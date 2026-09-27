@@ -1,0 +1,187 @@
+# 산업 성장 근거 — M3(산업 고성장) 근거 ②·③ (PRD §7.3 M3)
+# M3 통과 = ① 실제 실적(JARVIS 자동 집계) 또는 ② 미국 메이저 증권사 산업 성장률 전망 또는 ③ 성장 전망 — 하나 이상 ≥ 15%
+#
+# 규칙 (사용자 지정 2026-09-27, v1.3 D19)
+# - ② 는 **미국 메이저 증권사 전망치만** 인정한다(아래 us_major_brokers). 그 외 증권사는 ②로 쓰지 않는다.
+# - ② 는 증권사 로그인·유료 리포트·유료 API(Claude 웹 검색 도구 포함)를 쓰지 않는다. **무료·무키 공개 소스**(news_search)로 찾고,
+#   **발표일이 최근 90일(3개월) 이내**인 공개 자료만 쓴다.
+# - 수치는 **LLM 없이 정규식(growth_patterns)** 으로 원문 문장에서 뽑는다. quote = 원문 문장 그대로.
+# - **사람 확인 없음**: domain_tiers + rules.yaml M3.us_major_broker.adoption 규칙을 통과하면 자동 adopted → M3 에 사용.
+#   원하면 excluded_outlooks 에 URL 을 적어 제외할 수 있다(선택 사항, 안 해도 자동으로 돈다).
+# - 이 파일에 사람이 직접 적은 ② 항목(source_type: broker)은 adopted(규칙 manual)로 간주한다.
+# - ③(source_type: research | company | government)은 출처·기준월(as_of) 필수, 12개월 이내.
+
+threshold_pct: 15.0
+
+us_major_brokers:        # ② 로 인정하는 미국 메이저 증권사 (이름·별칭 정규화 매칭)
+  - {name: "Goldman Sachs",   aliases: ["골드만삭스", "골드만", "GS Research", "Goldman Sachs Research"]}
+  - {name: "Morgan Stanley",  aliases: ["모건스탠리", "모건 스탠리", "Morgan Stanley Research"]}
+  - {name: "J.P. Morgan",     aliases: ["JP모건", "JP 모건", "JPMorgan", "J.P. Morgan Research", "JPMorgan Chase"]}
+  - {name: "BofA Securities", aliases: ["뱅크오브아메리카", "BofA", "Bank of America", "BofA Global Research", "메릴린치"]}
+  - {name: "Citi",            aliases: ["씨티", "씨티그룹", "Citigroup", "Citi Research"]}
+  - {name: "Wells Fargo",     aliases: ["웰스파고", "Wells Fargo Investment Institute"]}
+  # 필요 시 사용자가 주석을 풀어 확장 (미국계 대형 리서치)
+  # - {name: "Jefferies",     aliases: ["제프리스"]}
+  # - {name: "Bernstein",     aliases: ["번스타인", "AllianceBernstein"]}
+  # - {name: "Evercore ISI",  aliases: ["에버코어"]}
+
+news_search:             # ② 무료 자동 수집 (PRD §5.6·§7.3). 비용 $0, API 키 없음, GitHub Actions에서 실행
+  schedule: "일·수 04:00 KST"
+  recency_days: 90
+  user_agent: "JARVIS-research (+https://github.com/gotomirae/JARVIS)"   # 저장소 이름이 다르면 P0에서 교체
+  per_domain_delay_sec: 2
+  respect_robots_txt: true
+  sources:
+    google_news_rss:
+      enabled: true
+      url_en: "https://news.google.com/rss/search?q={q}+when:90d&hl=en-US&gl=US&ceid=US:en"
+      url_ko: "https://news.google.com/rss/search?q={q}+when:90d&hl=ko&gl=KR&ceid=KR:ko"
+      resolve_redirect: true               # news.google.com 링크 → 원문 URL. 실패 시 제목·매체로 다른 소스에서 원문 탐색
+    bing_news_rss:
+      enabled: true
+      url: "https://www.bing.com/news/search?q={q}&format=rss"   # Sage discovery.py 에서 Actions 동작 실측
+    gdelt_doc:
+      enabled: true
+      url: "https://api.gdeltproject.org/api/v2/doc/doc?query={q}&mode=artlist&format=json&timespan=3m&maxrecords=75&sort=datedesc"
+      min_interval_sec: 5                  # GDELT 요청 제한
+      backoff_on_429: true
+    broker_sites:                          # 등급 A 직접 수집 (공개 페이지만). P0 에서 목록·sitemap URL 실측 후 고정
+      enabled: true
+      pages:
+        - {broker: "Morgan Stanley",  list_url: "https://www.morganstanley.com/insights/articles"}
+        - {broker: "J.P. Morgan",     list_url: "https://www.jpmorgan.com/insights/global-research"}
+        - {broker: "Goldman Sachs",   list_url: "https://www.goldmansachs.com/insights/articles"}
+        - {broker: "BofA Securities", list_url: "https://institute.bankofamerica.com/"}
+        - {broker: "Citi",            list_url: "https://www.citigroup.com/global/insights"}
+        - {broker: "Wells Fargo",     list_url: "https://www.wellsfargoadvisors.com/research-analysis/strategy/"}
+  query_templates:                         # {brokers_or} = 증권사 이름·영문 별칭 OR 묶음
+    en: '"{segment_en}" ({brokers_or}) (CAGR OR "to grow" OR "compound annual" OR forecast)'
+    ko: '"{segment_ko}" ({brokers_or_ko}) (성장률 OR 연평균 OR 전망)'
+  segments_en:                             # L1별 검색어 (세부시장 추가 가능)
+    "1a": ["artificial intelligence", "AI infrastructure", "AI software"]
+    "1b": ["semiconductor", "HBM memory", "AI chips"]
+    "1c": ["power grid equipment", "electrical infrastructure", "data center power"]
+    "1d": ["biotech", "biopharma", "GLP-1 obesity drugs"]
+    "1e": ["K-beauty cosmetics", "aesthetic devices"]
+    "1f": ["music entertainment", "K-pop", "streaming entertainment"]
+    "1g": ["defense spending", "space economy", "aerospace"]
+    "1h": ["shipbuilding", "LNG carriers"]
+    "1i": ["battery", "energy storage system", "EV battery"]
+    "1l": ["autonomous driving", "robotaxi", "automotive"]
+    "2a": ["humanoid robots", "robotics", "industrial automation"]
+    "2b": ["cloud software", "optical networking", "IT services"]
+    "2c": ["medical devices", "medtech"]
+    "2d": ["consumer staples", "packaged food exports"]
+    "2e": ["inbound tourism Korea", "travel"]
+    "2f": ["financials", "banks"]
+    "2g": ["construction", "infrastructure construction"]
+    "3c": ["quantum computing"]
+  segments_ko:
+    "1a": ["인공지능", "AI 인프라"]
+    "1b": ["반도체", "HBM"]
+    "1c": ["전력기기", "전력망"]
+    "1d": ["바이오", "비만 치료제"]
+    "1e": ["화장품", "미용기기"]
+    "1f": ["엔터", "K팝"]
+    "1g": ["방산", "우주"]
+    "1h": ["조선", "LNG선"]
+    "1i": ["2차전지", "ESS"]
+    "1l": ["자율주행", "로보택시"]
+    "2a": ["휴머노이드", "로봇"]
+    "2b": ["클라우드", "소프트웨어"]
+    "2c": ["의료기기", "헬스케어"]
+    "2d": ["소비재", "K푸드"]
+    "2e": ["방한 관광", "여행"]
+    "2f": ["금융", "은행"]
+    "2g": ["건설", "인프라 건설"]
+    "3c": ["양자컴퓨터"]
+
+domain_tiers:            # 채택 후보 도메인. 여기에 없는 도메인은 채택하지 않음(참고용 unverified 도 아님 — 폐기)
+  A:                     # 증권사 자체 공개 도메인 → 단독 채택(A1)
+    "Goldman Sachs":   ["goldmansachs.com", "gs.com"]
+    "Morgan Stanley":  ["morganstanley.com"]
+    "J.P. Morgan":     ["jpmorgan.com", "jpmorganchase.com", "am.jpmorgan.com"]
+    "BofA Securities": ["bankofamerica.com", "ml.com", "merrilledge.com", "institute.bankofamerica.com", "business.bofa.com"]
+    "Citi":            ["citigroup.com", "citi.com"]
+    "Wells Fargo":     ["wellsfargo.com", "wellsfargoadvisors.com"]
+  B:                     # 주요 경제 매체 → 교차 보도(B1) 또는 명시 조건(B2)
+    - reuters.com
+    - bloomberg.com
+    - cnbc.com
+    - wsj.com
+    - ft.com
+    - barrons.com
+    - marketwatch.com
+    - fortune.com
+    - businessinsider.com
+    - finance.yahoo.com
+    - investing.com
+    - asia.nikkei.com
+    - apnews.com
+    - axios.com
+    - theinformation.com
+    - hankyung.com
+    - mk.co.kr
+    - yna.co.kr
+    - sedaily.com
+    - edaily.co.kr
+    - chosun.com
+    - joongang.co.kr
+    - mt.co.kr
+    - thebell.co.kr
+  # 공통 제외: 보도자료 배포처·블로그·코인 거래소 뉴스·콘텐츠 농장
+  deny: ["prnewswire.com", "globenewswire.com", "businesswire.com", "einpresswire.com", "medium.com", "substack.com",
+         "kucoin.com", "binance.com", "seekingalpha.com", "simplywall.st", "openpr.com", "linkedin.com"]
+
+growth_patterns:         # 결정적 추출 규칙 (lib/engine/outlook/extract.ts). 테스트 fixture 로 정탐·오탐을 고정
+  industry_nouns_en: ["market", "industry", "sector", "spending", "demand", "capex", "capital expenditure", "TAM", "shipments", "revenue pool"]
+  industry_nouns_ko: ["시장", "산업", "수요", "투자", "설비투자", "출하"]
+  growth_regex_en:
+    - '(?i)\b(?:CAGR|compound annual growth(?: rate)?)\b[^.%]{0,80}?(\d{1,3}(?:\.\d+)?)\s?%'
+    - '(?i)(\d{1,3}(?:\.\d+)?)\s?%\s*(?:CAGR|compound annual|annual(?:ized)? growth|a year|per year|annually)'
+    - '(?i)(?:grow|expand|rise|increase|climb)\w*\s+(?:by\s+|at\s+(?:a\s+)?(?:rate\s+of\s+)?)?(?:about\s+|around\s+|roughly\s+|more than\s+|over\s+)?(\d{1,3}(?:\.\d+)?)\s?%\s*(?:in|next year|through|by|to|over)\b'
+  growth_regex_ko:
+    - '연평균\s*(?:성장률\s*)?(\d{1,3}(?:\.\d+)?)\s?%'
+    - '(?:내년|20\d\d년)[^.。]{0,40}?(\d{1,3}(?:\.\d+)?)\s?%\s*(?:성장|증가|확대)'
+  derived_cagr_regex_en: '(?i)from\s+\$?(\d+(?:\.\d+)?)\s*(billion|trillion|bn|tn)\s+(?:in\s+)?(20\d\d)\s+to\s+\$?(\d+(?:\.\d+)?)\s*(billion|trillion|bn|tn)\s+(?:by|in)\s+(20\d\d)'
+  year_range_regex: '(20\d\d)\s*(?:-|–|~|to|through)\s*(20\d\d)|(?:by|through|until|in)\s+(20\d\d)|(20\d\d)년까지'
+  anaphora_starts: ["The bank", "The firm", "Its analysts", "The brokerage", "Analysts at the bank", "이 증권사", "동사", "이 회사 애널리스트"]
+  exclude_terms_en: ["price target", "target price", "shares", "stock", "EPS", "earnings per share", "S&P 500", "Nasdaq", "Dow", "GDP", "inflation", "rate cut", "yield", "dividend", "market share"]
+  exclude_terms_ko: ["목표주가", "주가", "영업이익", "순이익", "코스피", "코스닥", "GDP", "물가", "금리", "배당", "점유율"]
+  past_tense_only_en: ["grew", "rose", "increased", "jumped", "climbed", "expanded"]   # 미래 표현(will·expects·forecast·to grow·seen) 없이 이것만 있으면 폐기
+  past_tense_only_ko: ["증가했다", "성장했다", "늘었다", "기록했다"]
+  exclude_if_company_subject: true         # 엔티티 마스터 기업명·티커가 수치의 주어면 폐기(기업 매출 성장 ≠ 산업 성장)
+  value_range_pct: [0.1, 200]
+  range_policy: "lower_bound"              # "20~25%" → 20
+
+excluded_outlooks: []    # 선택: 잘못 채택된 자료의 URL 을 적으면 다음 실행부터 제외 (사람 확인 단계는 아님)
+
+# 항목 형식
+#   ② {source_type: broker, broker: "Morgan Stanley", segment: "세부시장", metric: "CAGR_3Y|CAGR_2Y|NEXT_YEAR_GROWTH",
+#      value_pct: 0.0, horizon: "2026-2028", published_date: "YYYY-MM-DD", publisher: "보도 매체 또는 증권사 공개 페이지",  # 수동 입력 = adoption_rule manual
+#      url: "https://...", quote: "원문 문장"}
+#   ③ {source_type: research|company|government, segment: "", cagr_3y_pct: 0.0, source: "", url: "", as_of: "YYYY-MM"}
+
+industries:
+  "1a":   # AI
+    - {source_type: research, segment: "AI 소프트웨어·클라우드", cagr_3y_pct: 15.7, source: "Gartner direct AI services outlook", url: "https://www.gartner.com/en/documents/8318253", as_of: "2026-09", origin: "Heimdallr sector_growth.py"}
+  "1b":   # 반도체
+    - {source_type: company, segment: "AI·HBM 반도체 밸류체인", cagr_3y_pct: 30.0, current_growth_pct: 58.0, source: "SK hynix 2026 HBM market outlook", url: "https://news.skhynix.com/en/2026-market-outlook-focus-on-the-hbm-led-memory-supercycle/", as_of: "2026-09", origin: "Heimdallr sector_growth.py"}
+  "1c":   # 전력인프라
+    - {source_type: research, segment: "전력망·에너지저장", cagr_3y_pct: 27.0, source: "Grand View Research grid-scale battery storage outlook", url: "https://www.grandviewresearch.com/industry-analysis/grid-scale-battery-storage-market", as_of: "2026-09", origin: "Heimdallr sector_growth.py"}
+  # 아래는 미입력 — ①(실제 실적) 또는 ②(무료 검색 자동 채택)로 판단된다. 셋 다 없으면 대시보드 /growth 에 "근거 없음" 표시.
+  "1d": []   # 바이오
+  "1e": []   # 화장품_미용기기
+  "1f": []   # 엔터
+  "1g": []   # 우주항공방산
+  "1h": []   # 조선
+  "1i": []   # 2차 전지
+  "1l": []   # 자율주행차
+  "2a": []   # Robot
+  "2b": []   # IT
+  "2c": []   # 헬스케어
+  "2d": []   # 소비재
+  "2e": []   # 여행
+  "2f": []   # 금융
+  "2g": []   # 건설
+  "3c": []   # 양자컴퓨터

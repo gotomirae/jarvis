@@ -1,0 +1,10 @@
+# 수동 이벤트 캘린더 — M4(6개월 내 주가 상승 이벤트) 보조 입력 (PRD §7.3 M4)
+# 자동 소스(SnowBall triggers, HermesCall triggers_timeline, Heimdallr 트리거, 실적 일정)에 없는 이벤트만 넣는다.
+# 규칙: 날짜(date) 또는 기간 끝(window_end)과 출처(source)가 없으면 무효. direction은 up만 M4에 반영.
+# scope: company(entity 필수) | industry(l1 필수) | macro
+
+events:
+  # 예시 — 실제 값으로 교체
+  # - {scope: industry, l1: "1b", title: "차세대 HBM 양산 고객 인증", window_end: "2027-03-31", direction: up, source: "회사 컨콜 2026-07", url: ""}
+  # - {scope: company, entity: "KR:000660", title: "청주 M15X HBM 생산 개시", window_end: "2026-12-31", direction: up, source: "포트폴리오 트리거", url: ""}
+  # - {scope: macro, title: "FOMC", date: "2026-10-28", direction: neutral, source: "FlyWheel fomc_dates.json"}

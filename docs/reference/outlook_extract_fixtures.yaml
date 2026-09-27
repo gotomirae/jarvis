@@ -1,0 +1,33 @@
+# M3 ② 결정적 추출·채택 테스트 fixture (PRD §7.3, D19). 네트워크 없이 vitest 로 전부 통과해야 한다.
+# 예문은 형식 검증용 합성 문장이다(실제 보도 아님). 실측 정탐·오탐 문장을 발견하면 여기에 추가한다.
+today: "2026-09-27"
+extract:
+  positive:
+    - {text: "Morgan Stanley analysts expect the AI chips market to grow at a 25% CAGR through 2030.", broker: "Morgan Stanley", l1: "1b", metric: CAGR, value_pct: 25.0, horizon_end: 2030}
+    - {text: "Goldman Sachs forecasts data center power demand to grow 15% a year through 2030.", broker: "Goldman Sachs", l1: "1c", metric: CAGR, value_pct: 15.0, horizon_end: 2030}
+    - {text: "The humanoid robot market is expected to expand at a compound annual growth rate of 18.5% from 2026 to 2030, according to J.P. Morgan.", broker: "J.P. Morgan", l1: "2a", metric: CAGR, value_pct: 18.5, horizon_end: 2030}
+    - {text: "골드만삭스는 HBM 시장이 2028년까지 연평균 30% 성장할 것으로 전망했다.", broker: "Goldman Sachs", l1: "1b", metric: CAGR, value_pct: 30.0, horizon_end: 2028}
+    - {text: "BofA sees AI capex rising from $400 billion in 2025 to $900 billion by 2029.", broker: "BofA Securities", l1: "1a", metric: CAGR_DERIVED, value_pct: 22.5, horizon_end: 2029}
+    - {text: "Citi Research expects the defense spending market to grow 20-25% next year.", broker: "Citi", l1: "1g", metric: NEXT_YEAR, value_pct: 20.0}
+    - {prev: "Wells Fargo Investment Institute published its new outlook on Monday.", text: "The firm expects the quantum computing market to grow at a 40% CAGR through 2029.", broker: "Wells Fargo", l1: "3c", metric: CAGR, value_pct: 40.0, horizon_end: 2029}
+  negative:
+    - {text: "Morgan Stanley raised its price target on Nvidia to $250, citing 40% revenue growth.", reason: exclude_term}
+    - {text: "Goldman Sachs expects the S&P 500 to rise 10% by the end of 2027.", reason: exclude_term}
+    - {text: "Samsung Electronics revenue will grow 30% next year, J.P. Morgan said.", reason: company_subject}
+    - {text: "The semiconductor market grew 19% last year, according to Citi.", reason: past_tense_only}
+    - {text: "Nomura expects the HBM market to grow at a 30% CAGR through 2028.", reason: non_us_major_broker}
+    - {text: "Morgan Stanley expects the AI chips market to grow at a 25% CAGR through 2040.", reason: horizon_too_far}
+    - {text: "The AI market could grow 30% a year, analysts said.", reason: no_broker}
+    - {text: "Morgan Stanley expects strong demand growth of 30% for its wealth management unit.", reason: no_l1_match}
+adopt:
+  - {case: "A1 등급 A 단독", items: [{domain: "morganstanley.com", broker: "Morgan Stanley", l1: "1b", value_pct: 25.0, published: "2026-09-01"}], expect: {status: adopted, rule: A1}}
+  - {case: "B1 서로 다른 매체 2곳 ±2%p", items: [{domain: "reuters.com", broker: "Goldman Sachs", l1: "1c", value_pct: 15.0, published: "2026-09-10"}, {domain: "cnbc.com", broker: "Goldman Sachs", l1: "1c", value_pct: 16.0, published: "2026-09-11"}], expect: {status: adopted, rule: B1}}
+  - {case: "B1 신디케이션은 1곳", items: [{domain: "reuters.com", broker: "Citi", l1: "1g", value_pct: 20.0, published: "2026-09-10", quote_id: q1}, {domain: "finance.yahoo.com", broker: "Citi", l1: "1g", value_pct: 20.0, published: "2026-09-10", quote_id: q1}], expect: {status: unverified}}
+  - {case: "B2 단일 매체 + CAGR·기간 명시", items: [{domain: "bloomberg.com", broker: "J.P. Morgan", l1: "2a", value_pct: 18.5, published: "2026-08-20", has_cagr_word: true, has_year_range: true}], expect: {status: adopted, rule: B2}}
+  - {case: "등급 밖 도메인", items: [{domain: "kucoin.com", broker: "Morgan Stanley", l1: "1a", value_pct: 30.0, published: "2026-09-01"}], expect: {status: dropped}}
+  - {case: "90일 초과", items: [{domain: "morganstanley.com", broker: "Morgan Stanley", l1: "1b", value_pct: 25.0, published: "2026-06-01"}], expect: {status: expired}}
+  - {case: "충돌 5%p 이상 → 최신값 + conflict", items: [{domain: "morganstanley.com", broker: "Morgan Stanley", l1: "1b", value_pct: 25.0, published: "2026-08-01"}, {domain: "morganstanley.com", broker: "Morgan Stanley", l1: "1b", value_pct: 18.0, published: "2026-09-15"}], expect: {status: adopted, value_used: 18.0, conflict: true}}
+aggregate:
+  - {case: "증권사별 최신값 중앙값", l1: "1b", adopted: {"Morgan Stanley": 18.0, "Goldman Sachs": 30.0, "Citi": 12.0}, expect: {median: 18.0, pass: true}}
+  - {case: "중앙값 경계값 15 = 통과", l1: "2b", adopted: {"J.P. Morgan": 14.0, "Citi": 16.0}, expect: {median: 15.0, pass: true}}
+  - {case: "단일 증권사 미달", l1: "2e", adopted: {"Wells Fargo": 9.0}, expect: {median: 9.0, pass: false}}

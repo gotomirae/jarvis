@@ -1,0 +1,102 @@
+# JARVIS 산업 분류 — 단일 출처 (PRD §4.1)
+# 정본: 노션 "2. 주식 자본 > 2_1. 산업 & 종목" (2026-09-27 실측)
+# L1 = 노션 카테고리(코드는 불변 키), L2 = 그 아래 [산업] 페이지(= FlyWheel industries.json)
+# 매핑 규칙: 키워드 일부 겹침 = 동일 산업 (사용자 지정) + 오탐 가드 (PRD §4.1.3)
+
+version: 1
+source:
+  notion_parent: "https://app.notion.com/p/36a9c770aa61809c95e5c1117f9779b5"
+  synced_at: "2026-09-27"   # 18개 카테고리 (1l 자율주행차 추가 반영)
+
+l1:
+  - {code: "1a", name: "AI",              l2: ["AI"],               synonyms: ["인공지능"]}
+  - {code: "1b", name: "반도체",           l2: ["반도체"],            synonyms: ["팹리스", "파운드리", "HBM"]}
+  - {code: "1c", name: "전력인프라",        l2: ["전력인프라"],         synonyms: ["원전", "변압기", "전력망", "신재생", "에너지"]}   # 에너지 = 전력인프라 (사용자 지정 2026-09-27)
+  - {code: "1d", name: "바이오",           l2: ["바이오"],            synonyms: ["제약", "신약"]}
+  - {code: "1e", name: "화장품_미용기기",    l2: ["화장품", "미용기기"],  synonyms: ["뷰티", "코스메틱", "Beauty"]}
+  - {code: "1f", name: "엔터",             l2: ["엔터"],              synonyms: ["미디어", "게임", "콘텐츠"]}
+  - {code: "1g", name: "우주항공방산",      l2: ["우주항공", "방산"],    synonyms: ["우주", "항공", "방위"]}
+  - {code: "1h", name: "조선",             l2: ["조선"],              synonyms: ["해운"]}
+  - {code: "1i", name: "2차 전지",          l2: ["배터리"],            synonyms: ["2차전지", "이차전지", "전기차"]}
+  - {code: "1l", name: "자율주행차",        l2: [],                    synonyms: ["자동차", "자율주행"]}   # 노션 신규(2026-09-27), 자동차 = 자율주행차 (사용자 지정)
+  - {code: "2a", name: "Robot",            l2: ["Robot"],             synonyms: ["로봇", "휴머노이드"]}
+  - {code: "2b", name: "IT",               l2: ["IT"],                synonyms: ["소프트웨어", "플랫폼", "인터넷", "통신", "네트워크", "전자부품", "디스플레이", "OLED"]}
+  - {code: "2c", name: "헬스케어",          l2: ["의료기기"],           synonyms: ["의료"]}
+  - {code: "2d", name: "소비재",           l2: ["음식료"],            synonyms: ["음식", "식품", "식음료", "라면", "의류", "유통"]}
+  - {code: "2e", name: "여행",             l2: ["인바운드"],           synonyms: ["관광", "면세", "카지노"]}
+  - {code: "2f", name: "금융",             l2: [],                    synonyms: ["은행", "증권", "보험"]}
+  - {code: "2g", name: "건설",             l2: [],                    synonyms: ["건자재", "부동산"]}
+  - {code: "3c", name: "양자컴퓨터",        l2: ["양자컴퓨터"],         synonyms: ["양자"]}
+
+special_labels:          # 산업 집계 제외, 신호는 보존
+  - {code: "MACRO", aliases: ["거시경제", "매크로"]}
+  - {code: "ETF",   aliases: ["ETF", "ETN"]}
+  - {code: "ETC",   aliases: ["기타"]}
+
+matching:
+  normalize_strip: [" ", "_", "·", "-", ".", "/"]
+  min_keyword_len: 2
+  partial_min_len: 2
+  partial_on: ["l1_name", "l1_parts", "l2"]   # 동의어에는 부분일치 금지 (실측 오탐: 인바운드↔파운드리)
+  stop_substrings: ["인프라", "기기", "부품", "소재", "장비", "산업", "서비스", "기타"]
+  multi_membership: true
+  new_partial_or_unmatched: pending           # 자동 적용 + 대시보드 확인 대기
+
+# 사용자가 확정한 매핑 (pending 확정 시 자동 추가). 최우선 적용.
+overrides:
+  - {project: "*", label: "AI인프라반도체", l1: ["1a", "1b"]}
+  - {project: "*", label: "AI 팹리스",      l1: ["1a", "1b"]}
+  - {project: "*", label: "AI 반도체",      l1: ["1a", "1b"]}
+  - {project: "*", label: "거시경제",       l1: ["MACRO"]}
+  - {project: "*", label: "기타",           l1: ["ETC"]}
+  - {project: "*", label: "ETF",            l1: ["ETF"]}
+
+  # 사용자 지정(2026-09-27): 아래는 기타(ETC)로 간주
+  - {project: "*", label: "소재",           l1: ["ETC"]}
+  - {project: "*", label: "화학·소재",      l1: ["ETC"]}
+  - {project: "*", label: "철강·금속",      l1: ["ETC"]}
+  - {project: "*", label: "운송·물류",      l1: ["ETC"]}
+  - {project: "*", label: "지주·기타서비스", l1: ["ETC"]}
+
+# 규칙: 위 어디에도 매핑되지 않는 새 라벨은 ETC로 집계하고 taxonomy_pending에 올린다 (사용자 지정)
+unmatched_default: "ETC"
+
+# 노션 페이지 ID (링크·인박스용). L1 = 2_1 하위 DB/페이지, L2 = [산업] 페이지 (FlyWheel config/industries.json 과 동일)
+notion:
+  l1_urls:
+    "1a": "https://www.notion.so/36a9c770aa6180908b74cf2f84e066f8"
+    "1b": "https://www.notion.so/36a9c770aa61805b84ecfcc72d41a8d0"
+    "1c": "https://www.notion.so/36a9c770aa6180fbb23dfa0c80ba20b4"
+    "1d": "https://www.notion.so/36a9c770aa61807a985dec3f0ef15b36"
+    "1e": "https://www.notion.so/36a9c770aa61808eb671f9d62d3b0a10"
+    "1f": "https://www.notion.so/36a9c770aa6180ca91c3c7962e50794a"
+    "1g": "https://www.notion.so/36a9c770aa6180c78955efb2b955907e"
+    "1h": "https://www.notion.so/36a9c770aa618035ade9e737d3ff254d"
+    "1i": "https://www.notion.so/36a9c770aa61807d8454f6dd814c6d84"
+    "1l": "https://www.notion.so/3e89c770aa6180b3aa29c86ce5483968"
+    "2a": "https://www.notion.so/36a9c770aa6180379e97fb80ac61afbc"
+    "2b": "https://www.notion.so/36a9c770aa6180369ec3e56654952895"
+    "2c": "https://www.notion.so/36a9c770aa618095a93ec38ac5ea4e9f"
+    "2d": "https://www.notion.so/36a9c770aa61809c92a6f25f2355a032"
+    "2e": "https://www.notion.so/3e89c770aa618048aeb6d2e4c0ea9376"
+    "2f": "https://www.notion.so/3e89c770aa6180d386e0ff1465977ff2"
+    "2g": "https://www.notion.so/3e89c770aa618002896bdc15b843fda7"
+    "3c": "https://www.notion.so/36a9c770aa6180348a69e070fe9abca6"
+  l2_page_ids:
+    "AI": "ca49c770aa618378a74f0167eaf1139b"
+    "반도체": "b239c770aa6182eeb66a014414648adc"
+    "전력인프라": "5639c770aa6183ec94f5019137c89914"
+    "바이오": "2a79c770aa6182dba15481357252a33f"
+    "화장품": "21c9c770aa61832ead1b01f5d07b1ab3"
+    "미용기기": "5e49c770aa6183538f9c0167b820c95a"
+    "엔터": "ea39c770aa6182d3b283818c0bd764b9"
+    "우주항공": "ef99c770aa61831fa40301c0f843923b"
+    "방산": "e089c770aa61820bafbb0181fccca51d"
+    "조선": "1709c770aa618370909801a8575507c9"
+    "배터리": "5c79c770aa618299ab2d01d1a37c086e"
+    "Robot": "1d69c770aa6182e9960281650680a4aa"
+    "IT": "3999c770aa6180dca145c919018c3d40"
+    "의료기기": "6f89c770aa6182bca7dc8187d5b63705"
+    "음식료": "4369c770aa6183e3aa5c01f1ee0a214c"
+    "인바운드": "05b9c770aa6183a2929701c1a2499d5b"
+    "양자컴퓨터": "2499c770aa61839fa3138161363883d8"

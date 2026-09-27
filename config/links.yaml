@@ -1,0 +1,61 @@
+# 외부 링크 규칙 — 텔레그램·대시보드 공용 단일 출처 (PRD §9.4)
+# lib/links.ts 가 이 파일만 읽는다. 링크를 만들 수 없으면 버튼을 생략한다(죽은 링크·빈 화면 금지).
+# 실측 근거: Heimdallr src/notify/links.py, HermesCall src/notify/stock_links.py (2026-09-02~22 확인)
+
+dashboards:                         # 메시지 하단 공통 버튼 (홈)
+  jarvis:     {label: "📊 JARVIS",     url: "${JARVIS_URL}/"}
+  heimdallr:  {label: "🛡️ Heimdallr",  url: "https://heimdallr-call.vercel.app/"}
+  hermescall: {label: "⚡ HermesCall", url: "https://hermes-call-psi.vercel.app/"}
+  snowball:   {label: "❄️ SnowBall",   url: "https://snowball-heritage.vercel.app/ironman/portfolio"}
+  sage:       {label: "🧙 Sage",       url: "https://sage-gotomiraes-projects.vercel.app/"}      # Vercel 로그인 보호(본인 사용 OK)
+  flywheel:   {label: "🔄 FlyWheel",   url: "https://www.notion.so/36a9c770aa61809c95e5c1117f9779b5"}   # 웹 대시보드 없음 → 노션 2_1. 산업 & 종목
+
+stock:                              # 종목별 버튼. {code}=국내 6자리, {symbol}=미국 티커, {naver_us}=NVDA.O 등
+  jarvis:
+    label: "📊 JARVIS"
+    url: "${JARVIS_URL}/stock/{entity_id}"
+    markets: [KR, US]
+  heimdallr:
+    label: "🛡️ Heimdallr"
+    url: "https://heimdallr-call.vercel.app/stock/{code}"
+    markets: [KR]
+  hermescall:
+    label: "⚡ HermesCall"
+    url: "https://hermes-call-psi.vercel.app/analysis/{hermes_analysis_id}"    # 해당 종목 관련 최신 분석이 있을 때만
+    fallback: "https://hermes-call-psi.vercel.app/screener"
+    markets: [KR, US]
+  snowball:
+    label: "❄️ SnowBall"
+    url: "https://snowball-heritage.vercel.app/ironman/asset/{snowball_asset_id}"   # SnowBall 자산이 있을 때
+    fallback: "https://snowball-heritage.vercel.app/ironman/ideas"
+    markets: [KR, US]
+  sage:
+    label: "🧙 Sage"
+    url: "https://sage-gotomiraes-projects.vercel.app/?q={name_urlenc}&date=30d"    # 멘토 글 검색
+    markets: [KR, US]
+  flywheel:
+    label: "🔄 FlyWheel"
+    url: "https://www.notion.so/{flywheel_l2_page_id_nodash}"    # 종목 primary L1의 L2 [산업] 페이지 (config/industries.json)
+    fallback: "https://www.notion.so/36a9c770aa61809c95e5c1117f9779b5"
+    markets: [KR, US]
+  naver:
+    label: "🟢 네이버증권"
+    kr: "https://m.stock.naver.com/domestic/stock/{code}/total"          # 텔레그램은 폰에서 열리므로 모바일
+    us: "https://m.stock.naver.com/worldstock/stock/{naver_us}/total"
+    us_resolve_api: "https://api.stock.naver.com/stock/{symbol}{suffix}/basic"   # 200 이고 'StockConflict' 없으면 채택
+    us_suffixes: [".O", ".K"]                                               # 나스닥 → 뉴욕 순
+    us_fallback: "https://search.naver.com/search.naver?query={symbol}"     # 미수록 종목(MDT 실측)
+    markets: [KR, US]
+  stockeasy:
+    label: "📈 StockEasy"
+    url: "https://stockeasy.intellio.kr/stock-analysis/stock-info/{code}"   # 국내 전용(미국 종목 페이지 없음), 로그인 필요
+    markets: [KR]
+
+layout:
+  stock_card_rows:                  # 인라인 키보드 (한 행 최대 3개)
+    - [jarvis, heimdallr, hermescall]
+    - [snowball, sage, flywheel]
+    - [naver, stockeasy]
+  action_row: ["snowball_idea", "ignore_7d"]
+  multi_stock_messages: "inline_text_links"   # 브리핑처럼 종목이 여러 개면 종목명 옆에 <a>네이버</a>·<a>StockEasy</a>·<a>Heimdallr</a> 텍스트 링크, 하단에 dashboards 버튼
+  naver_us_code_cache_days: 30

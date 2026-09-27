@@ -1,0 +1,173 @@
+# JARVIS 판정 규칙 — 단일 출처 (PRD §6·§7·§12)
+# 코드에 임계값 하드코딩 금지. 변경은 PR + docs/DECISIONS.md 기록.
+# 보정: 표본 30건 미만 항목은 변경 금지 (PRD §12.4)
+
+version: 4   # 2026-09-27 — M1~M5 필수 + M3 근거 3종 중 하나. v4: M3 ② 무료 검색·정규식 추출·자동 채택(D19)
+
+normalize:
+  industry_narrative: {multiplier: 2, ttl_days: 14}            # FlyWheel 신호강도 1~5 → 2~10
+  company_mention_fw: {counts: {1: 4, 2: 6, 3: 8}, ttl_days: 14}
+  mentor_consensus: {min_sage_score: 50, counts: {2: 6, 3: 8, 4: 10}, ttl_days: 30}
+  earnings_catalyst: {ttl_days: 60}
+  earnings_quality_us: {per_filter: 2.5, ttl_days: 90}
+  industry_sentiment: {ttl_days: 30}
+  accel_grade: {"★": 10, "○": 7, "△": 5, "·": 2, base_effect_penalty: 2}
+
+axes:
+  N: {industry_narrative_min: 8, company_mention_min: 6, mentor_consensus_min: 6}
+  C: {earnings_catalyst_min: 7, us_filters_any: ["F1", "F2"]}
+  F: {kr_score_min: 75, kr_gate_required: true, us_filters_all: ["F3", "F4"]}
+  P: {buy_max: 40, pullback_min: 65, take_profit_min: 75}
+
+regime:
+  risk_off_if: {snowball_regime: -1, or_all: {vix_min: 25, kospi_below_ma: 60}}
+  risk_off_effects: {weight_multiplier: 0.5, buy_requires: {kr_grade: "★", us_filters_all: ["F1", "F3", "F4"]}}
+
+queues:
+  order: ["holding_alert", "take_profit", "buy", "radar", "pullback_wait"]
+  holding_alert:
+    heimdallr_score_delta_max: -5
+    flywheel_unfavorable_level: 3
+    mentor_flip_min: 2
+    setup_invalidation_window_days: 20
+  take_profit: {heat_min: 76, pri_min: 75}
+  buy: {min_signal_families: 2}
+  radar: {next_earnings_within_days: 45}
+  pullback_wait: {pri_alert_below: 50}
+  snowball_submit: {queues: ["buy", "radar"], max_per_day: 3, dedupe_days: 7}
+
+# ─────────────────────────────────────────────────────────────
+# 진입 신호 필수 조건 M1~M5 (PRD §7.3, 사용자 지정 2026-09-27)
+# 🟢 진입 신호 = M1 ∧ M2 ∧ M3 ∧ M4 ∧ M5 (+ entry_gate). 하나라도 빠지면 🟢 불가.
+# 계산 위치: 국내 M1·M2·M5 = Heimdallr / 미국 M1·M2·M5 = HermesCall / M3·M4·게이트 = JARVIS
+# ─────────────────────────────────────────────────────────────
+entry_core:
+  M1_earnings_up_price_not:          # 실적 지속 증가 + 성장 가속 + 주가 미반영(조정·횡보)
+    quarterly:
+      consecutive_quarters_yoy_positive: 2      # 매출·영업이익 YoY 모두 > 0, 최근 2개 분기 연속
+      op_must_be_positive: true                 # 영업이익 흑자 (부호 전환 구간 제외)
+      acceleration: {revenue_yoy_rising: true, op_yoy_rising: true}   # 최근 분기 YoY > 직전 분기 YoY (둘 다)
+      reject_base_effect_warning: true          # Heimdallr base_effect_warning = true 이면 탈락
+    annual:
+      ttm_revenue_growth_min_pct: 0.0           # TTM 매출·영업이익 > 4분기 전 TTM
+      ttm_op_growth_min_pct: 0.0
+      use_annual_consensus_if_available: true   # 올해(E) 매출·영업이익 > 전년 확정 (국내 네이버, 미국은 가능 시)
+    price_not_reflected:                        # (조정 또는 횡보) 그리고 반영도 낮음
+      correction: {from_post_earnings_high_max_pct: -10.0, or_from_52w_high_max_pct: -15.0}
+      sideways: {range_20d_max_pct: 12.0, abs_return_20d_max_pct: 5.0}
+      reflection_max: {kr_pri: 50, us_pri_lite: 50}
+  M2_macd_pre_cross:                 # MACD가 Signal을 아래→위로 상향 돌파하기 직전
+    params: [12, 26, 9]
+    macd_below_signal: true
+    hist_rising_bars_min: 2                     # 히스토그램(음수) 2일 연속 개선
+    near_cross_gap_pct_of_close_max: 0.30       # (Signal − MACD) / 종가 ≤ 0.30%
+    or_projected_bars_to_cross_max: 3           # 최근 히스토그램 기울기로 추정한 교차까지 봉 수
+    allow_cross_today: true                     # 당일 교차는 "크로스 당일"로 표시해 허용
+  M3_industry_high_growth:           # 해당 산업(L1)이 높은 성장 중 — 근거 3종 중 하나 이상 (사용자 지정 2026-09-27)
+    pass_if_any: ["realized", "us_major_broker", "outlook"]
+    required_bases: []                          # 특정 근거를 필수로 하려면 여기에 추가 (예: ["us_major_broker"])
+    realized:                                   # ① 실제 실적
+      median_revenue_yoy_min_pct: 15.0
+      consecutive_quarters: 2
+      median_op_yoy_min_pct: 0.0
+      min_members: 5                            # 부족하면 국내+미국 합산, 그래도 부족하면 '판단 불가'
+    us_major_broker:                            # ② 미국 메이저 증권사 산업 성장률 전망 (무료 공개 검색, 로그인·유료 자료 사용 안 함) — D19
+      growth_min_pct: 15.0                      # L1별 '증권사별 최신 채택값'의 중앙값 기준
+      aggregate: "median_of_latest_per_broker"
+      metrics: ["CAGR", "CAGR_DERIVED", "NEXT_YEAR"]
+      horizon_end_max_years_ahead: 5            # CAGR 종료 연도 ≤ 올해 + 5
+      max_published_age_days: 90                # 최근 3개월 이내 발표
+      brokers_list: "config/industry_growth.yaml#us_major_brokers"
+      source: "free_news_search"                # config/industry_growth.yaml#news_search (LLM·유료 API 금지)
+      extraction: "deterministic_regex"         # quote = 원문 문장 그대로
+      require_status: "adopted"                 # 자동 채택 규칙 통과분만 사용 (사람 확인 없음)
+      adoption:                                 # 하나라도 만족하면 adopted, 아니면 unverified(표시만)
+        A1_tier_a_single: true                  # 증권사 자체 도메인 단독
+        B1_tier_b_min_independent_sources: 2    # 서로 다른 주요 매체 2곳 이상, 같은 증권사·L1
+        B1_value_tolerance_pctp: 2.0
+        B1_syndication_similarity: 0.9          # 문장 유사도 ≥ 0.9 는 같은 기사로 간주
+        B2_tier_b_single_requires: ["broker_name", "cagr_word", "year_range"]
+        conflict_threshold_pctp: 5.0            # 같은 증권사·L1 값 차이 ≥ 5%p → 최신값 사용 + conflict 표시
+        date_mismatch_max_days: 3               # 목록 날짜 vs 본문 메타 차이 초과 시 더 이른 날짜
+        tier_b_requires_meta_date: true
+    outlook:                                    # ③ config/industry_growth.yaml 성장 전망(시장조사기관·IR 등)
+      config: "config/industry_growth.yaml"
+      cagr_3y_min_pct: 15.0
+      max_age_months: 12
+  M4_catalyst_within_6m:             # 산업 또는 기업의 주가 상승 이벤트가 향후 6개월 내
+    horizon_days: 180
+    min_events: 1
+    require_date_or_window_end: true
+    require_source: true
+    sources: ["snowball_triggers", "hermescall_triggers_timeline", "hermescall_catalyst_watch", "heimdallr_analysis_triggers", "earnings_with_rising_consensus", "catalyst_calendar_yaml"]
+    earnings_with_rising_consensus: {consensus_change_30d_min_pct: 0.0}   # 다음 실적일 ≤180일 + 30일 추정치 상향(>0%)이면 이벤트로 인정
+  M5_flow_2days:                     # 외국인 또는 기관 매수 우위 최소 2일 연속
+    kr: {days: 2, pass_if_any: ["foreign_consecutive", "institution_consecutive", "foreign_plus_institution_consecutive"]}
+    us_proxy: {days: 2, accumulation_day: {close_up: true, volume_vs_ma20_min: 1.0}}   # 미국은 투자자별 일별 수급 미공개 → 매집일 대용
+
+entry_gate:
+  risk_off_weight_multiplier: 0.5
+  pri_hard_max: 50
+  weight_capacity_required: true     # SnowBall allowed_weight 여유 없으면 🟢 대신 "비중 한도"
+  watch_level_if: "M1 and M2 and at_least_2_of[M3,M4,M5]"    # 🟡 관찰 (대시보드·저녁 브리핑 목록, 실시간 없음)
+  first_tranche: 0.3333              # 1차 1/3 → 확인 1/3 → 다음 실적 확인 1/3
+  invalidation: {PB: "low_10d", SW: "low_20d", CU: "signal_day_low_or_leader_below_event_close", PEAD_PB: "breakout_d0_low"}
+
+setup_tags:                          # 🟢 신호의 맥락 표시 (판정 조건 아님, 성과 귀속 단위)
+  PB: "눌림 (M1 조정)"
+  SW: "횡보 (M1 횡보)"
+  CU: "공급망 캐치업 (HermesCall catalyst_watch 해당)"
+  PEAD_PB: "실적 돌파 후 눌림 (60거래일 내 🔵 이력)"
+
+breakout_watch:                      # 🔵 실적 돌파 관찰 — 진입 신호 아님. 이후 M1~M5 통과 시 PEAD_PB 태그로 🟢
+  K1_kr:
+    grades: ["★", "○"]
+    gap_open_min_pct: 3.0
+    or_close_return_min_pct: 5.0
+    volume_mult_min: 2.5
+    close_location_min: 0.7
+    arm_days: 60
+  H1_us:
+    require_filters: ["F1", "F2"]
+    f1_eps_surprise_min_pct: 3.0
+    gap_min_pct: 4.0
+    gap_min_pct_megacap: 3.0
+    megacap_usd: 200000000000
+    volume_mult_min: 2.0
+    close_location_min: 0.7
+    arm_days: 60
+
+catch_up_candidate:                  # HermesCall → catalyst_watch (태그 CU + M4 이벤트 제공)
+  strength_min: 7
+  window_trading_days: 10
+  leader_ret_min_pct: 6.0
+  bene_ratio_max: 0.3333
+
+gate:
+  daily_green_max: {KR: 2, US: 1}
+  priority: ["signal_families_desc", "pri_asc", "m3_realized_growth_desc", "m4_nearest_event_asc"]
+  priority_by_tag_after_calibration: true      # 태그별 표본 30건 이후 성과 순위로 교체
+  resend_block_trading_days: 14
+
+pri_us_lite:
+  weights: {pos_52w: 0.30, rel_ret_3m_pctile: 0.25, rsi14: 0.20, ma50_gap: 0.15, post_earnings_reaction: 0.10}
+
+inbox:
+  max_per_day: 5
+  hermescall: {stage: "final", strength_min: 7, or_filters_min: 2}
+  heimdallr: {grades: ["★"], stage: 3}
+  sage: {new_mentors_min: 2}
+
+outcomes:
+  entry_price: "next_trading_day_close"
+  horizons_days: [5, 20, 60]
+  benchmarks: {KOSPI: "KOSPI", KOSDAQ: "KOSDAQ", US: "SPX"}
+  min_samples_for_calibration: 30
+
+telegram:
+  realtime_max_per_day_excl_urgent: 3
+  briefing_times_kst: {morning: "07:30", evening: "19:20", weekly: "Sat 09:30"}
+
+cost:
+  monthly_llm_cap_usd: 5    # 주간 메모 서술만. M3 ② 수집·추출은 무료(LLM·유료 API 0)
+  warn_at_pct: 80

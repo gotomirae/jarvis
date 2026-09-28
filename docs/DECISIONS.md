@@ -69,5 +69,24 @@
 
 → **Actions 기준 3/4 응답 → P0 통과 조건(3종 이상) 충족.**
 
+### 2-2. pg_cron → workflow_dispatch (2026-09-28)
+- `0002_cron_dispatch.sql` 적용(cron job id 1 `jarvis-outlook-smoke`), Vault `jarvis_github_dispatch_token` 저장.
+- `select jarvis.dispatch_job('outlook_smoke')` → `net._http_response` **204** → Actions run 36423106379(workflow_dispatch) **성공**. 결과 동일(Google 51·Bing 9·GDELT 무응답, 3/4).
+- GDELT 는 Actions 에서 2회 연속 무응답 → P2 `industry_outlook_collect` 에서 타임아웃·재시도 상향, 계속 실패하면 🔧 알림 대상(T21).
+
+### 2-3. 봇 webhook (2026-09-28)
+- Vercel 배포 확인: `GET /api/telegram/webhook` 200, 잘못된 secret POST → 401, 올바른 secret(빈 업데이트) → 200, 홈 200.
+- `npm run job -- telegram_webhook --action set` → @Tonny_JARVIS_bot 확인 후 등록. 사용자가 `/status`·`/links` 전송 → **둘 다 응답**, getWebhookInfo pending 0 · last_error 없음.
+
+### ✅ P0 통과 (2026-09-28)
+| 통과 조건(PRD §16) | 결과 |
+|---|---|
+| 5개 소스 읽기 | 5/5 (SnowBall RPC 6 · Heimdallr 9 · HermesCall 6 · Sage 4 · FlyWheel 16/17 L2) |
+| 무료 검색 소스 3종 이상 응답(Actions) | 3/4 (Google News · Bing · 증권사 sitemap. GDELT 무응답) |
+| 봇 `/status`·`/links` 응답 | 응답 확인 |
+| (추가) pg_cron → workflow_dispatch | 204 → Actions 성공 |
+
+남은 P0 외 항목: `GITHUB_READ_TOKEN`(P4 `/health` 전), 저장소 public 전환(D8, 사용자 결정), Actions Node 20 경고(actions/checkout·setup-node 버전 갱신).
+
 ### 3. 코드 게이트
 - `npm run typecheck` ✅ · `npm run test:coverage` ✅(32 tests, 대상 파일 라인 100%) · `npm run build` ✅

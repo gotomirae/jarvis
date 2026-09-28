@@ -27,6 +27,20 @@
 | D23 | 2026-09-27 | M3 ② 무료 소스: Bing News RSS 는 OR·괄호 묶음 쿼리에 0건 → 증권사별 단순 쿼리(`query_templates.bing_en`). GDELT 는 마침표 든 이름 대신 별칭(JPMorgan), 429 는 10·30·60초 백오프. 증권사 목록 페이지는 JS 렌더링이 많아(GS·BofA 링크 0) **sitemap lastmod 90일**을 주 경로로 고정. Wells Fargo 목록 URL 404 → `wellsfargo.com/cib/insights/`(sitemap lastmod 없음 → 본문 메타 날짜) | P0 로컬 실측(아래 P0 기록). Actions 실측은 push 후 추가 |
 | D24 | 2026-09-27 | 재생성 불가 데이터(signal_ledger·outcomes·entry_eval·breakout_watch·industry_outlooks·weekly_memos·notifications·queue_items·taxonomy_labels/pending·inbox_log·cost_log)는 주 1회(일 23:30 KST) `pg_dump` → **private 백업 저장소** 커밋, 최근 12개 유지(`.github/workflows/backup.yml`). 공개 저장소·아티팩트에는 두지 않음 | D5 인계 + 불변 규칙 10. SnowBall backup.yml 과 동일 방식 |
 | D25 | 2026-09-27 | SnowBall `jarvis_export_positions` 의 `market` 은 거래소 코드(KOSPI·KOSDAQ·NASDAQ·NYSE·OTHER)이고 `industry_l1` 필드는 없다 → JARVIS 가 KR/US 로 환산하고 `sector` 를 taxonomy 로 L1 매핑한다. 개별 종목 신호는 `asset_class='stock'` 만 | P0 실측(보유 49 = stock 37·etf 6·fund 6) |
+| D26 | 2026-09-28 | `holdings_cache` 에는 SnowBall 보유의 **수량·평단·평가액을 저장하지 않는다**(`lib/entities.ts` HOLDING_KEEP 화이트리스트). 비중·허용비중·과열·논지 요약만 둔다 | 불변 규칙 1·10, SC7. H축·익절·보유 경고에 금액 불필요 |
+| D27 | 2026-09-28 | 대시보드 읽기 권한을 **허용 이메일 1개**로 제한: `jarvis.allowed_users` + `jarvis.is_allowed()`(security definer) 정책(`0003`). 이메일은 저장소가 아닌 테이블에 `auth_setup` 잡으로 넣는다. middleware 도 ALLOWED_EMAIL 외 세션을 로그아웃 | Supabase 기본 설정은 anon 키로 누구나 가입 가능 → 0001 의 authenticated 전체 허용은 구멍. 공개 저장소에 이메일 미기재 |
+| D28 | 2026-09-28 | 노션 `2_1` 변경 감지는 **ID 기준**(taxonomy.yaml `l1_urls`). 공개 API 의 child_database 제목은 화면 제목이 아니라 데이터 소스 이름(`1f. 엔터_미디어`, `1j. IT`)이라 제목 비교는 오탐 8건 → 참고(title_notes)로만 표시 | P1 실측(API 2022-06-28·2025-09-03 모두 동일) |
+| D29 | 2026-09-28 | 네이버 미국 코드 해석 순서 `.O → .K → (접미사 없음)`, 응답 `reutersCode` 우선. TSM·MDT·IBM 은 접미사 없이만 200(HermesCall 이 "MDT 미수록"으로 본 사례 해결) | P1 실측 |
+| D30 | 2026-09-28 | 링크 스모크 빈 화면 판정은 **`<title>` 안에서만**(본문 검사 금지), 리다이렉트 최대 5회 추적, 타임아웃 45초. 로그인 필요 규칙: StockEasy·Sage·SnowBall·JARVIS | Next.js 앱·StockEasy 정상 페이지 번들에 404 문구가 들어 있어 본문 검사 오탐 12건. 없는 종목은 HermesCall·StockEasy 가 404 상태로 응답. notion.so 는 2단계 리다이렉트 |
+
+---
+
+## P1 검증 기록 (2026-09-28, 진행 중)
+
+- **부록 A 재현**: `lib/taxonomy/match.ts` = 참조 구현 스냅샷 7개 프로젝트·127 라벨 **전부 일치**, 오탐 회귀 3종 통과. 참조 스크립트 재실행 결과도 `taxonomy_expected.json` 과 동일(현 yaml 기준). 커버리지 lib/taxonomy·links·entities 라인 100%(테스트 73).
+- **taxonomy_sync 실데이터**: 라벨 96개(HermesCall 13·Sage 9·Heimdallr 섹터 37·SnowBall 20·FlyWheel 17) 전부 매핑. pending 1건 = SnowBall ETF 섹터 `S&P500`(미매칭 → /taxonomy 확정 대기). 노션 2_1: ID 기준 변경 없음.
+- **holdings_sync**: SnowBall 49종목 스냅샷(금액 필드 제외).
+- **link_smoke**(로컬): 21개 중 19개 통과. 실패 2 = JARVIS `/stock/*`(P1 에서 페이지·로그인 보호 추가, 배포 후 재측정).
 
 ---
 

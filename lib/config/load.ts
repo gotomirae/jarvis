@@ -5,6 +5,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parse } from "yaml";
+import type { LinksCfg } from "@/lib/links";
+import type { TaxonomyRules } from "@/lib/taxonomy/match";
 
 const cache = new Map<string, unknown>();
 
@@ -17,7 +19,7 @@ export function loadYaml<T = Record<string, unknown>>(name: string): T {
   return cache.get(name) as T;
 }
 
-export type TaxonomyConfig = {
+export type TaxonomyConfig = TaxonomyRules & {
   l1: { code: string; name: string; l2: string[]; synonyms: string[] }[];
   notion: {
     l1_urls: Record<string, string>;
@@ -31,10 +33,17 @@ export type TaxonomyConfig = {
   };
 };
 
-export type LinksConfig = {
-  dashboards: Record<string, { label: string; url: string }>;
-  stock: Record<string, Record<string, unknown>>;
-  layout: Record<string, unknown>;
+export type LinksConfig = LinksCfg & {
+  layout: LinksCfg["layout"] & { naver_us_code_cache_days: number };
+  smoke: {
+    samples: Record<"KR" | "US", { symbol: string; name: string; primary_l1: string }>;
+    login_redirect_ok: string[];
+    title_patterns: string[];
+    body_patterns: string[];
+    min_body_bytes: number;
+    timeout_sec: number;
+    max_redirects: number;
+  };
 };
 
 export const taxonomyConfig = () => loadYaml<TaxonomyConfig>("taxonomy.yaml");

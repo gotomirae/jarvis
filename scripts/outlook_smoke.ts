@@ -178,6 +178,6 @@ export async function outlookSmokeJob(args: Record<string, string>): Promise<voi
       ...brokers.map((b) => ({ run_id: runId, source: "broker_site", query: b.list_url, http_status: b.http_status, result_count: b.article_links, note: `robots=${b.robots_allowed}` })),
     ];
     const w = await dbInsert("outlook_fetch_log", rows);
-    console.log(w.ok ? `outlook_fetch_log ${w.data}행 기록` : `outlook_fetch_log 기록 실패: ${w.reason}`);
+    console.log(w.ok ? `outlook_fetch_log ${rows.length}행 기록` : `outlook_fetch_log 기록 실패: ${w.reason}`);
   }
 }

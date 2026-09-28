@@ -1,11 +1,15 @@
 # JARVIS 배치 (PRD §14). cron 은 UTC (KST = UTC+9).
-# 정시 시작 = Supabase pg_cron → workflow_dispatch (supabase/migrations/0002_cron_dispatch.sql, D7).
-# 아래 schedule 은 pg_cron 실패·GitHub 지연 대비 30분 뒤 예비다. 잡은 멱등(같은 슬롯 성공 시 즉시 종료, 불변 규칙 13).
-# LLM·유료 API 는 M3 ② 에서 쓰지 않는다(D19). 공개 저장소 → 로그에 키·개인 금액 출력 금지.
+# 정시 시작 = Supabase pg_cron → workflow_dispatch (supabase/migrations/0002·0004, D7).
+# 아래 schedule 은 pg_cron 실패·GitHub 지연 대비 30분 뒤 예비다. 슬롯 이름이 pg_cron 과 같아서
+# 이미 성공한 슬롯이면 잡이 즉시 끝난다(불변 규칙 13). 공개 저장소 → 로그에 키·개인 금액 출력 금지.
 name: jobs
 
 on:
   schedule:
+    - cron: "40 22 * * *"     # 07:40 KST 예비: holdings_sync am
+    - cron: "40 7 * * *"      # 16:40 KST 예비: holdings_sync pm
+    - cron: "30 18 * * 6"     # 일 03:30 KST 예비: taxonomy_sync → entities_sync
+    - cron: "0 19 * * *"      # 04:00 KST 예비: link_smoke
     - cron: "30 19 * * 2,6"   # 일·수 04:30 KST 예비: outlook_smoke (P2 부터 industry_outlook_collect)
   workflow_dispatch:
     inputs:
@@ -14,7 +18,7 @@ on:
         required: true
         default: "outlook_smoke"
       args:
-        description: "extra args, e.g. --source snowball"
+        description: "extra args, e.g. --slot 2026-09-28-am"
         required: false
         default: ""
 
@@ -24,8 +28,10 @@ concurrency:
 
 env:
   NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
   SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-  JARVIS_URL: ${{ vars.JARVIS_URL }}
+  JARVIS_URL: ${{ vars.JARVIS_URL || secrets.JARVIS_URL }}
+  ALLOWED_EMAIL: ${{ secrets.ALLOWED_EMAIL }}
   TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
   TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
   NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
@@ -48,8 +54,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -59,13 +65,28 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: npm run job -- ${{ inputs.job }} ${{ inputs.args }}
 
+      # ---- 예비 스케줄 (슬롯 = pg_cron 과 동일한 KST 날짜 규칙) ----
+      - name: holdings_sync am (예비)
+        if: github.event.schedule == '40 22 * * *'
+        run: npm run job -- holdings_sync --slot "$(TZ=Asia/Seoul date +%F)-am"
+      - name: holdings_sync pm (예비)
+        if: github.event.schedule == '40 7 * * *'
+        run: npm run job -- holdings_sync --slot "$(TZ=Asia/Seoul date +%F)-pm"
+      - name: taxonomy_sync → entities_sync (예비)
+        if: github.event.schedule == '30 18 * * 6'
+        run: |
+          npm run job -- taxonomy_sync --slot "$(TZ=Asia/Seoul date +%F)-weekly"
+          npm run job -- entities_sync --slot "$(TZ=Asia/Seoul date +%F)-weekly"
+      - name: link_smoke (예비)
+        if: github.event.schedule == '0 19 * * *'
+        run: npm run job -- link_smoke --slot "$(TZ=Asia/Seoul date +%F)-daily"
       - name: outlook_smoke (예비)
         if: github.event.schedule == '30 19 * * 2,6'
         run: npm run job -- outlook_smoke
 
       - name: smoke 결과 보관 (상태·개수·호스트만, 값·키 없음)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: smoke-out-${{ github.run_id }}
           path: smoke-out/

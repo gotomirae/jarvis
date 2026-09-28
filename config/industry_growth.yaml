@@ -44,18 +44,25 @@ news_search:             # ② 무료 자동 수집 (PRD §5.6·§7.3). 비용 $
       enabled: true
       url: "https://api.gdeltproject.org/api/v2/doc/doc?query={q}&mode=artlist&format=json&timespan=3m&maxrecords=75&sort=datedesc"
       min_interval_sec: 5                  # GDELT 요청 제한
+      backoff_sec: [10, 30, 60]            # P0 실측: 연속 호출 후 429 가 15초 넘게 유지 → 3단계 백오프 후 건너뜀
       backoff_on_429: true
-    broker_sites:                          # 등급 A 직접 수집 (공개 페이지만). P0 에서 목록·sitemap URL 실측 후 고정
+    broker_sites:                          # 등급 A 직접 수집 (공개 페이지만). P0 실측(2026-09-27, 로컬) 후 고정
       enabled: true
+      # 수집 방식: sitemap 의 <lastmod> 90일 이내 + url_pattern 일치 URL → 본문 수집. sitemap 에 lastmod 가 없으면 목록 페이지 링크 + 본문 메타 날짜.
+      # 목록 페이지는 대부분 JS 렌더링이라 정적 HTML 링크가 적다(GS·BofA 0개) → sitemap 이 주 경로. robots.txt 6곳 모두 해당 경로 허용.
       pages:
-        - {broker: "Morgan Stanley",  list_url: "https://www.morganstanley.com/insights/articles"}
-        - {broker: "J.P. Morgan",     list_url: "https://www.jpmorgan.com/insights/global-research"}
-        - {broker: "Goldman Sachs",   list_url: "https://www.goldmansachs.com/insights/articles"}
-        - {broker: "BofA Securities", list_url: "https://institute.bankofamerica.com/"}
-        - {broker: "Citi",            list_url: "https://www.citigroup.com/global/insights"}
-        - {broker: "Wells Fargo",     list_url: "https://www.wellsfargoadvisors.com/research-analysis/strategy/"}
+        - {broker: "Morgan Stanley",  list_url: "https://www.morganstanley.com/insights", sitemap: "https://www.morganstanley.com/sitemap.xml", url_pattern: "/insights/articles/"}          # 목록 링크 62 · sitemap insights 255 (lastmod 90일 76)
+        - {broker: "J.P. Morgan",     list_url: "https://www.jpmorgan.com/insights/research", sitemap: "https://www.jpmorgan.com/US/en/sitemap.xml", url_pattern: "/insights/"}          # /insights/global-research → /insights/research 리다이렉트 · sitemap 1647 (90일 191)
+        - {broker: "Goldman Sachs",   list_url: "https://www.goldmansachs.com/insights/articles", sitemap: "https://www.goldmansachs.com/sitemap-1.xml", url_pattern: "/insights/"}     # 목록 JS 렌더링(링크 0) · sitemap 3658 (90일 177)
+        - {broker: "BofA Securities", list_url: "https://institute.bankofamerica.com/", sitemap: "https://institute.bankofamerica.com/content/institute/bank-of-america-institute.sitemap.xml", url_pattern: "insights"}   # sitemap 125 (90일 33)
+        - {broker: "Citi",            list_url: "https://www.citigroup.com/global/insights/citi-institute", sitemap: "https://www.citigroup.com/global/sitemap.xml", url_pattern: "/insights/"}   # /global/insights → citi-institute 리다이렉트 · sitemap 1807 (90일 71)
+        - {broker: "Wells Fargo",     list_url: "https://www.wellsfargo.com/cib/insights/", sitemap: "https://www.wellsfargo.com/seo-sitemap/wellsfargositemap", url_pattern: "/cib/insights/", sitemap_has_lastmod: false}   # 기존 wellsfargoadvisors 전략 URL 404 → CIB insights. sitemap lastmod 없음 → 본문 메타 날짜로 판정
   query_templates:                         # {brokers_or} = 증권사 이름·영문 별칭 OR 묶음
     en: '"{segment_en}" ({brokers_or}) (CAGR OR "to grow" OR "compound annual" OR forecast)'
+    # Bing News RSS 는 OR·괄호 묶음 쿼리에 0건을 돌려준다(P0 실측: 위 en 템플릿 0건, 아래 단순형 6~10건) → 증권사별 단순 쿼리
+    bing_en: '{segment_en} {broker} growth forecast'
+    # GDELT 는 따옴표·OR 묶음을 지원한다. 단 "J.P. Morgan" 처럼 마침표가 든 이름은 제외하고 별칭(JPMorgan)을 쓴다
+    gdelt: '"{segment_en}" ({brokers_or_nodot})'
     ko: '"{segment_ko}" ({brokers_or_ko}) (성장률 OR 연평균 OR 전망)'
   segments_en:                             # L1별 검색어 (세부시장 추가 가능)
     "1a": ["artificial intelligence", "AI infrastructure", "AI software"]

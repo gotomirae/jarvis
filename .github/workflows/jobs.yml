@@ -1,0 +1,73 @@
+# JARVIS 배치 (PRD §14). cron 은 UTC (KST = UTC+9).
+# 정시 시작 = Supabase pg_cron → workflow_dispatch (supabase/migrations/0002_cron_dispatch.sql, D7).
+# 아래 schedule 은 pg_cron 실패·GitHub 지연 대비 30분 뒤 예비다. 잡은 멱등(같은 슬롯 성공 시 즉시 종료, 불변 규칙 13).
+# LLM·유료 API 는 M3 ② 에서 쓰지 않는다(D19). 공개 저장소 → 로그에 키·개인 금액 출력 금지.
+name: jobs
+
+on:
+  schedule:
+    - cron: "30 19 * * 2,6"   # 일·수 04:30 KST 예비: outlook_smoke (P2 부터 industry_outlook_collect)
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "job name (scripts/run.ts)"
+        required: true
+        default: "outlook_smoke"
+      args:
+        description: "extra args, e.g. --source snowball"
+        required: false
+        default: ""
+
+concurrency:
+  group: jarvis-jobs-${{ github.event.schedule || inputs.job }}
+  cancel-in-progress: false
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+  JARVIS_URL: ${{ vars.JARVIS_URL }}
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+  NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+  NOTION_IDEA_DB_ID: ${{ secrets.NOTION_IDEA_DB_ID }}
+  NOTION_WEEKLY_PARENT_PAGE_ID: ${{ secrets.NOTION_WEEKLY_PARENT_PAGE_ID }}
+  GITHUB_READ_TOKEN: ${{ secrets.GH_READ_TOKEN }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  HEIMDALLR_SUPABASE_URL: ${{ secrets.HEIMDALLR_SUPABASE_URL }}
+  HEIMDALLR_ANON_KEY: ${{ secrets.HEIMDALLR_ANON_KEY }}
+  HERMES_SUPABASE_URL: ${{ secrets.HERMES_SUPABASE_URL }}
+  HERMES_ANON_KEY: ${{ secrets.HERMES_ANON_KEY }}
+  SAGE_SUPABASE_URL: ${{ secrets.SAGE_SUPABASE_URL }}
+  SAGE_READ_KEY: ${{ secrets.SAGE_READ_KEY }}
+  SNOWBALL_SUPABASE_URL: ${{ secrets.SNOWBALL_SUPABASE_URL }}
+  SNOWBALL_ANON_KEY: ${{ secrets.SNOWBALL_ANON_KEY }}
+  SNOWBALL_JARVIS_TOKEN: ${{ secrets.SNOWBALL_JARVIS_TOKEN }}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: manual / pg_cron dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: npm run job -- ${{ inputs.job }} ${{ inputs.args }}
+
+      - name: outlook_smoke (예비)
+        if: github.event.schedule == '30 19 * * 2,6'
+        run: npm run job -- outlook_smoke
+
+      - name: smoke 결과 보관 (상태·개수·호스트만, 값·키 없음)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-out-${{ github.run_id }}
+          path: smoke-out/
+          if-no-files-found: ignore
+          retention-days: 14

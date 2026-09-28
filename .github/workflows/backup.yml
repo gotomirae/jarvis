@@ -1,0 +1,57 @@
+# 재생성 불가 데이터 주기 내보내기 (D5 A안 인계: "성과 원장 등은 주기적 내보내기").
+# 공개 저장소이므로 결과물을 이 저장소·아티팩트에 두지 않는다 → private 백업 저장소에 커밋(SnowBall backup.yml 과 같은 방식).
+# 필요 secrets: SUPABASE_DB_URL (JARVIS postgres 연결 문자열), BACKUP_REPO (owner/repo, private), BACKUP_TOKEN (그 저장소 Contents RW PAT)
+# 대상: 판정·성과 원장처럼 다시 계산할 수 없는 테이블. signals·axes 등 재수집 가능한 표는 제외. secrets 미설정이면 건너뛴다.
+name: backup
+
+on:
+  schedule:
+    - cron: "30 14 * * 0"   # 일 23:30 KST
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: check secrets
+        id: chk
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_REPO: ${{ secrets.BACKUP_REPO }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ] || [ -z "$BACKUP_REPO" ]; then echo "백업 secrets 미설정 → 건너뜀"; echo "skip=1" >> "$GITHUB_OUTPUT"; fi
+      - name: install pg_dump 17
+        if: steps.chk.outputs.skip != '1'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq postgresql-client-17
+      - name: dump (jarvis 스키마 구조 + 재생성 불가 테이블 데이터)
+        if: steps.chk.outputs.skip != '1'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          mkdir -p out
+          D=$(date -u +%F)
+          pg_dump "$SUPABASE_DB_URL" --schema=jarvis --schema-only --no-owner --no-privileges | gzip > out/jarvis-schema-$D.sql.gz
+          pg_dump "$SUPABASE_DB_URL" --data-only --no-owner --no-privileges \
+            -t jarvis.signal_ledger -t jarvis.outcomes -t jarvis.entry_eval -t jarvis.breakout_watch \
+            -t jarvis.industry_outlooks -t jarvis.weekly_memos -t jarvis.notifications -t jarvis.queue_items \
+            -t jarvis.taxonomy_labels -t jarvis.taxonomy_pending -t jarvis.inbox_log -t jarvis.cost_log \
+            | gzip > out/jarvis-data-$D.sql.gz
+          ls -la out
+      - name: push to private backup repo
+        if: steps.chk.outputs.skip != '1'
+        env:
+          BACKUP_REPO: ${{ secrets.BACKUP_REPO }}
+          BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
+        run: |
+          git clone --depth 1 "https://x-access-token:${BACKUP_TOKEN}@github.com/${BACKUP_REPO}.git" repo
+          mkdir -p repo/jarvis && cp out/*.sql.gz repo/jarvis/
+          cd repo
+          ls -1t jarvis/jarvis-data-*.sql.gz | tail -n +13 | xargs -r rm --
+          ls -1t jarvis/jarvis-schema-*.sql.gz | tail -n +13 | xargs -r rm --
+          git config user.name "jarvis-backup" && git config user.email "backup@jarvis.local"
+          git add -A && git commit -m "jarvis backup $(date -u +%F)" && git push

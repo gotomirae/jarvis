@@ -37,3 +37,17 @@ PRD §16의 P{번호}를 진행해라. 시작 전에 해당 절과 관련 config
 ## 연계 프로젝트 작업 (각 저장소에서 별도 세션)
 - SnowBall Heritage: `docs/SNOWBALL_SETUP_GUIDE.md` — **P0 전에 먼저**
 - Sage: §E · HermesCall: §C · Heimdallr(Codex): §B · FlyWheel: §D
+
+
+[인계 — 이미 끝난 것]
+- SnowBall 연결(P(-1)) 완료: 0019_jarvis_contract.sql 운영 DB 적용·검증 끝(SnowBall 커밋 5ab99ff, D-69).
+  읽기 RPC 6개 모두 200 응답(보유 49종목 — 주식 37·ETF 6·펀드 6, 연금 계좌 포함 → 개별 종목 신호는 asset_class='stock' 만).
+  jarvis_submit_idea 는 운영 DB에서 아직 호출 안 함. 아이디어 payload 형식은 SnowBall types/index.ts 의
+  JarvisSubmitIdeaInput·JarvisEntry(M1~M5: {pass, note}) 를 따른다. RPC 는 반드시 POST 로 호출(GET 이면 토큰이 URL 에 남음).
+- risk_alerts 미확인 경보가 7일에 250건 → 보유 경고는 종목·규칙별 묶음/심각도 필터 필요.
+- git: 이미 초기화됨. 원격 gotomirae/jarvis(현재 private, 브랜치 master). .gitignore 로 .env.local 제외 확인.
+  공개 여부(D8 은 public)는 내가 아직 결정 안 함 — 묻고 진행해라.
+- .env.local 에 SNOWBALL_SUPABASE_URL·SNOWBALL_ANON_KEY·SNOWBALL_JARVIS_TOKEN 입력 완료, GitHub Secrets 에도 같은 3개 등록 완료.
+- D5: A안 — 별도 구글 계정의 새 Supabase 프로젝트 jarvis(서울). 키는 내가 .env.local 에 직접 넣는다.
+  스키마 SQL 은 전부 supabase/migrations 에 커밋하고, 재생성 불가 데이터(성과 원장 등)는 주기적 내보내기를 설계해라.
+- Vercel 은 앱 골격 push 후 연결 예정(아직 안 함).

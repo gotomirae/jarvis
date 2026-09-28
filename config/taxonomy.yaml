@@ -100,3 +100,29 @@ notion:
     "음식료": "4369c770aa6183e3aa5c01f1ee0a214c"
     "인바운드": "05b9c770aa6183a2929701c1a2499d5b"
     "양자컴퓨터": "2499c770aa61839fa3138161363883d8"
+  # FlyWheel L2별 모니터링 DB (FlyWheel config/industries.json monitoring_db_id, 2026-09-27 복사)
+  # 연계종합 행 형식 (P0 실측, AI DB 2026-09-22~26):
+  #   구분 = '날짜' 텍스트 속성의 둘째 줄 ("2026-09-26\n연계종합"). '구분' select 속성은 존재하지만 비어 있다(FlyWheel 미사용).
+  #   신호강도 = select, 옵션 "1"~"5". 연계종합 행에만 값이 있고 당일종합 행은 null.
+  flywheel_monitoring:
+    date_property: "날짜"
+    strength_property: "신호강도"
+    linked_marker: "연계종합"
+    db_ids:
+      "AI": "36a9c770aa6181a6b614eb51baf3b194"
+      "조선": "36a9c770aa6181d0a86ce60ac583fd46"
+      "바이오": "3999c770aa6180fdb9a7f89dd6794628"
+      "반도체": "3959c770aa6180058122c1d6b3cee9ae"
+      "양자컴퓨터": "36a9c770aa6181c99dc4d1c755f88be7"
+      "음식료": "36a9c770aa61813d8326ce2a1c9cbf9e"
+      "인바운드": "36a9c770aa6181829c35cb2a501658e7"
+      "의료기기": "36a9c770aa61816fbb04da54ec580e44"
+      "IT": "3999c770aa6180ffaca6ddef492d4683"
+      "Robot": "37d9c770aa6180d2a13ac440ce34cd6f"
+      "배터리": "36a9c770aa61819f87c8d21643f9820e"
+      "방산": "36a9c770aa6181d6a4fde2f38f759ebc"
+      "엔터": "36a9c770aa6181e6a2bbc1b01b1e95c7"
+      "미용기기": "36a9c770aa61812a84e4d171032ca4df"
+      "우주항공": "36a9c770aa61813489c9f77c1d4aca87"
+      "화장품": "36a9c770aa618194946cfc956ccd484d"
+      "전력인프라": "36a9c770aa6181338532ed9f43ac8462"

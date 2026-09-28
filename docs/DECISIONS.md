@@ -35,7 +35,17 @@
 
 ---
 
-## P1 검증 기록 (2026-09-28, 진행 중)
+## ✅ P1 통과 (2026-09-28)
+| 통과 조건(PRD §16) | 결과 |
+|---|---|
+| 부록 A 재현 | 참조 스냅샷 7개 프로젝트·127 라벨 전부 일치, 실데이터 라벨 96개 매핑(pending 1: SnowBall `S&P500`) |
+| 링크 규칙 전부 200/3xx | **24/24** (배포 후 link_smoke, JARVIS `/stock/*` 307 로그인 이동 포함) |
+
+- 0003(허용 이메일 RLS)·0004(P1 pg_cron 6개) 적용, `auth_setup` 으로 allowed_users 1명 등록, Supabase Auth URL 설정(사용자).
+- `entities_sync`: **1,499 종목**(KR 1,399·US 100), L1 근거 Heimdallr 1,341·HermesCall 88·SnowBall 38·override(ETF) 6·없음 26, SnowBall 연결 44, HermesCall 분석 링크 93, 네이버 미국 코드 100/100.
+- 남은 사용자 작업: 각 프로젝트 산업명 수정(INTEGRATION_TASKS §C·§E, P1 범위의 사용자 몫), `/taxonomy` 에서 `S&P500` 확정.
+
+## P1 검증 기록 (2026-09-28)
 
 - **부록 A 재현**: `lib/taxonomy/match.ts` = 참조 구현 스냅샷 7개 프로젝트·127 라벨 **전부 일치**, 오탐 회귀 3종 통과. 참조 스크립트 재실행 결과도 `taxonomy_expected.json` 과 동일(현 yaml 기준). 커버리지 lib/taxonomy·links·entities 라인 100%(테스트 73).
 - **taxonomy_sync 실데이터**: 라벨 96개(HermesCall 13·Sage 9·Heimdallr 섹터 37·SnowBall 20·FlyWheel 17) 전부 매핑. pending 1건 = SnowBall ETF 섹터 `S&P500`(미매칭 → /taxonomy 확정 대기). 노션 2_1: ID 기준 변경 없음.

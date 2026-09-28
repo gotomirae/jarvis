@@ -57,7 +57,17 @@
 | GDELT DOC 2.0 | 200 | 75 | 75 | 첫 실행 429 → 백오프 후 200. 결과 잡음 많음(추출 단계에서 거름) |
 | 증권사 공개 페이지 | 200 (6/6) | sitemap 90일 lastmod: MS 76·JPM 191·GS 177·BofA 33·Citi 71·WF 없음 | — | robots.txt 6곳 모두 해당 경로 허용 |
 
-→ 로컬 기준 **4/4 응답**(통과 조건 3종 이상). **GitHub Actions 실측은 저장소 push 후 `jobs` 워크플로(outlook_smoke)로 수행하고 여기 추가한다.**
+→ 로컬 기준 **4/4 응답**(통과 조건 3종 이상).
+
+### 2-1. M3 ② 무료 소스 스모크 — **GitHub Actions 실측** (2026-09-28, run 36420608492)
+| 소스 | HTTP | 결과 | 90일 이내 | 비고 |
+|---|---|---|---|---|
+| Google News RSS | 200 | 51 | 51 | 원문 URL 해제 5/5(batchexecute) → finance.yahoo.com·cnn.com 등 |
+| Bing News RSS | 200 | 7 | 5 | msn.com·finance.yahoo.com 등 |
+| GDELT DOC 2.0 | 응답 없음 | 0 | 0 | Actions 러너에서 20초 내 응답 없음(연결 실패/타임아웃). 로컬에선 200. T21 대로 격리·다음 실행 재시도, P2 수집기에서 타임아웃 상향 검토 |
+| 증권사 공개 페이지 | 200 (6/6) | sitemap 90일 lastmod: MS 76·JPM 191·GS 173·BofA 33·Citi 70·WF 없음(패턴 14) | — | robots.txt 6곳 허용 |
+
+→ **Actions 기준 3/4 응답 → P0 통과 조건(3종 이상) 충족.**
 
 ### 3. 코드 게이트
 - `npm run typecheck` ✅ · `npm run test:coverage` ✅(32 tests, 대상 파일 라인 100%) · `npm run build` ✅

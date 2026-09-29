@@ -10,6 +10,7 @@
  *   taxonomy_sync      산업 라벨 매핑·pending·노션 변경 감지 (일 03:00)
  *   link_smoke         링크 규칙 스모크 (매일 03:30)
  *   auth_setup         ALLOWED_EMAIL → jarvis.allowed_users
+ *   set_password       대시보드 로그인 비밀번호 설정 — 사용자가 PowerShell 에서 직접 실행(대화형)
  */
 import "./env";
 import { sourceSmokeJob } from "./source_smoke";
@@ -20,6 +21,7 @@ import { entitiesSyncJob } from "./entities_sync";
 import { taxonomySyncJob } from "./taxonomy_sync";
 import { linkSmokeJob } from "./link_smoke";
 import { authSetupJob } from "./auth_setup";
+import { setPasswordJob } from "./set_password";
 
 export function parseArgs(argv: string[]): { job: string; args: Record<string, string> } {
   const [job, ...rest] = argv;
@@ -43,6 +45,7 @@ const JOBS: Record<string, (args: Record<string, string>) => Promise<void>> = {
   taxonomy_sync: taxonomySyncJob,
   link_smoke: linkSmokeJob,
   auth_setup: () => authSetupJob(),
+  set_password: () => setPasswordJob(),
 };
 
 async function main() {

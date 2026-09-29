@@ -32,6 +32,7 @@
 | D28 | 2026-09-28 | 노션 `2_1` 변경 감지는 **ID 기준**(taxonomy.yaml `l1_urls`). 공개 API 의 child_database 제목은 화면 제목이 아니라 데이터 소스 이름(`1f. 엔터_미디어`, `1j. IT`)이라 제목 비교는 오탐 8건 → 참고(title_notes)로만 표시 | P1 실측(API 2022-06-28·2025-09-03 모두 동일) |
 | D29 | 2026-09-28 | 네이버 미국 코드 해석 순서 `.O → .K → (접미사 없음)`, 응답 `reutersCode` 우선. TSM·MDT·IBM 은 접미사 없이만 200(HermesCall 이 "MDT 미수록"으로 본 사례 해결) | P1 실측 |
 | D30 | 2026-09-28 | 링크 스모크 빈 화면 판정은 **`<title>` 안에서만**(본문 검사 금지), 리다이렉트 최대 5회 추적, 타임아웃 45초. 로그인 필요 규칙: StockEasy·Sage·SnowBall·JARVIS | Next.js 앱·StockEasy 정상 페이지 번들에 404 문구가 들어 있어 본문 검사 오탐 12건. 없는 종목은 HermesCall·StockEasy 가 404 상태로 응답. notion.so 는 2단계 리다이렉트 |
+| D31 | 2026-09-29 | 대시보드 로그인을 **매직링크 → 이메일+비밀번호**로 변경. 비밀번호는 사용자가 PC PowerShell 에서 `npm run job -- set_password`(대화형·비표시 입력, Admin API)로 직접 설정. 세션 쿠키 유지로 같은 브라우저에선 재로그인 불필요. `/auth/callback` 제거 | 사용자 요청(매번 링크 번거로움) + 첫 시도 "링크 만료/잘못됨" — 메일 앱 내 브라우저 등 다른 브라우저로 열면 PKCE code_verifier 쿠키가 없어 교환 실패(추정). RLS·ALLOWED_EMAIL 보호는 그대로 |
 
 ---
 

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 export function Nav() {
-  const items: [string, string][] = [["/", "오늘"], ["/portfolio", "포트폴리오"], ["/growth", "산업 성장"], ["/taxonomy", "산업 매핑"]];
+  const items: [string, string][] = [["/", "오늘"], ["/portfolio", "내 보유 종목"], ["/growth", "산업 성장 근거"], ["/taxonomy", "산업 분류"]];
   return (
     <nav className="flex flex-wrap gap-3 text-sm border-b border-neutral-200 dark:border-neutral-800 pb-2">
       <span className="font-bold">JARVIS</span>
@@ -33,6 +33,9 @@ export function LinkRow({ links }: { links: { key: string; button: { text: strin
 }
 
 export const Empty = ({ text }: { text: string }) => <p className="text-sm text-neutral-500">{text}</p>;
+
+/** 섹션 설명 한 줄 — 이 목록이 무엇인지 */
+export const Guide = ({ children }: { children: ReactNode }) => <p className="text-xs text-neutral-500">{children}</p>;
 export const Footer = ({ asOf }: { asOf?: string }) => (
   <footer className="pt-4 text-xs text-neutral-500 space-y-1">
     {asOf && <p>기준 {asOf} KST</p>}

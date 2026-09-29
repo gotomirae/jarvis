@@ -4,12 +4,13 @@
  */
 import { linksConfig, taxonomyConfig } from "@/lib/config/load";
 import { dbInsert, dbSelect, dbSelectAll } from "@/lib/db";
+import { explain, type AxesEvidence } from "@/lib/engine/explain";
 import { QUEUE_LABEL, type Queue } from "@/lib/engine/queues";
 import { env } from "@/lib/env";
 import { read as heimdallr } from "@/lib/ingest/heimdallr";
 import { read as hermes } from "@/lib/ingest/hermescall";
 import { charts } from "@/lib/ingest/market";
-import { dashboardButtons, inlineLinks, rows, type LinkEntity } from "@/lib/links";
+import { dashboardButtons, linkLine, rows, type LinkEntity } from "@/lib/links";
 import { sendMessage } from "@/lib/telegram/send";
 import { briefText, type BriefData, type BriefItem } from "@/lib/telegram/templates";
 import { kstDate, kstString } from "@/lib/time";
@@ -35,18 +36,17 @@ export async function buildBrief(kind: "morning" | "evening", now = new Date()):
     dbSelectAll<{ entity_id: string | null; payload: { name?: string; summary?: string }; sent_at: string | null }>("notifications", `select=entity_id,payload,sent_at&kind=eq.holding_alert&sent_at=gte.${since24}`),
   ]);
   const ctx = { links: linksConfig(), taxonomy: taxonomyConfig(), jarvisUrl: env().JARVIS_URL };
+  const picked = (qItems.ok ? qItems.data : []).filter((x) => ORDER.includes(x.queue) && ents.byId.get(x.entity_id)?.market === focus)
+    .sort((a, b) => ORDER.indexOf(a.queue) - ORDER.indexOf(b.queue)).slice(0, 12);
+  const ids = picked.map((x) => x.entity_id);
+  const ax = ids.length ? await dbSelectAll<{ entity_id: string; evidence: AxesEvidence }>("axes_daily", `select=entity_id,evidence&date=eq.${date}&entity_id=in.(${ids.map((i) => `"${i}"`).join(",")})`) : { ok: true as const, data: [] };
+  const evBy = new Map((ax.ok ? ax.data : []).map((a) => [a.entity_id, a.evidence]));
   const items: BriefItem[] = [];
-  for (const q of ORDER) {
-    for (const it of (qItems.ok ? qItems.data : []).filter((x) => x.queue === q)) {
-      const e = ents.byId.get(it.entity_id);
-      if (!e || e.market !== focus) continue;
-      const r = it.reason as { p?: number | null; families?: string[]; days_to_earnings?: number; heat?: number };
-      const p = r.p === null || r.p === undefined ? "-" : String(Math.round(r.p));
-      const note = q === "buy" ? `${e.market === "KR" ? "PRI" : "P"} ${p} · ${r.families?.join("/") ?? ""}`
-        : q === "radar" ? `실적 D-${r.days_to_earnings ?? "?"} · ${r.families?.join("/") ?? ""}`
-        : q === "take_profit" ? `과열 ${r.heat ?? "-"} · P ${p}` : `P ${p} — 눌림 대기`;
-      items.push({ icon: ICON[q], html: inlineLinks(e as unknown as LinkEntity, ctx), note: `${QUEUE_LABEL[q].slice(2).trim()} · ${note}` });
-    }
+  for (const it of picked) {
+    const e = ents.byId.get(it.entity_id)!;
+    const r = it.reason as { p?: number | null; days_to_earnings?: number; heat?: number };
+    const x = explain({ queue: it.queue, market: e.market, evidence: evBy.get(it.entity_id) ?? {}, p: r.p ?? null, daysToEarnings: r.days_to_earnings ?? null, heat: r.heat ?? null });
+    items.push({ icon: ICON[it.queue], group: QUEUE_LABEL[it.queue].replace(/^\S+\s/, ""), name: e.name, code: e.symbol, conclusion: x.conclusion, reasons: x.reasons, links: linkLine(e as unknown as LinkEntity, ctx) });
   }
 
   // 실적: 아침 = 밤사이 HermesCall 미국 발표, 저녁 = 오늘 Heimdallr ★○
@@ -80,7 +80,7 @@ export async function buildBrief(kind: "morning" | "evening", now = new Date()):
     sectors: sectors.map((s) => ({ label: s.label, change_pct: quotes[s.sym]?.change_pct ?? null })),
     regime: { risk_off: reg.risk_off, reasons: reg.reasons },
     counts: { green: 0, yellow: 0, blue: 0, alert: al.length },
-    earnings, items: items.slice(0, 15),
+    earnings, items,
     holding: al.slice(0, 8).map((a) => `⚠️ ${a.payload?.name ?? a.entity_id ?? "-"}: ${a.payload?.summary ?? ""}`),
     schedule: { ...schedule, lines: schedule.lines.slice(0, 10) },
     asOf: kstString(now),

@@ -39,6 +39,7 @@
 | D35 | 2026-09-29 | FlyWheel 인박스의 "HermesCall 최종 딥분석" = **deep_analysis 가 있는 분석**(stage 값은 전부 `preliminary`) | P2 실측(60건 중 deep 46건, final 0건) |
 | D36 | 2026-09-29 | M3 ② 수집 최적화: **등급 A·B 매체만 원문 수집**(Google News `<source url>` 로 해제 전 거름), Bing 은 산업별 첫 세그먼트만(증권사별 쿼리), 도메인별 직렬화 + 6개 동시. 처리한 URL 은 `outlook_seen`(120일) | 반도체 1개 L1 시험: 272초(Google 해제 건당 ~4초) → 최적화 후 전력인프라 115초. 18개 L1 전체 예상 30~40분 → Actions timeout 90분 |
 | D37 | 2026-09-29 | M3 ② 영문 문장의 L1 판정 = taxonomy 키워드 + `segments_en/ko` **최장 일치**(예: "AI chips"→1b 가 "AI"→1a 보다 우선), 같은 길이 다른 L1 은 모호로 폐기. 비메이저 증권사 목록(`non_major_brokers`)으로 탈락 사유 구분. 범위 "20-25%"는 하한 선처리 | fixture 정탐 7·오탐 8·채택 7·집계 3 전부 통과. 첫 실채택: BofA 미국 반도체 CAGR 18%(~2030, finance.yahoo.com, B2) |
+| D38 | 2026-09-29 | **표시 원칙**: 대시보드·텔레그램에서 약어(N·C·F·P·PRI·M3·M4·CAGR·YoY·등급 A/B·규칙 A1/B1/B2·L1 코드)를 쓰지 않고 쉬운 이름(`lib/labels.ts`)과 섹션별 한 줄 설명을 쓴다. 종목은 **결론 → 근거 → 링크(맨 끝 줄)** 순서(`lib/engine/explain.ts`, 텔레그램·대시보드 공용). 🎯 매수 검토 판정에는 MACD·RSI 가 들어가지 않는다(판정 = 실적 숫자 + 주가 반영도 40 미만 + 서로 다른 프로젝트 2곳 합의). MACD 교차 직전(M2)·수급(M5)은 🟢 필수 조건으로 P3 에서 Heimdallr·HermesCall `entry_checks` 로 적용. 그 전까지 Heimdallr 기술 셋업·시세 RSI, HermesCall 기술 아이디어를 **"기술적 참고(판정 미사용)"**로만 표시(파이프라인이 axes_daily.evidence.tech 에 저장, 화면은 DB 만 읽음) | 사용자 요청(가독성·MACD/RSI 반영 여부 확인) |
 
 ---
 
@@ -53,6 +54,13 @@
 | poll (보유 경고) | 부트스트랩 후보 48건(전부 SnowBall 경보) — 첫 실행은 기록만 |
 | 브리핑 | 아침 1.5초·저녁 0.5초 생성(발송 전 확인) |
 | 인박스 | 최근 2일 후보 0건(드라이런) |
+
+### P2 가동 (2026-09-29 22:30 KST)
+- 0005 적용(Vault jarvis_base_url·jarvis_cron_secret, 스케줄 9개), Vercel CRON_SECRET, 노션 2_4 연결(사용자).
+- Vercel `/api/cron/poll` 200(24초) — 보유 경고 부트스트랩 48건 기록(발송 없음). **22:30 pg_cron 정시 폴링 도착 확인**(job_runs 슬롯 13:30Z, fresh 0).
+- 첫 pipeline: 신호 1,352(WiKi 언급 120 포함) · M4 560 · 큐 ⚠️32(부트스트랩 경고 = 현재 상태) 🎯8 🔭7 · **SnowBall draft 3건 제출**(GEV·LITE·KR:417840) · 인박스 0.
+- 저녁 브리핑 시험 발송 22:31(🎯 8건).
+- **7일 관찰 시작**: 통과 판정 = 브리핑 `notifications.brief_*` 의 sent_at 이 07:30·19:20 기준 정시(허용 오차는 판정 때 기록) 7일 연속 + 보유 경고 `payload.latency_min` ≤ 35.
 
 ---
 

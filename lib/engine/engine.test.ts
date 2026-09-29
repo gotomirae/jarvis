@@ -370,3 +370,54 @@ describe("M4 이벤트", () => {
     expect(m4ForEntity("KR:9", ["2e"], ev, "2026-09-28", 180)).toEqual({ pass: false, nearest: [] });
   });
 });
+
+describe("explain — 결론·근거 문장", () => {
+  it("신호 설명", async () => {
+    const { describeSignal } = await import("./explain");
+    expect(describeSignal("industry_narrative", 10, { l2: "반도체", signal_strength: 5 })).toBe("FlyWheel 반도체 흐름 강도 5/5");
+    expect(describeSignal("industry_narrative", 8, {})).toBe("FlyWheel 산업 흐름 강도 4/5");
+    expect(describeSignal("company_mention_fw", 6, { mentions_14d: 2 })).toBe("FlyWheel 위키 최근 14일 언급 2건");
+    expect(describeSignal("company_mention_fw", 6, {})).toBe("FlyWheel 위키 최근 14일 언급 ?건");
+    expect(describeSignal("mentor_consensus", 8, { bullish: ["a", "b", "c"] })).toBe("Sage 멘토 3명 강세");
+    expect(describeSignal("mentor_consensus", 8, {})).toBe("Sage 멘토 ?명 강세");
+    expect(describeSignal("mentor_consensus", 8, { bullish: ["a", "b"], scope: "industry" })).toBe("Sage 멘토 2명 강세(산업 전체)");
+    expect(describeSignal("earnings_catalyst", 8, { leader: "NVDA" })).toBe("HermesCall NVDA 실적 수혜 강도 8/10");
+    expect(describeSignal("earnings_catalyst", 8, {})).toBe("HermesCall 미국 대장주 실적 수혜 강도 8/10");
+    expect(describeSignal("x", 1, {})).toBe("x 1");
+  });
+
+  it("큐별 결론 + 근거 (국내·미국·기술 참고)", async () => {
+    const { explain, pLevel, rsiBand } = await import("./explain");
+    expect([rsiBand(75), rsiBand(25), rsiBand(50)]).toEqual(["과열권", "과매도권", "중립"]);
+    expect([pLevel(null), pLevel(10), pLevel(50), pLevel(80)]).toEqual(["계산 전", "덜 반영", "보통", "많이 반영"]);
+    const kr = explain({ queue: "buy", market: "KR", p: 14.9, evidence: {
+      F: { gate_passed: true, score: 82.25, grade: "★" }, P: { value: 14.9, basis: "PRI" }, families: ["flywheel", "heimdallr", "sage"],
+      N: [{ kind: "industry_narrative", strength: 10, detail: "FlyWheel 반도체 흐름 강도 5/5" }, { kind: "mentor_consensus", strength: 8 }],
+      C: { catalyst: { strength: 8, detail: "HermesCall NVDA 실적 수혜 강도 8/10" }, us_filters: [] } },
+      tech: { source: "Heimdallr 기술 셋업", as_of: "2026-09-23", rsi: 51.1, rsi_note: "상승 아님", macd_note: "시그널 아래", price_note: "하락 중 반등 접근" } });
+    expect(kr.conclusion).toBe("매수 검토 후보 — 실적 숫자가 좋고 주가는 덜 반영(15), FlyWheel·Heimdallr·Sage 3곳 신호 합의");
+    expect(kr.reasons).toEqual([
+      "실적 숫자: Heimdallr ★ · 점수 82 · 게이트 통과",
+      "주가 반영도: 15/100 (덜 반영) — 낮을수록 좋은 실적이 주가에 덜 반영됨",
+      "산업·종목 이야기: FlyWheel 반도체 흐름 강도 5/5 · Sage 멘토 ?명 강세",
+      "실적 촉매: HermesCall NVDA 실적 수혜 강도 8/10",
+      "기술적 참고(판정 미사용): MACD 시그널 아래 · RSI 51(중립, 상승 아님) · 가격 하락 중 반등 접근 — Heimdallr 기술 셋업 2026-09-23",
+    ]);
+    const gateNo = explain({ queue: "pullback_wait", market: "KR", p: 70, evidence: { F: { gate_passed: false, score: 90, grade: null } } });
+    expect(gateNo.reasons[0]).toBe("실적 숫자: Heimdallr 등급 없음 · 점수 90 · 게이트 미통과");
+    expect(gateNo.conclusion).toContain("눌림 대기 — 실적은 좋지만 주가가 이미 많이 반영(70)");
+    expect(explain({ queue: "buy", market: "KR", p: null, evidence: { F: { score: undefined, grade: "○" } } }).reasons[0]).toBe("실적 숫자: Heimdallr ○ · 점수 -");
+    const us = explain({ queue: "radar", market: "US", p: null, daysToEarnings: 30, evidence: { C: { catalyst: { strength: 7 }, us_filters: ["F2", "X9"] }, families: [] } });
+    expect(us.conclusion).toBe("실적 발표 30일 전 선행 관찰 — 이야기·촉매는 켜졌고 실적 숫자는 아직 확인 전");
+    expect(us.reasons).toEqual(["실적 숫자: 가이던스 상향 · X9", "실적 촉매: 수혜 강도 7/10"]);
+    expect(explain({ queue: "radar", market: "US", p: null, evidence: { F: { us_filters: ["F3", "F4"] } } }).reasons[0]).toBe("실적 숫자: 성장 가속 · 영업이익률 개선");
+    expect(explain({ queue: "radar", market: "US", p: null, evidence: {} }).conclusion).toContain("? 일 전".replace(" ", ""));
+    expect(explain({ queue: "take_profit", market: "KR", p: 80, heat: 78, evidence: {} }).conclusion).toBe("익절 검토 — 과열 78점, 주가 반영도 80로 높음 (SnowBall 익절 사다리 확인)");
+    expect(explain({ queue: "take_profit", market: "KR", p: null, evidence: {} }).conclusion).toContain("과열 -점, 주가 반영도 -");
+    expect(explain({ queue: "holding_alert", market: "KR", p: null, evidence: {} }).conclusion).toContain("보유 경고");
+    expect(explain({ queue: "buy", market: "US", p: 30, evidence: {}, tech: { source: "s", as_of: null, rsi: null, rsi_note: null, macd_note: null, price_note: null } }).reasons).toEqual(["주가 반영도: 30/100 (덜 반영) — 낮을수록 좋은 실적이 주가에 덜 반영됨"]);
+    expect(explain({ queue: "buy", market: "US", p: 30, evidence: {}, tech: { source: "s", as_of: null, rsi: 40, rsi_note: null, macd_note: null, price_note: null } }).reasons[1]).toBe("기술적 참고(판정 미사용): RSI 40(중립) — s");
+    expect(explain({ queue: "pullback_wait", market: "KR", p: null, evidence: {} }).conclusion).toContain("계산 전(-)");
+    expect(explain({ queue: "buy", market: "KR", p: 10, evidence: { tech: { source: "저장", as_of: "2026-09-29", rsi: 72, rsi_note: null, macd_note: null, price_note: null } } }).reasons[1]).toBe("기술적 참고(판정 미사용): RSI 72(과열권) — 저장 2026-09-29");
+  });
+});

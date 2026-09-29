@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  dashboardButtons, evaluateLink, fillTemplate, flywheelL2PageId, htmlTitle, inlineLinks, naverCacheFresh, naverUsAccept, rows, stockKeyboard, stockLinks, stockUrl,
+  dashboardButtons, evaluateLink, fillTemplate, flywheelL2PageId, htmlTitle, linkLine, inlineLinks, naverCacheFresh, naverUsAccept, rows, stockKeyboard, stockLinks, stockUrl,
   type LinkCtx, type LinkEntity,
 } from "./links";
 import { linksConfig, taxonomyConfig } from "./config/load";
@@ -99,6 +99,10 @@ describe("links — 종목 링크 세트 (PRD §9.4)", () => {
     expect(inlineLinks({ ...hynix, name: "A&B<주>" }, ctx)).toBe(
       'A&amp;B&lt;주&gt; · <a href="https://m.stock.naver.com/domestic/stock/000660/total">네이버</a> · <a href="https://stockeasy.intellio.kr/stock-analysis/stock-info/000660">StockEasy</a> · <a href="https://heimdallr-call.vercel.app/stock/000660">Heimdallr</a> · <a href="https://jarvis.example.app/stock/KR%3A000660">JARVIS</a>');
     expect(inlineLinks(nvda, { ...ctx, jarvisUrl: undefined })).toBe('NVIDIA · <a href="https://m.stock.naver.com/worldstock/stock/NVDA.O/total">네이버</a>');
+    expect(linkLine(nvda, { ...ctx, jarvisUrl: undefined })).toBe('🔗 <a href="https://m.stock.naver.com/worldstock/stock/NVDA.O/total">네이버</a> · <a href="https://hermes-call-psi.vercel.app/screener">HermesCall</a>');
+    expect(linkLine(hynix, ctx)).toContain("🔗 <a href=\"https://m.stock.naver.com/domestic/stock/000660/total\">네이버</a> · ");
+    const none = { ...ctx, links: { ...ctx.links, stock: {} } };
+    expect(linkLine(nvda, none)).toBe("");
   });
 });
 

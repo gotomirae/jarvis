@@ -2,6 +2,7 @@
  * 종목별 축 N·C·F·P·H (PRD §6.2) — 합산하지 않는다. 임계값은 rules.yaml `axes`.
  * 순수 함수: 유효 신호·Heimdallr 최신 스크린·HermesCall 필터·보유 정보를 받는다.
  */
+import { describeSignal } from "./explain";
 import { FAMILY, type Signal } from "./types";
 
 export type AxesRules = {
@@ -47,13 +48,13 @@ export function computeAxes(e: EntityCtx, signals: Signal[], rules: AxesRules, n
     cons && cons.strength >= rules.N.mentor_consensus_min && cons,
   ].filter((x): x is Signal => !!x);
   nHits.forEach((s) => fam.add(FAMILY[s.kind]));
-  ev.N = nHits.map((s) => ({ kind: s.kind, strength: s.strength, ref: s.source_ref }));
+  ev.N = nHits.map((s) => ({ kind: s.kind, strength: s.strength, ref: s.source_ref, detail: describeSignal(s.kind, s.strength, { ...s.evidence, scope: s.entity_id ? "company" : "industry" }) }));
 
   const cat = best("earnings_catalyst");
   const usAny = (e.usFilters ?? []).filter((f) => rules.C.us_filters_any.includes(f));
   const cOn = (cat !== null && cat.strength >= rules.C.earnings_catalyst_min) || usAny.length > 0;
   if (cOn) fam.add("hermescall");
-  ev.C = { catalyst: cat ? { strength: cat.strength, ref: cat.source_ref } : null, us_filters: usAny };
+  ev.C = { catalyst: cat ? { strength: cat.strength, ref: cat.source_ref, detail: describeSignal(cat.kind, cat.strength, cat.evidence) } : null, us_filters: usAny };
 
   let fOn = false;
   if (e.market === "KR" && e.screen) {

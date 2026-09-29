@@ -136,12 +136,24 @@ const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").re
 export const INLINE_KEYS: [string, string][] = [["naver", "네이버"], ["stockeasy", "StockEasy"], ["heimdallr", "Heimdallr"], ["jarvis", "JARVIS"]];
 
 export function inlineLinks(e: LinkEntity, ctx: LinkCtx): string {
-  const parts = [escHtml(e.name)];
-  for (const [key, text] of INLINE_KEYS) {
+  const links = linkParts(e, ctx);
+  return [escHtml(e.name), ...links].join(" · ");
+}
+
+function linkParts(e: LinkEntity, ctx: LinkCtx, keys: [string, string][] = INLINE_KEYS): string[] {
+  const parts: string[] = [];
+  for (const [key, text] of keys) {
     const url = stockUrl(key, e, ctx);
     if (url) parts.push(`<a href="${escHtml(url)}">${text}</a>`);
   }
-  return parts.join(" · ");
+  return parts;
+}
+
+/** 종목 블록 끝에 붙이는 링크 한 줄 (브리핑): 🔗 네이버 · StockEasy · Heimdallr · HermesCall · JARVIS */
+export const LINE_KEYS: [string, string][] = [["naver", "네이버"], ["stockeasy", "StockEasy"], ["heimdallr", "Heimdallr"], ["hermescall", "HermesCall"], ["jarvis", "JARVIS"]];
+export function linkLine(e: LinkEntity, ctx: LinkCtx): string {
+  const parts = linkParts(e, ctx, LINE_KEYS);
+  return parts.length ? `🔗 ${parts.join(" · ")}` : "";
 }
 
 /** 링크 스모크 판정 (PRD §9.4): 4xx·5xx·빈 화면 패턴 = 실패. 로그인 필요 규칙은 3xx·401 을 정상으로 본다(T13). */

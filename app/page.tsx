@@ -1,6 +1,7 @@
-import { Card, Empty, Footer, LinkRow, Nav, Section } from "@/app/_components/ui";
+import { Card, Empty, Footer, Guide, LinkRow, Nav, Section } from "@/app/_components/ui";
 import { linksConfig, taxonomyConfig } from "@/lib/config/load";
-import { QUEUE_LABEL, type Queue } from "@/lib/engine/queues";
+import { explain, type AxesEvidence } from "@/lib/engine/explain";
+import type { Queue } from "@/lib/engine/queues";
 import { env } from "@/lib/env";
 import { stockLinks, type LinkEntity } from "@/lib/links";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -8,78 +9,108 @@ import { kstDate, kstString } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
-type QItem = { date: string; entity_id: string; queue: Queue; reason: Record<string, unknown>; first_seen: string; last_seen: string };
+type QItem = { date: string; entity_id: string; queue: Queue; reason: Record<string, unknown>; first_seen: string };
 type Ent = LinkEntity & { l1_codes: string[] };
 
-/** 오늘 (PRD §8): 레짐 띠 → ⚠️ → 💰 → 🟢 → 🎯 → 🟡 → 🔭 → ⏳ → 🔵. 🟢🟡🔵 는 P3 */
+const SECTIONS: { queue: Queue; title: string; about: string }[] = [
+  { queue: "take_profit", title: "💰 익절 검토", about: "보유 종목 중 과열 점수와 주가 반영도가 모두 높은 종목" },
+  { queue: "buy", title: "🎯 매수 검토", about: "실적 숫자가 좋고 주가는 아직 덜 반영됐으며, 서로 다른 프로젝트 2곳 이상이 같은 방향 신호를 낸 종목" },
+  { queue: "radar", title: "🔭 선행 관찰", about: "산업 이야기와 실적 촉매는 켜졌지만 실적 숫자는 아직 확인 전이고, 실적 발표가 45일 안에 있는 종목" },
+  { queue: "pullback_wait", title: "⏳ 눌림 대기", about: "실적은 좋지만 주가가 이미 많이 반영된 종목 — 반영도가 50 아래로 내려오면 다시 봄" },
+];
+
+/** 오늘 (PRD §8): 시장 국면 → 보유 경고 → 익절 → 진입 신호 → 매수 검토 → 관찰 → 선행 관찰 → 눌림 대기 → 실적 돌파 */
 export default async function Today() {
   const sb = await supabaseServer();
   const since7 = new Date(Date.now() - 7 * 86400_000).toISOString();
   const [lastDate, reg, alerts] = await Promise.all([
     sb.from("queue_items").select("date").order("date", { ascending: false }).limit(1).maybeSingle(),
-    sb.from("bot_state").select("value,updated_at").eq("key", "regime").maybeSingle(),
-    sb.from("notifications").select("entity_id,payload,sent_at,created_at").eq("kind", "holding_alert").gte("created_at", since7).order("created_at", { ascending: false }).range(0, 49),
+    sb.from("bot_state").select("value").eq("key", "regime").maybeSingle(),
+    sb.from("notifications").select("entity_id,payload,sent_at,created_at").eq("kind", "holding_alert").gte("created_at", since7).order("created_at", { ascending: false }).range(0, 99),
   ]);
   const date = (lastDate.data?.date as string | undefined) ?? kstDate();
-  const items = await sb.from("queue_items").select("date,entity_id,queue,reason,first_seen,last_seen").eq("date", date).range(0, 499);
+  const [items, axes] = await Promise.all([
+    sb.from("queue_items").select("date,entity_id,queue,reason,first_seen").eq("date", date).range(0, 499),
+    sb.from("axes_daily").select("entity_id,evidence").eq("date", date).range(0, 1999),
+  ]);
   const q = (items.data ?? []) as QItem[];
+  const evBy = new Map(((axes.data ?? []) as { entity_id: string; evidence: AxesEvidence }[]).map((a) => [a.entity_id, a.evidence]));
   const ids = [...new Set([...q.map((x) => x.entity_id), ...(alerts.data ?? []).map((a) => a.entity_id).filter(Boolean)])] as string[];
   const ents = ids.length ? await sb.from("entities").select("id,market,symbol,name,primary_l1,l1_codes,snowball_asset_id,hermes_analysis_id,naver_us_code").in("id", ids) : { data: [] };
   const byId = new Map(((ents.data ?? []) as Ent[]).map((e) => [e.id, e]));
   const ctx = { links: linksConfig(), taxonomy: taxonomyConfig(), jarvisUrl: env().JARVIS_URL };
   const r = reg.data?.value as { risk_off?: boolean; reasons?: string[]; vix?: number | null; snowball?: number | null; at?: string } | undefined;
-  const liveAlerts = (alerts.data ?? []).filter((a) => !(a.payload as { bootstrap?: boolean })?.bootstrap);
 
-  const section = (queue: Queue) => {
-    const xs = q.filter((x) => x.queue === queue);
-    return (
-      <Section key={queue} title={QUEUE_LABEL[queue]} count={xs.length}>
-        {xs.length === 0 ? <Empty text="없음" /> : xs.map((x) => {
-          const e = byId.get(x.entity_id);
-          const rs = x.reason as { p?: number | null; families?: string[]; days_to_earnings?: number; heat?: number };
-          return (
-            <Card key={x.entity_id}>
-              <div className="flex flex-wrap items-baseline gap-2">
-                <a href={`/stock/${encodeURIComponent(x.entity_id)}`} className="font-medium underline decoration-dotted">{e?.market === "US" ? "🇺🇸" : "🇰🇷"} {e?.name ?? x.entity_id}</a>
-                <span className="text-xs text-neutral-500">
-                  {rs.p !== undefined && rs.p !== null ? `P ${Math.round(rs.p)} · ` : ""}{rs.days_to_earnings !== undefined ? `실적 D-${rs.days_to_earnings} · ` : ""}{rs.heat !== undefined ? `과열 ${rs.heat} · ` : ""}{rs.families?.join("/") ?? ""} · {Math.max(1, Math.ceil((Date.now() - new Date(x.first_seen).getTime()) / 86400_000))}일째
-                </span>
-              </div>
-              {e && <LinkRow links={stockLinks(e, ctx)} />}
-            </Card>
-          );
-        })}
-      </Section>
-    );
-  };
+  // 보유 경고: 종목별로 묶어서
+  const alertBy = new Map<string, { name: string; lines: { summary: string; source: string; when: string }[] }>();
+  for (const a of alerts.data ?? []) {
+    const p = a.payload as { name?: string; summary?: string; source?: string; bootstrap?: boolean; asset_id?: string };
+    const k = a.entity_id ?? p.asset_id ?? p.name ?? "-";
+    const cur = alertBy.get(k) ?? alertBy.set(k, { name: p.name ?? k, lines: [] }).get(k)!;
+    cur.lines.push({ summary: p.summary ?? "", source: p.source ?? "", when: a.sent_at ? `알림 ${kstString(new Date(a.sent_at))}` : p.bootstrap ? "처음 실행 때 기록(알림 안 보냄)" : "미발송" });
+  }
 
   return (
-    <main className="mx-auto max-w-3xl p-4 space-y-5">
+    <main className="mx-auto max-w-3xl p-4 space-y-6">
       <Nav />
       <div className={`rounded px-3 py-2 text-sm ${r?.risk_off ? "bg-red-100 dark:bg-red-950" : "bg-emerald-50 dark:bg-emerald-950"}`}>
-        {r ? (r.risk_off ? `🔴 risk_off — ${(r.reasons ?? []).join(", ")} · 🟢 1차 비중 절반` : "🟢 레짐 정상") : "레짐 미계산"}
-        {r && <span className="text-neutral-500"> · VIX {r.vix?.toFixed(1) ?? "-"} · SnowBall REGIME {r.snowball ?? "-"}</span>}
+        <p className="font-medium">{r ? (r.risk_off ? "🔴 시장 국면: 위험 회피" : "🟢 시장 국면: 정상") : "시장 국면: 아직 계산 전"}</p>
+        {r && <p className="text-xs text-neutral-600 dark:text-neutral-400">
+          {r.risk_off ? `이유: ${(r.reasons ?? []).join(", ")} → 진입 신호의 1차 비중을 절반으로 줄임. ` : ""}변동성지수(VIX) {r.vix?.toFixed(1) ?? "-"} · SnowBall 국면 값 {r.snowball ?? "-"} (−1이면 위험 회피)
+        </p>}
       </div>
 
-      <Section title="⚠️ 보유 경고 (7일)" count={liveAlerts.length}>
-        {liveAlerts.length === 0 ? <Empty text="없음" /> : liveAlerts.map((a, i) => {
-          const p = a.payload as { name?: string; summary?: string; source?: string; latency_min?: number };
-          return (
-            <Card key={i} tone="warn">
-              <p><span className="font-medium">{p.name}</span> — {p.summary} <span className="text-xs text-neutral-500">({p.source}{p.latency_min !== undefined ? ` · 지연 ${p.latency_min}분` : ""})</span></p>
-              <p className="text-xs text-neutral-500">{a.sent_at ? `발송 ${kstString(new Date(a.sent_at))}` : "미발송"}</p>
-            </Card>
-          );
-        })}
+      <Section title="⚠️ 보유 경고 (최근 7일)" count={alertBy.size}>
+        <Guide>보유 종목에 생긴 위험 신호입니다. 고점 대비 −20% 이하 하락, 허용 비중 초과, 투자 논지를 깨는 이벤트, 등급 하락 등을 종목별로 묶어 보여 줍니다.</Guide>
+        {alertBy.size === 0 ? <Empty text="없음" /> : [...alertBy.entries()].map(([k, v]) => (
+          <Card key={k} tone="warn">
+            <p className="font-medium">{byId.has(k) ? <a href={`/stock/${encodeURIComponent(k)}`} className="underline decoration-dotted">{v.name}</a> : v.name}</p>
+            <ul className="text-sm list-disc pl-5">{v.lines.map((l, i) => <li key={i}>{l.summary} <span className="text-xs text-neutral-500">— {l.source} · {l.when}</span></li>)}</ul>
+            <p className="text-xs">할 일: 투자 논지 다시 보기 → SnowBall에 결정 기록</p>
+          </Card>
+        ))}
       </Section>
-      {section("take_profit")}
-      <Section title="🟢 진입 신호" count={0}><Empty text="P3(연계 작업 B·C 이후)에서 M1~M5 판정이 시작됩니다." /></Section>
-      {section("buy")}
-      <Section title="🟡 관찰" count={0}><Empty text="P3" /></Section>
-      {section("radar")}
-      {section("pullback_wait")}
-      <Section title="🔵 실적 돌파" count={0}><Empty text="P3" /></Section>
-      <Footer asOf={`${date} 큐 · 레짐 ${r?.at ? kstString(new Date(r.at)) : "-"}`} />
+
+      <QueueSection {...SECTIONS[0]} q={q} byId={byId} evBy={evBy} ctx={ctx} />
+      <Section title="🟢 진입 신호" count={0}>
+        <Guide>필수 조건 5가지(실적 가속·주가 미반영 / MACD 교차 직전 / 산업 고성장 / 6개월 내 상승 이벤트 / 외국인·기관 2일 연속 순매수)를 모두 충족한 종목만 표시합니다.</Guide>
+        <Empty text="Heimdallr·HermesCall 연계 작업(진입 조건 계산) 후 다음 단계에서 시작합니다." />
+      </Section>
+      <QueueSection {...SECTIONS[1]} q={q} byId={byId} evBy={evBy} ctx={ctx} />
+      <Section title="🟡 관찰" count={0}><Empty text="진입 신호와 함께 다음 단계에서 시작합니다." /></Section>
+      <QueueSection {...SECTIONS[2]} q={q} byId={byId} evBy={evBy} ctx={ctx} />
+      <QueueSection {...SECTIONS[3]} q={q} byId={byId} evBy={evBy} ctx={ctx} />
+      <Section title="🔵 실적 돌파" count={0}><Empty text="다음 단계에서 시작합니다(진입 신호 아님, 60거래일 관찰)." /></Section>
+      <Footer asOf={`${date} 판정 · 시장 국면 ${r?.at ? kstString(new Date(r.at)) : "-"}`} />
     </main>
+  );
+}
+
+function QueueSection({ queue, title, about, q, byId, evBy, ctx }: {
+  queue: Queue; title: string; about: string; q: QItem[]; byId: Map<string, Ent>; evBy: Map<string, AxesEvidence>;
+  ctx: Parameters<typeof stockLinks>[1];
+}) {
+  const xs = q.filter((x) => x.queue === queue);
+  return (
+    <Section title={title} count={xs.length}>
+      <Guide>{about}</Guide>
+      {xs.length === 0 ? <Empty text="없음" /> : xs.map((x) => {
+        const e = byId.get(x.entity_id);
+        const rs = x.reason as { p?: number | null; days_to_earnings?: number; heat?: number };
+        const ex = explain({ queue, market: e?.market ?? "KR", evidence: evBy.get(x.entity_id) ?? {}, p: rs.p ?? null, daysToEarnings: rs.days_to_earnings ?? null, heat: rs.heat ?? null });
+        const days = Math.max(1, Math.ceil((Date.now() - new Date(x.first_seen).getTime()) / 86400_000));
+        return (
+          <Card key={x.entity_id}>
+            <p className="font-medium">
+              <a href={`/stock/${encodeURIComponent(x.entity_id)}`} className="underline decoration-dotted">{e?.market === "US" ? "🇺🇸" : "🇰🇷"} {e?.name ?? x.entity_id}</a>
+              <span className="ml-1 text-xs text-neutral-500">{e?.symbol} · 이 목록에 {days}일째</span>
+            </p>
+            <p><b>결론</b> {ex.conclusion}</p>
+            <ul className="list-disc pl-5 text-neutral-700 dark:text-neutral-300">{ex.reasons.map((t, i) => <li key={i}>{t}</li>)}</ul>
+            {e && <LinkRow links={stockLinks(e, ctx)} />}
+          </Card>
+        );
+      })}
+    </Section>
   );
 }

@@ -20,18 +20,20 @@ export type HoldingAlertView = {
 export function holdingAlertText(v: HoldingAlertView): string {
   const flag = v.market === "KR" ? "🇰🇷" : v.market === "US" ? "🇺🇸" : "";
   const lines = [
-    `⚠️ <b>보유 경고</b> · ${flag} ${esc(v.name)} (${esc(v.code)})`,
-    ...v.causes.map((c) => `원인: ${esc(c.summary)} <i>(${esc(c.source)})</i>`),
+    `⚠️ <b>보유 경고</b> · ${flag} <b>${esc(v.name)}</b> (${esc(v.code)})`,
+    `결론: 투자 논지를 다시 확인할 때입니다${v.causes[0] ? ` — ${esc(v.causes[0].summary)}` : ""}`,
+    ...v.causes.map((c) => ` · ${esc(c.summary)} (${esc(c.source)})`),
   ];
-  if (v.thesisLink) lines.push(`연결 논지: ${esc(v.thesisLink)}`);
-  lines.push(`비중 ${w(v.weight)} (허용 ${w(v.allowed)}) · 과열 ${v.heat ?? "-"} · PRI ${v.pri ?? "-"}`);
-  lines.push("권장: 논지 재검토 → SnowBall 결정 기록", "", FOOT);
+  if (v.thesisLink) lines.push(` · 연결된 투자 논지: ${esc(v.thesisLink)}`);
+  lines.push(` · 비중 ${w(v.weight)} (허용 비중 ${w(v.allowed)}) · 과열 점수 ${v.heat ?? "-"} · 주가 반영도 ${v.pri === null ? "-" : Math.round(v.pri)}`);
+  lines.push("할 일: 논지 재검토 → SnowBall에 결정 기록", "", FOOT);
   return lines.join("\n");
 }
 
 // ── ☀️ 아침 / 🌙 저녁 브리핑 (부록 B.2) ───────────────
 export type MarketLine = { label: string; last: number | null; change_pct: number | null; level?: boolean };
-export type BriefItem = { icon: string; html: string; note: string };            // html = inlineLinks(entity)
+/** 종목 블록: 결론·근거가 먼저, 링크는 맨 끝 줄 (links = lib/links.ts linkLine 이 만든 HTML) */
+export type BriefItem = { icon: string; group: string; name: string; code: string; conclusion: string; reasons: string[]; links: string };
 export type BriefData = {
   kind: "morning" | "evening"; date: string;
   market: MarketLine[];
@@ -56,10 +58,15 @@ export function briefText(d: BriefData): string {
     const s = [...d.sectors].filter((x) => x.change_pct !== null).sort((a, b) => (b.change_pct as number) - (a.change_pct as number));
     if (s.length) out.push(`섹터 ▲ ${s.slice(0, 2).map((x) => `${esc(x.label)} ${pct(x.change_pct)}`).join(", ")} / ▼ ${s.slice(-2).reverse().map((x) => `${esc(x.label)} ${pct(x.change_pct)}`).join(", ")}`);
   }
-  out.push(d.regime.risk_off ? `🔴 레짐 risk_off — ${esc(d.regime.reasons.join(", "))}` : "🟢 레짐 정상");
-  out.push(`🟢 진입 ${d.counts.green} · 🟡 관찰 ${d.counts.yellow} · 🔵 돌파 ${d.counts.blue} · ⚠️ 보유 경고 ${d.counts.alert}`);
+  out.push(d.regime.risk_off ? `🔴 시장 국면: 위험 회피 — ${esc(d.regime.reasons.join(", "))} (진입 1차 비중 절반)` : "🟢 시장 국면: 정상");
+  out.push(`🟢 진입 신호 ${d.counts.green} · 🟡 관찰 ${d.counts.yellow} · 🔵 실적 돌파 ${d.counts.blue} · ⚠️ 보유 경고 ${d.counts.alert}`);
   if (d.earnings.lines.length) out.push("", `<b>${esc(d.earnings.title)}</b>`, ...d.earnings.lines.map(esc));
-  if (d.items.length) out.push("", ...d.items.map((i) => `${i.icon} ${i.html} — ${esc(i.note)}`));
+  let group = "";
+  for (const i of d.items) {
+    if (i.group !== group) { group = i.group; out.push("", `<b>${esc(i.icon)} ${esc(i.group)}</b>`); }
+    out.push("", `<b>${esc(i.name)}</b> (${esc(i.code)})`, `결론: ${esc(i.conclusion)}`, ...i.reasons.map((r) => ` · ${esc(r)}`));
+    if (i.links) out.push(i.links);
+  }
   if (d.holding.length) out.push("", "<b>보유</b>", ...d.holding.map(esc));
   if (d.schedule.lines.length) out.push("", `<b>${esc(d.schedule.title)}</b>`, ...d.schedule.lines.map(esc));
   out.push("", `<i>기준 ${esc(d.asOf)} KST</i>`, FOOT);

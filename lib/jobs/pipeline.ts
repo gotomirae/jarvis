@@ -17,6 +17,7 @@ import { exportMacro, submitIdea } from "@/lib/ingest/snowball";
 import { kstDate } from "@/lib/time";
 import { activeSignals, latestHoldings, loadEntities, rules, type EntityIndex } from "./context";
 import { latestScreens } from "./ingest";
+import { techRefs } from "./tech";
 
 export async function currentRegime(): Promise<{ risk_off: boolean; reasons: string[]; vix: number | null; snowball: number | null }> {
   const R = rules();
@@ -91,6 +92,10 @@ export async function runPipeline(now = new Date(), opts: { submit?: boolean } =
     const q = assignQueue({ axes: a, heat: h?.heat_score ?? null, holdingAlert: alerted.has(id), daysToEarnings: e.market === "US" ? nextUs.get(id) ?? null : krDays }, R.queues, R.axes.P);
     if (q) queueRows.push({ entity_id: id, ...q });
   }
+
+  // 큐에 든 종목은 기술적 참고(판정 미사용)를 근거에 저장 — 화면·브리핑은 DB 만 읽는다(PRD §8)
+  const tech = await techRefs(queueRows.map((q) => q.entity_id), now);
+  for (const r of axesRows) { const t = tech.get(r.entity_id as string); if (t) (r.evidence as Record<string, unknown>).tech = t; }
 
   // first_seen 유지: 최근 30일 같은 큐에 있었으면 그때부터
   const prev = await dbSelectAll<{ entity_id: string; queue: string; first_seen: string; date: string }>("queue_items", `select=entity_id,queue,first_seen,date&date=gte.${kstDate(new Date(now.getTime() - 30 * 86400_000))}&date=lt.${date}&order=date.desc`);

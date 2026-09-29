@@ -8,6 +8,7 @@ export type SearchItem = {
   link: string;
   published: string | null;   // ISO
   publisher: string | null;
+  publisher_url?: string | null;    // Google News <source url="…"> — 원문 해제 전에 매체 등급을 거를 때 쓴다
   origin: "google_news" | "bing_news" | "gdelt";
 };
 
@@ -53,7 +54,8 @@ export function parseRss(xml: string, origin: "google_news" | "bing_news"): Sear
     const link = tag(b, "link");
     if (!title || !link) continue;
     const publisher = tag(b, "source") ?? tag(b, "News:Source");
-    out.push({ title, link, published: toIso(tag(b, "pubDate")), publisher, origin });
+    const publisherUrl = b.match(/<source[^>]*\surl=["']([^"']+)["']/i)?.[1] ?? null;
+    out.push({ title, link, published: toIso(tag(b, "pubDate")), publisher, publisher_url: publisherUrl, origin });
   }
   return out;
 }

@@ -14,8 +14,10 @@
     "job": "tsx scripts/run.ts"
   },
   "dependencies": {
+    "@mozilla/readability": "^0.6.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",
+    "linkedom": "^0.18.13",
     "next": "15.5.25",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

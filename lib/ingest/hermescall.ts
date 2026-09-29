@@ -8,7 +8,7 @@ import { fail, type Result, type SourceAdapter } from "./types";
 
 export const HERMES_TABLES = [
   "analyses", "beneficiaries", "quarterly_metrics", "earnings_events", "technical_ideas", "watchlist",
-  "entry_checks_us", "catalyst_watch",
+  "entry_checks_us", "catalyst_watch", "transcripts",
 ] as const;
 
 function target(): RestTarget | null {

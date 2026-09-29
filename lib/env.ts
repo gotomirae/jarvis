@@ -19,6 +19,7 @@ const schema = z.object({
   TELEGRAM_BOT_TOKEN: opt,
   TELEGRAM_CHAT_ID: opt,
   TELEGRAM_WEBHOOK_SECRET: opt,
+  CRON_SECRET: opt,                     // pg_cron → /api/cron/* 호출 비밀값 (Vault jarvis_cron_secret 과 같은 값)
   GITHUB_DISPATCH_TOKEN: opt,
   GITHUB_READ_TOKEN: opt,
   GITHUB_REPO: z.string().default("gotomirae/jarvis"),

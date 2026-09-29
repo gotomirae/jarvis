@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { loadYaml } from "@/lib/config/load";
 import type { TaxonomyRules } from "@/lib/taxonomy/match";
-import { buildEntities, entityId, krCode, marketOf, sanitizePosition, usSymbol } from "./entities";
+import { buildEntities, cleanUsName, entityId, krCode, marketOf, sanitizePosition, usSymbol } from "./entities";
 
 const rules = loadYaml<TaxonomyRules>("taxonomy.yaml");
 const now = new Date("2026-09-28T00:00:00Z");
@@ -24,6 +24,14 @@ describe("entities — 식별자 정규화", () => {
     expect(usSymbol("1234")).toBeNull();
     expect(usSymbol(null)).toBeNull();
     expect(entityId("US", "NVDA")).toBe("US:NVDA");
+  });
+
+  it("미국 종목명 정리", () => {
+    expect(cleanUsName("Lumentum Holdings Inc. - Common Stock")).toBe("Lumentum Holdings");
+    expect(cleanUsName("GE Vernova Inc. Common Stock")).toBe("GE Vernova");
+    expect(cleanUsName("Taiwan Semiconductor Manufacturing Company Ltd. - American Depositary Shares")).toBe("Taiwan Semiconductor Manufacturing Company");
+    expect(cleanUsName("Meta Platforms")).toBe("Meta Platforms");
+    expect(cleanUsName("Inc.")).toBe("Inc.");
   });
 
   it("holdings_cache 는 수량·평단·평가액을 버린다", () => {

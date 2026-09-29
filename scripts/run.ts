@@ -11,6 +11,7 @@
  *   link_smoke         링크 규칙 스모크 (매일 03:30)
  *   auth_setup         ALLOWED_EMAIL → jarvis.allowed_users
  *   set_password       대시보드 로그인 비밀번호 설정 — 사용자가 PowerShell 에서 직접 실행(대화형)
+ * P2 잡: scripts/p2.ts (pipeline · ingest_all · catalysts · industry_growth_realized · industry_outlook_collect · poll · brief)
  */
 import "./env";
 import { sourceSmokeJob } from "./source_smoke";
@@ -22,6 +23,7 @@ import { taxonomySyncJob } from "./taxonomy_sync";
 import { linkSmokeJob } from "./link_smoke";
 import { authSetupJob } from "./auth_setup";
 import { setPasswordJob } from "./set_password";
+import { P2_JOBS } from "./p2";
 
 export function parseArgs(argv: string[]): { job: string; args: Record<string, string> } {
   const [job, ...rest] = argv;
@@ -46,6 +48,7 @@ const JOBS: Record<string, (args: Record<string, string>) => Promise<void>> = {
   link_smoke: linkSmokeJob,
   auth_setup: () => authSetupJob(),
   set_password: () => setPasswordJob(),
+  ...P2_JOBS,
 };
 
 async function main() {

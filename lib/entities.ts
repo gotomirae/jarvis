@@ -25,6 +25,16 @@ export function usSymbol(symbol: string | null | undefined): string | null {
   return /^[A-Z][A-Z0-9.\-]{0,9}$/.test(s) ? s : null;
 }
 
+/** 미국 종목명 꼬리 정리: "Lumentum Holdings Inc. - Common Stock" → "Lumentum Holdings" */
+export function cleanUsName(name: string): string {
+  const out = name
+    .replace(/\s*[-–]\s*(?:Common Stock|Ordinary Shares|American Depositary Shares?|ADS|Class [A-C].*)$/i, "")
+    .replace(/\s+(?:Common Stock|Ordinary Shares|Class [A-C] (?:Common Stock|Ordinary Shares|Shares))$/i, "")
+    .replace(/,?\s+(?:Inc\.?|Incorporated|Corp\.?|Corporation|Co\.?|Ltd\.?|Limited|plc|N\.V\.|S\.A\.)$/i, "")
+    .trim();
+  return out || name;
+}
+
 export function entityId(market: Market, symbol: string): string {
   return `${market}:${symbol}`;
 }
@@ -91,7 +101,7 @@ export function buildEntities(
     const m = marketOf(w.market);
     const sym = m === "KR" ? krCode(w.symbol) : m === "US" ? usSymbol(w.symbol) : null;
     if (!m || !sym) continue;
-    const d = get(m, sym, w.name || sym);
+    const d = get(m, sym, m === "US" && w.name ? cleanUsName(w.name) : w.name || sym);
     d.hermesIndustries = w.industries ?? [];
     if (w.name && w.name !== d.name) d.aliases.add(w.name);
   }

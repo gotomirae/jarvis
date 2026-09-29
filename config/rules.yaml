@@ -29,7 +29,15 @@ queues:
     heimdallr_score_delta_max: -5
     flywheel_unfavorable_level: 3
     mentor_flip_min: 2
+    mentor_flip_window_days: 14
     setup_invalidation_window_days: 20
+    # P2 실측(9/28): SnowBall risk_alerts 7일 250건(drawdown/warn 215·dynamic_weight/critical 22) → 규칙·심각도 필터 + 종목·규칙별 묶음
+    snowball_risk:
+      rule_types: {dynamic_weight: ["critical"], drawdown: ["warn", "critical"]}   # allocation_drift·volume_anomaly(info)는 경고 아님
+      drawdown_max_pct: -20.0          # PRD §7.5 "드로다운 −20%(SnowBall 규칙) → 재검토"
+      drawdown_step_pct: 5.0           # 드로다운은 5%p 더 깊어질 때만 다시 알림(−20 → −25 → −30). P2 실측: 2일 창에 후보 48건 → 주 1회 반복은 과다
+      dedupe_days: 7                   # 그 외 규칙은 같은 종목·규칙 7일에 1번
+    thesis_break_trigger: {thesis_link: "훼손", direction: "negative", alert_on: ["new", "imminent"]}   # 훼손조건 매칭 트리거
   take_profit: {heat_min: 76, pri_min: 75}
   buy: {min_signal_families: 2}
   radar: {next_earnings_within_days: 45}
@@ -163,6 +171,12 @@ outcomes:
   horizons_days: [5, 20, 60]
   benchmarks: {KOSPI: "KOSPI", KOSDAQ: "KOSDAQ", US: "SPX"}
   min_samples_for_calibration: 30
+
+market:                              # 브리핑·레짐 시세 (Yahoo chart, 무료·무키 — lib/ingest/market.ts)
+  morning: [{sym: "^GSPC", label: "S&P 500"}, {sym: "^IXIC", label: "NASDAQ"}, {sym: "^SOX", label: "필라델피아 반도체"}, {sym: "^RUT", label: "Russell 2000"}, {sym: "^VIX", label: "VIX", level: true}, {sym: "^TNX", label: "미 10년물", level: true}, {sym: "KRW=X", label: "원/달러", level: true}]
+  us_sectors: [{sym: "XLK", label: "기술"}, {sym: "XLC", label: "커뮤니케이션"}, {sym: "XLY", label: "경기소비"}, {sym: "XLF", label: "금융"}, {sym: "XLV", label: "헬스케어"}, {sym: "XLI", label: "산업재"}, {sym: "XLE", label: "에너지"}, {sym: "XLU", label: "유틸리티"}]
+  evening: [{sym: "^KS11", label: "KOSPI"}, {sym: "^KQ11", label: "KOSDAQ"}, {sym: "KRW=X", label: "원/달러", level: true}]
+  regime: {vix: "^VIX", kospi: "^KS11"}
 
 telegram:
   realtime_max_per_day_excl_urgent: 3

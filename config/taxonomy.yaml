@@ -104,6 +104,7 @@ notion:
   # 연계종합 행 형식 (P0 실측, AI DB 2026-09-22~26):
   #   구분 = '날짜' 텍스트 속성의 둘째 줄 ("2026-09-26\n연계종합"). '구분' select 속성은 존재하지만 비어 있다(FlyWheel 미사용).
   #   신호강도 = select, 옵션 "1"~"5". 연계종합 행에만 값이 있고 당일종합 행은 null.
+  flywheel_wiki_db_id: "3999c770aa6180ecb514e74eb998e127"   # 2_4 > 2. Invest_WiKi (수혜 기업 = rich_text, P2 실측)
   flywheel_monitoring:
     date_property: "날짜"
     strength_property: "신호강도"

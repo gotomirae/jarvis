@@ -77,6 +77,41 @@ export async function latestLinkedSyntheses(): Promise<Result<LinkedSynthesis[]>
   return ok(out);
 }
 
+/** Invest_WiKi 행의 '수혜 기업' 텍스트 → 기업명 목록 (쉼표·가운뎃점·줄바꿈·"및" 구분, 괄호 설명 제거) */
+export function splitCompanies(text: string): string[] {
+  return text.split(/[,，、·\n\/;]| 및 /).map((s) => s.replace(/\(.*?\)|（.*?）/g, "").trim()).filter((s) => s.length >= 2 && s.length <= 30);
+}
+
+/** Invest_WiKi 최근 N일 행 (PRD §5.5 "Invest_WiKi 14일 수혜 기업") */
+export async function wikiSince(days: number): Promise<Result<{ page_id: string; created_time: string; companies: string[]; url: string }[]>> {
+  const key = env().NOTION_API_KEY;
+  const dbId = (taxonomyConfig().notion as unknown as { flywheel_wiki_db_id?: string }).flywheel_wiki_db_id;
+  if (!key || !dbId) return fail("NOTION_API_KEY 또는 flywheel_wiki_db_id 미설정");
+  const since = new Date(Date.now() - days * 86400_000).toISOString();
+  const out: { page_id: string; created_time: string; companies: string[]; url: string }[] = [];
+  let cursor: string | undefined;
+  try {
+    do {
+      const res = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Notion-Version": NOTION_VERSION, "Content-Type": "application/json" },
+        body: JSON.stringify({ filter: { timestamp: "created_time", created_time: { on_or_after: since } }, page_size: 100, ...(cursor ? { start_cursor: cursor } : {}) }),
+      });
+      if (res.status !== 200) return fail(`Invest_WiKi: HTTP ${res.status}${res.status === 404 ? " (JARVIS 통합이 이 DB 에 연결되지 않음)" : ""}`, res.status);
+      const j = (await res.json()) as { results: NotionPage[]; has_more: boolean; next_cursor: string | null };
+      for (const p of j.results) {
+        const text = (p.properties["수혜 기업"]?.rich_text ?? []).map((t) => t.plain_text ?? "").join("");
+        out.push({ page_id: p.id, created_time: p.created_time, companies: splitCompanies(text), url: p.url ?? `https://www.notion.so/${p.id.replace(/-/g, "")}` });
+      }
+      cursor = j.has_more && j.next_cursor ? j.next_cursor : undefined;
+      await new Promise((s) => setTimeout(s, 350));
+    } while (cursor);
+    return ok(out);
+  } catch (e) {
+    return fail(`Invest_WiKi: ${safeReason(e)}`);
+  }
+}
+
 export const flywheel: SourceAdapter = {
   name: "flywheel",
   configured: () => !!env().NOTION_API_KEY,

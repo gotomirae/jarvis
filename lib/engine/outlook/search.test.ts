@@ -23,7 +23,8 @@ describe("outlook search — RSS / GDELT parsing", () => {
   it("parses RSS items, decodes entities, skips broken items", () => {
     const g = parseRss(RSS, "google_news");
     expect(g).toHaveLength(2);
-    expect(g[0]).toMatchObject({ title: "AI chip market to grow 30% & more", publisher: "Reuters", published: "2026-09-26T12:00:00.000Z", origin: "google_news" });
+    expect(g[0]).toMatchObject({ title: "AI chip market to grow 30% & more", publisher: "Reuters", publisher_url: "https://www.reuters.com", published: "2026-09-26T12:00:00.000Z", origin: "google_news" });
+    expect(g[1].publisher_url).toBeNull();
     expect(g[1].title).toBe("Bing 'item' ’s");
     expect(g[1].published).toBeNull();
     expect(g[1].publisher).toBe("CNBC");

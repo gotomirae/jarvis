@@ -33,6 +33,26 @@
 | D29 | 2026-09-28 | 네이버 미국 코드 해석 순서 `.O → .K → (접미사 없음)`, 응답 `reutersCode` 우선. TSM·MDT·IBM 은 접미사 없이만 200(HermesCall 이 "MDT 미수록"으로 본 사례 해결) | P1 실측 |
 | D30 | 2026-09-28 | 링크 스모크 빈 화면 판정은 **`<title>` 안에서만**(본문 검사 금지), 리다이렉트 최대 5회 추적, 타임아웃 45초. 로그인 필요 규칙: StockEasy·Sage·SnowBall·JARVIS | Next.js 앱·StockEasy 정상 페이지 번들에 404 문구가 들어 있어 본문 검사 오탐 12건. 없는 종목은 HermesCall·StockEasy 가 404 상태로 응답. notion.so 는 2단계 리다이렉트 |
 | D31 | 2026-09-29 | 대시보드 로그인을 **매직링크 → 이메일+비밀번호**로 변경. 비밀번호는 사용자가 PC PowerShell 에서 `npm run job -- set_password`(대화형·비표시 입력, Admin API)로 직접 설정. 세션 쿠키 유지로 같은 브라우저에선 재로그인 불필요. `/auth/callback` 제거 | 사용자 요청(매번 링크 번거로움) + 첫 시도 "링크 만료/잘못됨" — 메일 앱 내 브라우저 등 다른 브라우저로 열면 PKCE code_verifier 쿠키가 없어 교환 실패(추정). RLS·ALLOWED_EMAIL 보호는 그대로 |
+| D32 | 2026-09-29 | **가벼운 잡(30분 폴링·브리핑)은 pg_cron → Vercel 라우트(`/api/cron/*`, CRON_SECRET)**, 무거운 수집(ingest·M3·M4·큐)은 pg_cron → Actions. Actions 에는 30분 뒤 예비 스케줄(같은 슬롯이면 건너뜀) | 30분 폴링을 Actions 로 돌리면 하루 48회 ≈ 월 1,400분 — private 저장소 무료 분(계정 공유) 소진. Vercel 호출은 GitHub 대기 지연도 없어 브리핑 정시성(SC8·P2 게이트)에 유리 |
+| D33 | 2026-09-29 | 보유 경고: SnowBall 경보는 **동적 비중 critical + 드로다운 ≤ −20%**만, 드로다운은 **5%p 더 깊어질 때만** 재알림(종목·단계 dedupe), 그 외는 종목·규칙 7일 1회. 훼손 트리거(thesis_link=훼손·negative)는 신규·imminent 때. 첫 실행은 부트스트랩(발송 없이 기록) | P2 실측: 7일 경보 250건(drawdown/warn 215), 2일 창 후보 48건 → 주 1회 반복은 알림 피로(SC3). PRD §7.5 −20% 기준 |
+| D34 | 2026-09-29 | M4: SnowBall 트리거는 expected_date 가 모두 비어 **expected_window 를 기간 끝으로 환산**(갱신일 + 0-1Q 91·1-2Q 182·2-4Q 365일, 4Q+ 제외). 국내 "실적+컨센 상향"은 Heimdallr consensus_snapshots 영업이익 추정 변화(45일 창) + 분기말+45일 예상일. **미국은 HermesCall 에 컨센 시계열이 없어 미계산** | P2 실측(트리거 96건 날짜 0건) |
+| D35 | 2026-09-29 | FlyWheel 인박스의 "HermesCall 최종 딥분석" = **deep_analysis 가 있는 분석**(stage 값은 전부 `preliminary`) | P2 실측(60건 중 deep 46건, final 0건) |
+| D36 | 2026-09-29 | M3 ② 수집 최적화: **등급 A·B 매체만 원문 수집**(Google News `<source url>` 로 해제 전 거름), Bing 은 산업별 첫 세그먼트만(증권사별 쿼리), 도메인별 직렬화 + 6개 동시. 처리한 URL 은 `outlook_seen`(120일) | 반도체 1개 L1 시험: 272초(Google 해제 건당 ~4초) → 최적화 후 전력인프라 115초. 18개 L1 전체 예상 30~40분 → Actions timeout 90분 |
+| D37 | 2026-09-29 | M3 ② 영문 문장의 L1 판정 = taxonomy 키워드 + `segments_en/ko` **최장 일치**(예: "AI chips"→1b 가 "AI"→1a 보다 우선), 같은 길이 다른 L1 은 모호로 폐기. 비메이저 증권사 목록(`non_major_brokers`)으로 탈락 사유 구분. 범위 "20-25%"는 하한 선처리 | fixture 정탐 7·오탐 8·채택 7·집계 3 전부 통과. 첫 실채택: BofA 미국 반도체 CAGR 18%(~2030, finance.yahoo.com, B2) |
+
+---
+
+## P2 진행 기록 (2026-09-29)
+
+| 항목 | 실데이터 결과 |
+|---|---|
+| ingest_all | 17초, 신호 1,232건(산업 서사 16·멘토 11·HermesCall 수혜 176·F1~F4 35·센티먼트 5·등급 162·PRI 571·SnowBall 경보 256). Invest_WiKi 는 JARVIS 통합 미연결로 404 |
+| catalysts (M4) | 이벤트 560건 (SnowBall 48·HermesCall 242·Heimdallr 215·국내 실적 컨센 상향 55) |
+| pipeline (축·큐) | 644종목 평가 → 🎯 10 · 🔭 7 (레짐 정상, VIX 15.8) |
+| industry_growth_realized (M3) | 통과 5/18: AI(①③)·반도체(①③)·전력인프라(③)·우주항공방산(①)·조선(①) |
+| poll (보유 경고) | 부트스트랩 후보 48건(전부 SnowBall 경보) — 첫 실행은 기록만 |
+| 브리핑 | 아침 1.5초·저녁 0.5초 생성(발송 전 확인) |
+| 인박스 | 최근 2일 후보 0건(드라이런) |
 
 ---
 

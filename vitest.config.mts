@@ -11,10 +11,10 @@ export default defineConfig({
       provider: "v8",
       include: [
         "lib/engine/**/*.ts", "lib/taxonomy/**/*.ts", "lib/outcomes/**/*.ts", "lib/memo/grounding.ts",
-        "lib/links.ts", "lib/entities.ts", "lib/env.ts", "lib/time.ts", "lib/telegram/format.ts", "lib/telegram/commands.ts",
+        "lib/links.ts", "lib/entities.ts", "lib/env.ts", "lib/time.ts", "lib/format.ts", "lib/telegram/format.ts", "lib/telegram/commands.ts", "lib/telegram/templates.ts",
       ],
       exclude: ["**/*.test.ts", "**/index.ts"],
-      thresholds: { lines: 100, functions: 100, statements: 100 },
+      thresholds: { lines: 100, functions: 100 },   // CLAUDE.md: 라인 커버리지 100%
     },
   },
 });

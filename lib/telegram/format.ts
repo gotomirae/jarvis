@@ -8,19 +8,24 @@ export function esc(s: unknown): string {
 }
 
 /** 4,096자 제한 → 줄 경계에서 분할 (한 줄이 너무 길면 강제 분할) */
-export function splitMessage(text: string, max = 4096): string[] {
+export function splitMessage(text: string, max = 4096, prefer?: RegExp): string[] {
   if (text.length <= max) return [text];
   const parts: string[] = [];
-  let cur = "";
+  let cur: string[] = [];
   for (const line of text.split("\n")) {
-    const add = cur ? `${cur}\n${line}` : line;
-    if (add.length <= max) { cur = add; continue; }
-    if (cur) parts.push(cur);
-    let rest = line;
-    while (rest.length > max) { parts.push(rest.slice(0, max)); rest = rest.slice(max); }
-    cur = rest;
+    let pending: string | null = line;
+    while (pending !== null) {
+      if ([...cur, pending].join("\n").length <= max) { cur.push(pending); pending = null; continue; }
+      if (!cur.length) { parts.push(pending.slice(0, max)); pending = pending.slice(max) || null; continue; }
+      // 넘침: prefer 에 맞는 줄(예: 종목 카드 시작) 바로 앞에서 자른다 — 카드가 두 메시지로 쪼개지지 않게
+      let cut = cur.length;
+      if (prefer) for (let i = cur.length - 1; i > 0; i--) if (prefer.test(cur[i])) { cut = i; break; }
+      const head = cur.slice(0, cut).join("\n");
+      parts.push(prefer ? head.trimEnd() : head);
+      cur = cur.slice(cut);
+    }
   }
-  if (cur) parts.push(cur);
+  if (cur.length) parts.push(cur.join("\n"));
   return parts;
 }
 

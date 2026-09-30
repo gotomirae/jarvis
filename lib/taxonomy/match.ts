@@ -13,6 +13,7 @@ export type TaxonomyRules = {
   matching: { normalize_strip: string[]; min_keyword_len: number; partial_min_len: number; stop_substrings: string[] };
   overrides?: Override[];
   unmatched_default?: string;
+  heimdallr_sector_guard?: { sector: string; etc_if_industry_contains: string[] }[];   // lib/entities.ts sectorMisfit
 };
 
 export type HitType = "override" | "special" | "contains" | "partial" | "unmatched";

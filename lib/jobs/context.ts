@@ -11,6 +11,7 @@ import type { RealizedRules } from "@/lib/engine/industry-growth";
 import type { M3Rules } from "@/lib/engine/m3";
 import type { NormalizeRules } from "@/lib/engine/normalize";
 import type { AdoptionRules } from "@/lib/engine/outlook/adopt";
+import type { MacdRules, TechDisplayRules } from "@/lib/engine/technicals";
 import type { PRules, QueueRules } from "@/lib/engine/queues";
 import type { RegimeRules } from "@/lib/engine/regime";
 import type { Signal } from "@/lib/engine/types";
@@ -24,8 +25,10 @@ export type Rules = {
   queues: QueueRules & { holding_alert: HoldingRules; snowball_submit: { queues: string[]; max_per_day: number; dedupe_days: number } };
   entry_core: {
     M3_industry_high_growth: M3Rules & { realized: RealizedRules; us_major_broker: { growth_min_pct: number; max_published_age_days: number; horizon_end_max_years_ahead: number; adoption: AdoptionRules & { date_mismatch_max_days: number; tier_b_requires_meta_date: boolean } } };
+    M2_macd_pre_cross: MacdRules;
     M4_catalyst_within_6m: { horizon_days: number; earnings_with_rising_consensus: { consensus_change_30d_min_pct: number } };
   };
+  tech_display: TechDisplayRules;
   inbox: { max_per_day: number; hermescall: { stage: string; strength_min: number; or_filters_min: number }; heimdallr: { grades: string[] }; sage: { new_mentors_min: number } };
   market: { morning: MarketSym[]; us_sectors: MarketSym[]; evening: MarketSym[]; regime: { vix: string; kospi: string } };
   telegram: { realtime_max_per_day_excl_urgent: number };

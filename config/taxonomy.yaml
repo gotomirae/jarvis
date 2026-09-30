@@ -58,6 +58,12 @@ overrides:
   - {project: "*", label: "운송·물류",      l1: ["ETC"]}
   - {project: "*", label: "지주·기타서비스", l1: ["ETC"]}
 
+# Heimdallr 포괄 섹터 오분류 교정 (사용자 지정 2026-09-30): 섹터가 아래이고 KSIC 업종에 단어가 들어 있으면 기타(ETC).
+# SnowBall 섹터가 있는 종목은 SnowBall 이 우선. Heimdallr 가 섹터를 고치면(INTEGRATION_TASKS B-13) 이 목록을 비운다.
+heimdallr_sector_guard:
+  - sector: "유통·소비재"
+    etc_if_industry_contains: ["화학", "철강", "석유", "광물", "비료", "통신", "방송", "의약", "의료용품"]
+
 # 규칙: 위 어디에도 매핑되지 않는 새 라벨은 ETC로 집계하고 taxonomy_pending에 올린다 (사용자 지정)
 unmatched_default: "ETC"
 

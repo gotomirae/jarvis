@@ -2,6 +2,7 @@
  * 결론·근거 문장 만들기 — 텔레그램 브리핑과 대시보드가 같은 함수를 쓴다(약어 없이 쉬운 말).
  * 판정은 하지 않는다. 이미 계산된 축·큐·참고 기술 지표를 사람이 읽는 문장으로 바꿀 뿐이다.
  */
+import type { IdeaEvidence } from "./idea";
 import type { Queue } from "./queues";
 
 /** 축 이름 (약어 대신) */
@@ -32,6 +33,8 @@ export type AxesEvidence = {
   P?: { value: number | null; basis: string };
   families?: string[];
   tech?: TechRef | null;       // 파이프라인이 저장한 기술적 참고(판정 미사용)
+  idea?: IdeaEvidence;         // 🎯 매수 검토 종목의 투자 아이디어·매수 근거(표시 전용)
+  next_event?: string | null;  // 가장 가까운 종목 이벤트 날짜(추천 순위용)
 };
 export type ExplainInput = {
   queue: Queue; market: "KR" | "US"; evidence: AxesEvidence;

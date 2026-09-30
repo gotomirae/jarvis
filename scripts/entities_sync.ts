@@ -19,7 +19,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function entitiesSyncJob(args: Record<string, string>): Promise<void> {
   await runJob("entities_sync", slotOf(args), async () => {
     const [krx, watch, bene, pos, wl, existing] = await Promise.all([
-      heimdallr<KrxRow>("krx_universe", { select: "code,name,sector,products" }),
+      heimdallr<KrxRow>("krx_universe", { select: "code,name,sector,industry,products" }),
       hermes<HermesWatchRow>("watchlist", { select: "symbol,name,market,industries,active" }),
       hermes<{ analysis_id: number; source_symbol: string; beneficiary_symbol: string; beneficiary_market: string }>("beneficiaries", { select: "analysis_id,source_symbol,beneficiary_symbol,beneficiary_market" }),
       exportPositions(),

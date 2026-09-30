@@ -1,6 +1,7 @@
 import { Card, Empty, Footer, Guide, LinkRow, Nav, Section } from "@/app/_components/ui";
 import { linksConfig, taxonomyConfig } from "@/lib/config/load";
 import { explain, type AxesEvidence } from "@/lib/engine/explain";
+import { buyReasons, consensusOf, EMPTY_IDEA, ideaCard, rankBuy } from "@/lib/engine/idea";
 import type { Queue } from "@/lib/engine/queues";
 import { env } from "@/lib/env";
 import { stockLinks, type LinkEntity } from "@/lib/links";
@@ -14,7 +15,7 @@ type Ent = LinkEntity & { l1_codes: string[] };
 
 const SECTIONS: { queue: Queue; title: string; about: string }[] = [
   { queue: "take_profit", title: "💰 익절 검토", about: "보유 종목 중 과열 점수와 주가 반영도가 모두 높은 종목" },
-  { queue: "buy", title: "🎯 매수 검토", about: "실적 숫자가 좋고 주가는 아직 덜 반영됐으며, 서로 다른 프로젝트 2곳 이상이 같은 방향 신호를 낸 종목" },
+  { queue: "buy", title: "🎯 매수 검토", about: "실적 숫자가 좋고 주가는 아직 덜 반영됐으며, 서로 다른 프로젝트 2곳 이상이 같은 방향 신호를 낸 종목. 신호 합의 수 → 낮은 주가 반영도 → 산업 성장률 → 가까운 이벤트 순으로 정렬하며, 시장별 상위 5개가 브리핑 추천입니다." },
   { queue: "radar", title: "🔭 선행 관찰", about: "산업 이야기와 실적 촉매는 켜졌지만 실적 숫자는 아직 확인 전이고, 실적 발표가 45일 안에 있는 종목" },
   { queue: "pullback_wait", title: "⏳ 눌림 대기", about: "실적은 좋지만 주가가 이미 많이 반영된 종목 — 반영도가 50 아래로 내려오면 다시 봄" },
 ];
@@ -90,7 +91,17 @@ function QueueSection({ queue, title, about, q, byId, evBy, ctx }: {
   queue: Queue; title: string; about: string; q: QItem[]; byId: Map<string, Ent>; evBy: Map<string, AxesEvidence>;
   ctx: Parameters<typeof stockLinks>[1];
 }) {
-  const xs = q.filter((x) => x.queue === queue);
+  let xs = q.filter((x) => x.queue === queue);
+  const top = new Set<string>();
+  if (queue === "buy") {
+    const rk = (m: "KR" | "US") => rankBuy(xs.filter((x) => (byId.get(x.entity_id)?.market ?? "KR") === m).map((x) => {
+      const ev = evBy.get(x.entity_id) ?? {};
+      return { ...x, families: ev.families?.length ?? 0, p: (x.reason as { p?: number | null }).p ?? null, industryGrowth: ev.idea?.industry?.realized_median ?? null, nextEvent: ev.next_event ?? null };
+    }), xs.length);
+    const kr = rk("KR"), us = rk("US");
+    for (const x of [...kr.slice(0, 5), ...us.slice(0, 5)]) top.add(x.entity_id);
+    xs = [...kr, ...us];
+  }
   return (
     <Section title={title} count={xs.length}>
       <Guide>{about}</Guide>
@@ -105,12 +116,32 @@ function QueueSection({ queue, title, about, q, byId, evBy, ctx }: {
               <a href={`/stock/${encodeURIComponent(x.entity_id)}`} className="underline decoration-dotted">{e?.market === "US" ? "🇺🇸" : "🇰🇷"} {e?.name ?? x.entity_id}</a>
               <span className="ml-1 text-xs text-neutral-500">{e?.symbol} · 이 목록에 {days}일째</span>
             </p>
-            <p><b>결론</b> {ex.conclusion}</p>
-            <ul className="list-disc pl-5 text-neutral-700 dark:text-neutral-300">{ex.reasons.map((t, i) => <li key={i}>{t}</li>)}</ul>
+            {queue === "buy" && e ? <IdeaView ev={evBy.get(x.entity_id) ?? {}} e={e} p={rs.p ?? null} top={top.has(x.entity_id)} /> : <>
+              <p><b>결론</b> {ex.conclusion}</p>
+              <ul className="list-disc pl-5 text-neutral-700 dark:text-neutral-300">{ex.reasons.map((t, i) => <li key={i}>{t}</li>)}</ul>
+            </>}
             {e && <LinkRow links={stockLinks(e, ctx)} />}
           </Card>
         );
       })}
     </Section>
+  );
+}
+
+/** 🎯 투자 아이디어·매수 근거 (브리핑과 같은 함수) */
+function IdeaView({ ev, e, p, top }: { ev: AxesEvidence; e: Ent; p: number | null; top: boolean }) {
+  const idea = ev.idea ?? EMPTY_IDEA;
+  const c = ideaCard(1, { name: e.name, symbol: e.symbol, market: e.market, industry: idea.industry?.name ?? "" }, idea,
+    buyReasons({ idea, p, consensus: consensusOf(ev), grade: ev.F?.grade ?? null, score: ev.F?.score ?? null }), ev.tech, "");
+  return (
+    <div className="space-y-1 text-sm">
+      {top && <p className="text-xs text-emerald-700 dark:text-emerald-400">⭐ 오늘 브리핑 추천 (시장별 상위 5)</p>}
+      {c.thesis && <p><b>💡 투자 아이디어</b> {c.thesis}</p>}
+      <p className="font-medium">📈 매수 근거</p>
+      <ul className="pl-2 text-neutral-700 dark:text-neutral-300">{c.reasons.map((t, i) => <li key={i}>{t}</li>)}</ul>
+      {c.events.length > 0 && <p>⏰ 다음 확인: {c.events.join(" / ")}</p>}
+      {c.risk && <p>⚠️ 리스크: {c.risk}</p>}
+      {c.tech && <p className="text-xs text-neutral-500">📊 기술적 참고(판정 미사용): {c.tech}</p>}
+    </div>
   );
 }

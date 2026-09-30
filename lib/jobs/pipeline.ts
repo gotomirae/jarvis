@@ -3,7 +3,7 @@
  *  · 대상: 유효 신호가 있거나 보유 중인 개별 종목(asset_class=stock) — ETF·펀드는 신호 대상 아님(SnowBall 인계)
  *  · 🎯·🔭 에 새로 들어온 종목은 SnowBall draft 로 제출(하루 3건, 같은 종목 7일 1회)
  */
-import { dbInsert, dbSelect, dbSelectAll, dbUpsertBatched } from "@/lib/db";
+import { dbDelete, dbInsert, dbSelect, dbSelectAll, dbUpsertBatched } from "@/lib/db";
 import { computeAxes, type Axes, type EntityCtx } from "@/lib/engine/axes";
 import { assignQueue, type Queue } from "@/lib/engine/queues";
 import { regime } from "@/lib/engine/regime";
@@ -16,6 +16,7 @@ import { chart } from "@/lib/ingest/market";
 import { exportMacro, submitIdea } from "@/lib/ingest/snowball";
 import { kstDate } from "@/lib/time";
 import { activeSignals, latestHoldings, loadEntities, rules, type EntityIndex } from "./context";
+import { ideaEvidence } from "./idea";
 import { latestScreens } from "./ingest";
 import { techRefs } from "./tech";
 
@@ -41,7 +42,7 @@ function krDaysToEarnings(now: Date): number {
   return 45;
 }
 
-export type PipelineOut = { date: string; evaluated: number; queues: Record<string, number>; submitted: string[]; regime: Awaited<ReturnType<typeof currentRegime>> };
+export type PipelineOut = { date: string; evaluated: number; queues: Record<string, number>; removed: number; submitted: string[]; regime: Awaited<ReturnType<typeof currentRegime>> };
 
 export async function runPipeline(now = new Date(), opts: { submit?: boolean } = {}): Promise<PipelineOut> {
   const R = rules();
@@ -96,6 +97,12 @@ export async function runPipeline(now = new Date(), opts: { submit?: boolean } =
   // 큐에 든 종목은 기술적 참고(판정 미사용)를 근거에 저장 — 화면·브리핑은 DB 만 읽는다(PRD §8)
   const tech = await techRefs(queueRows.map((q) => q.entity_id), now);
   for (const r of axesRows) { const t = tech.get(r.entity_id as string); if (t) (r.evidence as Record<string, unknown>).tech = t; }
+  // 🎯 매수 검토 종목은 투자 아이디어·매수 근거(원 프로젝트 분석·분기 실적·산업 성장·이벤트·리스크)를 함께 저장 — 표시 전용
+  const ideas = await ideaEvidence(queueRows.filter((q) => q.queue === "buy").map((q) => q.entity_id), ents, now);
+  for (const r of axesRows) {
+    const x = ideas.get(r.entity_id as string);
+    if (x) Object.assign(r.evidence as Record<string, unknown>, { idea: x.idea, next_event: x.nextEvent });
+  }
 
   // first_seen 유지: 최근 30일 같은 큐에 있었으면 그때부터
   const prev = await dbSelectAll<{ entity_id: string; queue: string; first_seen: string; date: string }>("queue_items", `select=entity_id,queue,first_seen,date&date=gte.${kstDate(new Date(now.getTime() - 30 * 86400_000))}&date=lt.${date}&order=date.desc`);
@@ -108,11 +115,15 @@ export async function runPipeline(now = new Date(), opts: { submit?: boolean } =
   if (!w1.ok) throw new Error(w1.reason);
   const w2 = await dbUpsertBatched("queue_items", qRows, "date,entity_id");
   if (!w2.ok) throw new Error(w2.reason);
+  // 같은 날 재실행(07:12 → 19:10)에서 큐를 벗어난 종목은 오늘 행을 지운다 — 남겨 두면 브리핑·대시보드에 옛 판정이 섞인다
+  const keep = qRows.map((q) => `"${q.entity_id}"`);
+  const stale = await dbDelete("queue_items", `date=eq.${date}${keep.length ? `&entity_id=not.in.(${keep.join(",")})` : ""}`);
+  if (!stale.ok) throw new Error(stale.reason);
 
   await dbInsert("bot_state", [{ key: "regime", value: { ...reg, at: nowIso }, updated_at: nowIso }], { upsertOn: "key" });
   const submitted = opts.submit === false ? [] : await submitNewIdeas(qRows.filter((q) => !prevMap.has(`${q.entity_id}|${q.queue}`)), ents, signals, axesById, now);
   const counts = qRows.reduce<Record<string, number>>((m, q) => ((m[q.queue] = (m[q.queue] ?? 0) + 1), m), {});
-  return { date, evaluated: axesRows.length, queues: counts, submitted, regime: reg };
+  return { date, evaluated: axesRows.length, queues: counts, removed: stale.data, submitted, regime: reg };
 }
 
 /** 🎯·🔭 첫 진입 → SnowBall jarvis_submit_idea (draft). 하루 max_per_day, 같은 종목 dedupe_days 안에 재제출 안 함 */

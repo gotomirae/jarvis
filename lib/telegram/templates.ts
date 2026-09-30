@@ -2,6 +2,7 @@
  * 텔레그램 메시지 템플릿 (PRD §9.2, 부록 B) — 순수 함수. 동적 텍스트는 모두 esc() 를 거친다(불변 규칙 8).
  * 종목 링크는 호출부가 lib/links.ts 로 만든 HTML(inlineLinks)·버튼을 넘긴다(불변 규칙 7). 모든 메시지에 "매수 확정 신호 아님"(불변 규칙 3).
  */
+import type { IdeaCard } from "@/lib/engine/idea";
 import { esc, NOT_A_BUY_SIGNAL } from "./format";
 
 const pct = (x: number | null | undefined, digits = 1) => (x === null || x === undefined || !Number.isFinite(x) ? "-" : `${x > 0 ? "+" : ""}${x.toFixed(digits)}%`);
@@ -32,16 +33,20 @@ export function holdingAlertText(v: HoldingAlertView): string {
 
 // ── ☀️ 아침 / 🌙 저녁 브리핑 (부록 B.2) ───────────────
 export type MarketLine = { label: string; last: number | null; change_pct: number | null; level?: boolean };
-/** 종목 블록: 결론·근거가 먼저, 링크는 맨 끝 줄 (links = lib/links.ts linkLine 이 만든 HTML) */
-export type BriefItem = { icon: string; group: string; name: string; code: string; conclusion: string; reasons: string[]; links: string };
+/** 🎯 외 큐 요약 (이름만 — 자세한 근거는 대시보드) */
+export type QueueSummary = { icon: string; label: string; names: string[] };
 export type BriefData = {
   kind: "morning" | "evening"; date: string;
   market: MarketLine[];
   sectors?: { label: string; change_pct: number | null }[];
   regime: { risk_off: boolean; reasons: string[] };
   counts: { green: number; yellow: number; blue: number; alert: number };
+  alertsPaused?: boolean;                             // 보유 경고 알림 일시 정지(/alerts off)
   earnings: { title: string; lines: string[] };
-  items: BriefItem[];                                 // 🟢🟡🔵🎯🔭⏳ (P2: 🎯🔭⏳💰)
+  focus: "KR" | "US";                                 // 추천 대상 시장 (아침 미국 · 저녁 국내)
+  ideas: IdeaCard[];                                  // 🎯 매수 검토 추천 — 최대 5개, 추천 시장 먼저 채우고 모자라면 다른 시장 (rankBuy)
+  buyTotal: number;                                   // 🎯 전체 수 (추천 밖 종목은 대시보드)
+  others: QueueSummary[];                             // 🔭 ⏳ 💰
   holding: string[];                                  // 보유 영향·경고 요약
   schedule: { title: string; lines: string[] };
   asOf: string;                                       // 기준 시각 KST
@@ -51,24 +56,46 @@ export function marketLine(m: MarketLine): string {
   return m.level ? `${esc(m.label)} ${num(m.last)} (${pct(m.change_pct)})` : `${esc(m.label)} ${pct(m.change_pct)}`;
 }
 
+const NUM = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"];
+/** 긴 브리핑을 나눌 때 끊을 자리: 종목 카드·구분선·섹션 제목 앞 (lib/telegram/send.ts splitBefore) */
+export const BRIEF_SPLIT = /^(?:\d️⃣|\d+\. |━|👀|📣|💼|📅)/u;
+const RULE = "━━━━━━━━━━━━━━";
+
+/** 추천 종목 카드: 아이디어 → 매수 근거 → 이벤트·리스크·기술 참고 → 링크(맨 끝 줄) */
+export function ideaBlock(c: IdeaCard): string[] {
+  const out = ["", `${NUM[c.rank - 1] ?? `${c.rank}.`} ${c.flag} <b>${esc(c.name)}</b> (${esc(c.code)})${c.industry ? ` · ${esc(c.industry)}` : ""}`];
+  if (c.thesis) out.push("", "💡 <b>투자 아이디어</b>", esc(c.thesis));
+  if (c.reasons.length) out.push("", "📈 <b>매수 근거</b>", ...c.reasons.map(esc));
+  if (c.events.length || c.risk || c.tech) out.push("");
+  if (c.events.length) out.push(`⏰ 다음 확인: ${c.events.map(esc).join(" / ")}`);
+  if (c.risk) out.push(`⚠️ 리스크: ${esc(c.risk)}`);
+  if (c.tech) out.push(`📊 기술적 참고(판정 미사용): ${esc(c.tech)}`);
+  if (c.links) out.push(c.links);
+  return out;
+}
+
 export function briefText(d: BriefData): string {
   const head = d.kind === "morning" ? `☀️ <b>${esc(d.date)} 아침 브리핑</b>` : `🌙 <b>${esc(d.date)} 저녁 브리핑</b>`;
-  const out = [head, d.market.map(marketLine).join(" · ") || "시세 수집 실패"];
+  const out = [head, "", `📈 ${d.market.map(marketLine).join(" · ") || "시세 수집 실패"}`];
   if (d.sectors?.length) {
     const s = [...d.sectors].filter((x) => x.change_pct !== null).sort((a, b) => (b.change_pct as number) - (a.change_pct as number));
-    if (s.length) out.push(`섹터 ▲ ${s.slice(0, 2).map((x) => `${esc(x.label)} ${pct(x.change_pct)}`).join(", ")} / ▼ ${s.slice(-2).reverse().map((x) => `${esc(x.label)} ${pct(x.change_pct)}`).join(", ")}`);
+    if (s.length) out.push(`🏭 섹터 ▲ ${s.slice(0, 2).map((x) => `${esc(x.label)} ${pct(x.change_pct)}`).join(", ")} / ▼ ${s.slice(-2).reverse().map((x) => `${esc(x.label)} ${pct(x.change_pct)}`).join(", ")}`);
   }
   out.push(d.regime.risk_off ? `🔴 시장 국면: 위험 회피 — ${esc(d.regime.reasons.join(", "))} (진입 1차 비중 절반)` : "🟢 시장 국면: 정상");
-  out.push(`🟢 진입 신호 ${d.counts.green} · 🟡 관찰 ${d.counts.yellow} · 🔵 실적 돌파 ${d.counts.blue} · ⚠️ 보유 경고 ${d.counts.alert}`);
-  if (d.earnings.lines.length) out.push("", `<b>${esc(d.earnings.title)}</b>`, ...d.earnings.lines.map(esc));
-  let group = "";
-  for (const i of d.items) {
-    if (i.group !== group) { group = i.group; out.push("", `<b>${esc(i.icon)} ${esc(i.group)}</b>`); }
-    out.push("", `<b>${esc(i.name)}</b> (${esc(i.code)})`, `결론: ${esc(i.conclusion)}`, ...i.reasons.map((r) => ` · ${esc(r)}`));
-    if (i.links) out.push(i.links);
+  out.push(`🚦 진입 신호 ${d.counts.green} · 관찰 ${d.counts.yellow} · 실적 돌파 ${d.counts.blue} · 보유 경고 ${d.counts.alert}${d.alertsPaused ? " (⏸ 알림 정지 중)" : ""}`);
+
+  const where = d.focus === "US" ? "🇺🇸 미국 우선" : "🇰🇷 국내 우선";
+  out.push("", RULE, `🎯 <b>매수 검토 추천</b> (${where}) ${d.ideas.length ? `TOP ${d.ideas.length}${d.buyTotal > d.ideas.length ? ` / 전체 ${d.buyTotal}` : ""}` : "— 오늘 없음"}`, RULE);
+  for (const c of d.ideas) out.push(...ideaBlock(c));
+
+  const others = d.others.filter((o) => o.names.length);
+  if (others.length) {
+    out.push("", "👀 <b>그 밖의 관찰 종목</b> (자세한 근거는 대시보드)");
+    for (const o of others) out.push(`${esc(o.icon)} ${esc(o.label)} ${o.names.length}: ${o.names.slice(0, 6).map(esc).join(" · ")}${o.names.length > 6 ? " 외" : ""}`);
   }
-  if (d.holding.length) out.push("", "<b>보유</b>", ...d.holding.map(esc));
-  if (d.schedule.lines.length) out.push("", `<b>${esc(d.schedule.title)}</b>`, ...d.schedule.lines.map(esc));
+  if (d.earnings.lines.length) out.push("", `📣 <b>${esc(d.earnings.title)}</b>`, ...d.earnings.lines.map((l) => `· ${esc(l)}`));
+  if (d.holding.length) out.push("", "💼 <b>보유</b>", ...d.holding.map(esc));
+  if (d.schedule.lines.length) out.push("", `📅 <b>${esc(d.schedule.title)}</b>`, ...d.schedule.lines.map((l) => `· ${esc(l)}`));
   out.push("", `<i>기준 ${esc(d.asOf)} KST</i>`, FOOT);
   return out.join("\n");
 }

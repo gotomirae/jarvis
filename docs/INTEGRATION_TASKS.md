@@ -85,6 +85,8 @@
 10. **투자 섹터**: `sector_map.py` 33개 이름은 유지하고, JARVIS `/api/public/taxonomy`로 L1을 매핑해 `krx_universe.industry_l1`(또는 뷰)을 제공한다.
 11. **anon SELECT 확인**: `screen_results`, `price_snapshots`, `quarterly_fundamentals`, `consensus_snapshots`, `notifications`(kind·payload), `analyses`(★○ 트리거·시나리오), `outcome_tracking`, `krx_universe`, `index_snapshots`, `entry_checks`. 개인 원문이 있는 테이블은 읽기 전용 뷰로 제공한다.
 12. **회귀**: 전체 안전 회귀를 통과한다. M1·M2·M5 경계값 테스트, 과거 2시즌 replay로 M1~M5(M3·M4 제외) 통과 표본 수를 `docs/decisions/`에 기록한다.
+13. **섹터 오분류 정정(2026-09-30 JARVIS 점검)**: `krx_universe.sector='유통·소비재'`(74종목)에 소비재가 아닌 종목이 섞여 있다 — 기초 화학물질 제조업(국도화학·후성·이수화학·유니드), 1차 철강(휴스틸), 석유 정제(한국쉘석유), 통신(LG유플러스), 방송(CJ ENM), 바이오(HLB테라퓨틱스), 의료로봇(큐렉소) 등. KSIC `industry` 와 교차 검증해 `화학·소재`·`철강·금속` 등 알맞은 섹터로 옮긴다. JARVIS 는 이 섹터로 L1 을 정하므로(국도화학 → 소비재 → FlyWheel 음식료 흐름이 매수 근거로 붙음) 결과가 바로 달라진다.
+14. **분석 출력 정리**: `analyses.payload.risks` 에 `{"risk":"...","watch_metric":"..."}` 자리표시가 저장된 사례(제이아이테크 2026Q2), `one_line_thesis` 에 `[[F 218.8억]]`·`[[F announcement_return_pct -11.375]]` 사실 표식과 `[검증 불가 수치 삭제]` 가 남는 사례가 있다. 저장 전에 표식을 값으로 치환하거나 문장을 다시 쓰게 한다(JARVIS 는 표시할 때 흔적만 지운다).
 
 ---
 

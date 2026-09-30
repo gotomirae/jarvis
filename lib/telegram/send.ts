@@ -29,8 +29,8 @@ export async function tgApi<T = unknown>(method: string, body: Record<string, un
   return fail(`${method}: 재시도 초과`);
 }
 
-export async function sendMessage(chatId: string | number, html: string, buttons?: Button[][]): Promise<Result<number[]>> {
-  const parts = splitMessage(html);
+export async function sendMessage(chatId: string | number, html: string, buttons?: Button[][], splitBefore?: RegExp): Promise<Result<number[]>> {
+  const parts = splitMessage(html, 4096, splitBefore);
   const ids: number[] = [];
   for (let i = 0; i < parts.length; i++) {
     const last = i === parts.length - 1;

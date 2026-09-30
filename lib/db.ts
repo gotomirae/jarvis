@@ -59,6 +59,19 @@ export async function dbUpdate(table: string, filter: string, patch: Record<stri
   }
 }
 
+/** 조건에 맞는 행 삭제 — 파생 스냅샷(예: 같은 날 재평가에서 빠진 큐 항목) 정리용. 지운 행 수를 돌려준다. */
+export async function dbDelete(table: string, filter: string): Promise<Result<number>> {
+  const b = base();
+  if (!b) return fail("JARVIS DB 미설정");
+  try {
+    const res = await fetch(`${b.url}/rest/v1/${table}?${filter}`, { method: "DELETE", headers: headers(b.key, { Prefer: "return=representation" }) });
+    if (res.status >= 300) return fail(`${table}: HTTP ${res.status} ${safeReason(await res.text())}`, res.status);
+    return ok(((await res.json()) as unknown[]).length, res.status);
+  } catch (e) {
+    return fail(`${table}: ${safeReason(e)}`);
+  }
+}
+
 export async function dbSelect<T = Record<string, unknown>>(table: string, query: string): Promise<Result<T[]>> {
   const b = base();
   if (!b) return fail("JARVIS DB 미설정");

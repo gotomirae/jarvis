@@ -121,6 +121,16 @@ entry_gate:
   first_tranche: 0.3333              # 1차 1/3 → 확인 1/3 → 다음 실적 확인 1/3
   invalidation: {PB: "low_10d", SW: "low_20d", CU: "signal_day_low_or_leader_below_event_close", PEAD_PB: "breakout_d0_low"}
 
+tech_display:                        # 🎯 추천 카드의 가격·기술 지표 ⑤~⑧ (표시 전용 — 판정 조건 아님). MACD "직전" 기준은 entry_core.M2_macd_pre_cross 를 그대로 쓴다
+  source: "yahoo_chart_1y"             # lib/ingest/market.ts 일봉 종가 (국내 .KS/.KQ, 미국 티커)
+  ma: [5, 20]                          # 5일선 · 20일선
+  ma_near_gap_pct_max: 1.0             # 5일선이 20일선 아래 1.0% 이내 …
+  ma_narrowing_days_min: 2             # … 이고 격차가 2일 연속 좁혀지면 "상향 통과 직전"
+  rsi_period: 14                       # Wilder RSI
+  rsi_direction_days: 3                # 방향 = 오늘 vs 3거래일 전
+  rsi_flat_band: 1.0                   # ±1.0 이내 변화는 보합
+  high_lookback_days: 250              # 고점 대비 하락률 = 최근 250거래일(≈52주) 최고 종가 대비
+
 setup_tags:                          # 🟢 신호의 맥락 표시 (판정 조건 아님, 성과 귀속 단위)
   PB: "눌림 (M1 조정)"
   SW: "횡보 (M1 횡보)"

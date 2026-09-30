@@ -55,7 +55,13 @@ export function sanitizePosition(p: Record<string, unknown>): Record<string, unk
   return out;
 }
 
-export type KrxRow = { code: string; name: string; sector?: string | null; products?: string | null };
+export type KrxRow = { code: string; name: string; sector?: string | null; industry?: string | null; products?: string | null };
+
+/** Heimdallr 포괄 섹터 오분류: 섹터가 guard 대상이고 KSIC 업종(krx_universe.industry)이 목록 단어를 포함하면 true → 기타(ETC) 고정 */
+export function sectorMisfit(sector: string | null | undefined, industry: string | null | undefined, guards: TaxonomyRules["heimdallr_sector_guard"] = []): boolean {
+  const g = guards.find((x) => x.sector === sector);
+  return !!g && !!industry && g.etc_if_industry_contains.some((k) => industry.includes(k));
+}
 export type HermesWatchRow = { symbol: string; name?: string | null; market: string; industries?: string[] | null; active?: boolean | null };
 export type SnowballAsset = { asset_id: string; ticker: string; name: string; market: string; sector?: string | null; asset_class?: string | null };
 export type HermesAnalysisRef = { analysis_id: number; symbol: string; market: string };
@@ -70,6 +76,7 @@ export type EntityRow = {
 type Draft = {
   market: Market; symbol: string; name: string; aliases: Set<string>; asset_class: string;
   snowball_asset_id: string | null; snowballSector: string | null; heimdallrSector: string | null; hermesIndustries: string[]; products: string | null;
+  sectorMisfit: boolean;
 };
 
 export function buildEntities(
@@ -83,7 +90,7 @@ export function buildEntities(
     const id = entityId(market, symbol);
     let d = drafts.get(id);
     if (!d) {
-      d = { market, symbol, name, aliases: new Set(), asset_class: "stock", snowball_asset_id: null, snowballSector: null, heimdallrSector: null, hermesIndustries: [], products: null };
+      d = { market, symbol, name, aliases: new Set(), asset_class: "stock", snowball_asset_id: null, snowballSector: null, heimdallrSector: null, hermesIndustries: [], products: null, sectorMisfit: false };
       drafts.set(id, d);
     }
     return d;
@@ -95,6 +102,7 @@ export function buildEntities(
     const d = get("KR", code, r.name);
     d.heimdallrSector = r.sector ?? null;
     d.products = r.products ?? null;
+    d.sectorMisfit = sectorMisfit(r.sector, r.industry, rules.heimdallr_sector_guard);
   }
   for (const w of src.hermesWatch) {
     if (w.active === false) continue;
@@ -129,7 +137,8 @@ export function buildEntities(
 
   return [...drafts.entries()].map(([id, d]) => {
     const l1 = resolveEntityL1({
-      override: d.asset_class === "etf" ? ["ETF"] : null,
+      // SnowBall 섹터가 있으면 그것을 우선, 없으면 오분류 섹터는 기타로 고정 (사용자 지정 2026-09-30, INTEGRATION_TASKS B-13 해결 전까지)
+      override: d.asset_class === "etf" ? ["ETF"] : d.sectorMisfit && !d.snowballSector ? ["ETC"] : null,
       snowballSector: d.snowballSector, heimdallrSector: d.heimdallrSector, hermesIndustries: d.hermesIndustries, products: d.products,
     }, rules, extraOverrides);
     const ex = existing.get(id);

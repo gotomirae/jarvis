@@ -52,6 +52,19 @@ describe("telegram commands", () => {
     expect(r2?.text).not.toContain("JARVIS_URL");
   });
 
+  it("/alerts on|off 와 /status 표시", async () => {
+    let state: boolean | null = null;
+    const c = { ...ctx, setAlertPause: async (p: boolean) => { state = p; } };
+    expect((await handleCommand("/alerts off", c))?.text).toContain("멈췄습니다");
+    expect(state).toBe(true);
+    expect((await handleCommand("/alerts ON", c))?.text).toContain("다시 켰습니다");
+    expect(state).toBe(false);
+    expect((await handleCommand("/alerts", c))?.text).toContain("사용법");
+    expect((await handleCommand("/alerts off", ctx))?.text).toContain("사용법");
+    expect(renderStatus({ ...status, alertsPaused: true })).toContain("⏸ 일시 정지");
+    expect(renderStatus({ ...status, alertsPaused: false })).toContain("▶️ 켜짐");
+  });
+
   it("help, planned and unknown commands; plain text ignored", async () => {
     expect((await handleCommand("/start", ctx))?.text).toContain("/status · /links");
     expect((await handleCommand("/help", ctx))?.text).toContain("/entry");

@@ -14,19 +14,43 @@ import { recordSource } from "@/lib/jobs";
 import { stockKeyboard, type LinkEntity } from "@/lib/links";
 import { sendMessage } from "@/lib/telegram/send";
 import { holdingAlertText } from "@/lib/telegram/templates";
-import { latestHoldings, loadEntities, rules } from "./context";
+import { latestHoldings, rules, type EntityRow } from "./context";
 
-async function getState<T>(key: string): Promise<T | null> {
+export async function getState<T>(key: string): Promise<T | null> {
   const r = await dbSelect<{ value: T }>("bot_state", `select=value&key=eq.${encodeURIComponent(key)}`);
   return r.ok && r.data[0] ? r.data[0].value : null;
 }
-async function setState(key: string, value: unknown) {
+export async function setState(key: string, value: unknown) {
   await dbInsert("bot_state", [{ key, value, updated_at: new Date().toISOString() }], { upsertOn: "key" });
 }
 
+/** 보유 종목 엔티티만 읽는다 (폴링은 Vercel 60초 제한 — 종목 마스터 전체를 읽지 않는다) */
+async function heldEntities(ids: string[]): Promise<{ byId: Map<string, EntityRow>; resolveName: (n: string) => string | null }> {
+  const r = ids.length ? await dbSelect<EntityRow>("entities", `select=id,market,symbol,name,aliases,primary_l1,l1_codes,asset_class,snowball_asset_id,hermes_analysis_id,naver_us_code&id=in.(${ids.map((i) => `"${i}"`).join(",")})`) : { ok: true as const, data: [] as EntityRow[] };
+  const rows = r.ok ? r.data : [];
+  const key = (x: string) => x.replace(/[\s()㈜·.,]/g, "").toLowerCase();
+  const names = new Map<string, string>();
+  for (const e of rows) for (const n of [e.name, ...(e.aliases ?? [])]) if (n) names.set(key(n), e.id);
+  return { byId: new Map(rows.map((e) => [e.id, e])), resolveName: (n) => names.get(key(n)) ?? null };
+}
+
+/** 이미 기록된 dedupe_key — 40개씩 묶어 한 번에 조회 */
+async function existingKeys(keys: string[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (let i = 0; i < keys.length; i += 40) {
+    const chunk = keys.slice(i, i + 40);
+    const r = await dbSelect<{ dedupe_key: string }>("notifications", `select=dedupe_key&dedupe_key=in.(${chunk.map((k) => `"${encodeURIComponent(k)}"`).join(",")})`);
+    if (r.ok) r.data.forEach((x) => out.add(x.dedupe_key));
+    else chunk.forEach((k) => out.add(k));        // 조회 실패 시 보내지 않는다(중복 발송 방지)
+  }
+  return out;
+}
+
 export async function poll(now = new Date(), opts: { dryRun?: boolean } = {}): Promise<Record<string, unknown>> {
+  const t0 = Date.now();
   const R = rules().queues.holding_alert;
-  const [ents, holdings] = await Promise.all([loadEntities(), latestHoldings()]);
+  const holdings = await latestHoldings();
+  const ents = await heldEntities(holdings.positions.map((p) => p.entity_id).filter((x): x is string => !!x));
   const held: Held[] = holdings.positions.filter((p) => p.asset_id).map((p) => ({
     asset_id: p.asset_id, entity_id: p.entity_id, name: p.name, ticker: p.ticker, weight: p.weight, allowed_weight: p.allowed_weight, heat_score: p.heat_score,
     invalidation: [p.invalidation_1, p.invalidation_2, p.invalidation_3].filter((x): x is string => !!x),
@@ -62,19 +86,19 @@ export async function poll(now = new Date(), opts: { dryRun?: boolean } = {}): P
   const bootstrapped = (await getState<boolean>("holding_alert_bootstrapped")) === true;
   const alerts = holdingAlerts({ held, riskAlerts: (ra.ok ? ra.data : []) as never, triggers, knownTriggerIds: bootstrapped ? known : new Set(triggers.map((t) => t.trigger_id)), screens, stances }, R, now);
 
-  // 이미 기록된 경고 제외
-  const fresh: HoldingAlert[] = [];
-  for (const a of alerts) {
-    const d = await dbSelect("notifications", `select=id&dedupe_key=eq.${encodeURIComponent(a.dedupe_key)}`);
-    if (!(d.ok && d.data.length)) fresh.push(a);
-  }
+  // 이미 기록된 경고 제외 (일괄 조회)
+  const seen = await existingKeys([...new Set(alerts.map((a) => a.dedupe_key))]);
+  const fresh: HoldingAlert[] = [...new Map(alerts.filter((a) => !seen.has(a.dedupe_key)).map((a) => [a.dedupe_key, a])).values()];
+  const tFetch = Date.now() - t0;
 
   let sent = 0;
   const latencies: number[] = [];
-  if (!bootstrapped || opts.dryRun) {
+  // 사용자 일시 정지(/alerts off): 계산·기록은 하되 보내지 않는다. 정지 중 쌓인 경고는 다시 켜도 한꺼번에 보내지 않는다.
+  const paused = (await getState<{ paused?: boolean }>("holding_alert_pause"))?.paused === true;
+  if (!bootstrapped || opts.dryRun || paused) {
     if (!opts.dryRun) {
-      await dbInsert("notifications", fresh.map((a) => ({ kind: "holding_alert", dedupe_key: a.dedupe_key, entity_id: a.entity_id && ents.byId.has(a.entity_id) ? a.entity_id : null, payload: { ...a, bootstrap: true } })), { ignoreDuplicates: true, upsertOn: "dedupe_key" });
-      await setState("holding_alert_bootstrapped", true);
+      await dbInsert("notifications", fresh.map((a) => ({ kind: "holding_alert", dedupe_key: a.dedupe_key, entity_id: a.entity_id && ents.byId.has(a.entity_id) ? a.entity_id : null, payload: { ...a, ...(paused && bootstrapped ? { paused: true } : { bootstrap: true }) } })), { ignoreDuplicates: true, upsertOn: "dedupe_key" });
+      if (!bootstrapped) await setState("holding_alert_bootstrapped", true);
     }
   } else {
     const chat = env().TELEGRAM_CHAT_ID;
@@ -104,5 +128,5 @@ export async function poll(now = new Date(), opts: { dryRun?: boolean } = {}): P
   }
   await setState("known_thesis_triggers", triggers.filter((t) => t.thesis_link === R.thesis_break_trigger.thesis_link).map((t) => t.trigger_id));
   const byCause = fresh.reduce<Record<string, number>>((m, a) => ((m[a.cause] = (m[a.cause] ?? 0) + 1), m), {});
-  return { bootstrap: !bootstrapped, candidates: alerts.length, fresh: fresh.length, by_cause: byCause, messages: sent, latency_min: latencies };
+  return { bootstrap: !bootstrapped, paused, candidates: alerts.length, fresh: fresh.length, by_cause: byCause, messages: sent, latency_min: latencies, ms: { collect: tFetch, total: Date.now() - t0 } };
 }

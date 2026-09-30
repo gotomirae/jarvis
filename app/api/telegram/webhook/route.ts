@@ -6,6 +6,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { linksConfig } from "@/lib/config/load";
 import { env } from "@/lib/env";
+import { dbInsert } from "@/lib/db";
 import { collectStatus } from "@/lib/status";
 import { handleCommand } from "@/lib/telegram/commands";
 import { safeEqual } from "@/lib/telegram/format";
@@ -27,7 +28,10 @@ export async function POST(req: NextRequest) {
   const text = update.message?.text;
   if (!chatId || !text || !e.TELEGRAM_CHAT_ID || String(chatId) !== e.TELEGRAM_CHAT_ID) return NextResponse.json({ ok: true });
 
-  const reply = await handleCommand(text, { dashboards: linksConfig().dashboards, jarvisUrl: e.JARVIS_URL, status: collectStatus });
+  const reply = await handleCommand(text, {
+    dashboards: linksConfig().dashboards, jarvisUrl: e.JARVIS_URL, status: collectStatus,
+    setAlertPause: async (paused) => { await dbInsert("bot_state", [{ key: "holding_alert_pause", value: { paused, at: new Date().toISOString(), by: "telegram" }, updated_at: new Date().toISOString() }], { upsertOn: "key" }); },
+  });
   if (reply) {
     const r = await sendMessage(chatId, reply.text, reply.buttons);
     if (!r.ok) console.error("telegram send 실패:", r.reason);

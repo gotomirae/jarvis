@@ -13,12 +13,14 @@ export type StatusCtx = {
   db: { ok: boolean; note?: string };
   jobs: { job: string; at: string; ok: boolean | null }[];
   sources: { source: string; last_ok_at: string | null; consecutive_failures: number }[];
+  alertsPaused?: boolean;
 };
 
 export type CommandCtx = {
   dashboards: DashboardsConfig;
   jarvisUrl: string | null | undefined;
   status: () => Promise<StatusCtx>;
+  setAlertPause?: (paused: boolean) => Promise<void>;     // /alerts on|off — 보유 경고 텔레그램 일시 정지
 };
 
 const PLANNED: Record<string, string> = {
@@ -46,6 +48,7 @@ export function renderStatus(s: StatusCtx): string {
     `환경변수 ${envOk}/${Object.keys(s.env).length} 설정${missing.length ? ` · 미설정: ${esc(missing.join(", "))}` : ""}`,
     `DB: ${s.db.ok ? "✅" : "❌"}${s.db.note ? ` ${esc(s.db.note)}` : ""}`,
   ];
+  if (s.alertsPaused !== undefined) lines.push(`보유 경고 알림: ${s.alertsPaused ? "⏸ 일시 정지 (/alerts on 으로 재개)" : "▶️ 켜짐"}`);
   if (s.sources.length) {
     lines.push("", "<b>소스</b>");
     for (const x of s.sources) lines.push(`${x.consecutive_failures >= 2 ? "🔧" : x.consecutive_failures ? "⚠️" : "✅"} ${esc(x.source)} · 마지막 성공 ${esc(x.last_ok_at ?? "없음")}`);
@@ -63,8 +66,14 @@ export async function handleCommand(text: string, ctx: CommandCtx): Promise<Repl
   if (!p) return null;
   if (p.cmd === "/status") return { text: renderStatus(await ctx.status()) };
   if (p.cmd === "/links") return renderLinks(ctx);
+  if (p.cmd === "/alerts") {
+    const arg = p.arg.toLowerCase();
+    if (!ctx.setAlertPause || !["on", "off"].includes(arg)) return { text: "사용법: /alerts off (보유 경고 알림 일시 정지) · /alerts on (다시 켜기)" };
+    await ctx.setAlertPause(arg === "off");
+    return { text: arg === "off" ? "⏸ 보유 경고 알림을 멈췄습니다. 경고는 계속 계산해 대시보드에만 표시합니다. 다시 켜려면 /alerts on" : "▶️ 보유 경고 알림을 다시 켰습니다. 멈춘 동안 쌓인 경고는 보내지 않고, 새로 생기는 경고부터 알립니다." };
+  }
   if (p.cmd === "/start" || p.cmd === "/help") {
-    return { text: ["🤖 <b>JARVIS</b> — 사용 가능: /status · /links", `준비 중: ${Object.keys(PLANNED).join(" ")}`].join("\n") };
+    return { text: ["🤖 <b>JARVIS</b> — 사용 가능: /status · /links · /alerts on|off", `준비 중: ${Object.keys(PLANNED).join(" ")}`].join("\n") };
   }
   const phase = PLANNED[p.cmd];
   return { text: phase ? `${esc(p.cmd)} 는 ${phase}에서 제공됩니다. 지금은 /status · /links 를 쓸 수 있습니다.` : `알 수 없는 명령: ${esc(p.cmd)} — /help` };

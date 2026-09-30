@@ -15,6 +15,9 @@ export async function submitToSnowball(formData: FormData) {
   const ent = e.ok ? e.data[0] : undefined;
   const back = `/stock/${encodeURIComponent(id)}`;
   if (!ent) redirect(`${back}?submitted=${encodeURIComponent("종목 없음")}`);
+  // 버튼 연타 방지: 같은 종목 수동 제출은 10분에 1번 (P2 운영: 같은 종목 5회 연속 제출 실측)
+  const recent = await dbSelect("notifications", `select=id&kind=eq.snowball_submit&entity_id=eq.${encodeURIComponent(id)}&created_at=gte.${new Date(Date.now() - 10 * 60_000).toISOString()}&limit=1`);
+  if (recent.ok && recent.data.length) redirect(`${back}?submitted=${encodeURIComponent("이미 보냈습니다(10분 안에 다시 보내지 않음)")}`);
   const base = env().JARVIS_URL?.replace(/\/$/, "");
   const r = await submitIdea({
     ticker: ent!.symbol,

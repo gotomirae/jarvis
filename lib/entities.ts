@@ -2,7 +2,7 @@
  * 종목 마스터 조립 (PRD §4.2) — 순수 함수. 네트워크는 scripts/entities_sync.ts 가 한다.
  * 원천: SnowBall(보유·관심, 최우선) → Heimdallr krx_universe → HermesCall watchlist. L1 은 resolveEntityL1 순서.
  */
-import { resolveEntityL1, type Override, type TaxonomyRules } from "@/lib/taxonomy/match";
+import { resolveEntityL1, type L2Scope, type Override, type TaxonomyRules } from "@/lib/taxonomy/match";
 
 export type Market = "KR" | "US";
 
@@ -62,6 +62,15 @@ export function sectorMisfit(sector: string | null | undefined, industry: string
   const g = guards.find((x) => x.sector === sector);
   return !!g && !!industry && g.etc_if_industry_contains.some((k) => industry.includes(k));
 }
+/** 범위가 정해진 L2(narrative_l2_scope) 중 이 종목이 속한 L2 목록 — 섹터·KSIC 업종 단어로 판정 */
+export function l2Members(x: { snowballSector?: string | null; heimdallrSector?: string | null; krxIndustry?: string | null }, scopes: L2Scope[] = []): string[] {
+  return scopes.filter((s) =>
+    (!!x.snowballSector && (s.snowball_sectors ?? []).includes(x.snowballSector))
+    || (!!x.heimdallrSector && (s.heimdallr_sectors ?? []).includes(x.heimdallrSector))
+    || (!!x.krxIndustry && (s.krx_industry_contains ?? []).some((k) => x.krxIndustry!.includes(k))),
+  ).map((s) => s.l2);
+}
+
 export type HermesWatchRow = { symbol: string; name?: string | null; market: string; industries?: string[] | null; active?: boolean | null };
 export type SnowballAsset = { asset_id: string; ticker: string; name: string; market: string; sector?: string | null; asset_class?: string | null };
 export type HermesAnalysisRef = { analysis_id: number; symbol: string; market: string };

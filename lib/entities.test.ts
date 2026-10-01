@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { loadYaml } from "@/lib/config/load";
 import type { TaxonomyRules } from "@/lib/taxonomy/match";
-import { buildEntities, cleanUsName, entityId, krCode, marketOf, sanitizePosition, sectorMisfit, usSymbol } from "./entities";
+import { buildEntities, cleanUsName, entityId, krCode, l2Members, marketOf, sanitizePosition, sectorMisfit, usSymbol } from "./entities";
 
 const rules = loadYaml<TaxonomyRules>("taxonomy.yaml");
 const now = new Date("2026-09-28T00:00:00Z");
@@ -114,6 +114,17 @@ describe("entities — buildEntities", () => {
     expect(sectorMisfit("유통·소비재", null, g)).toBe(false);
     expect(sectorMisfit("화학·소재", "기초 화학물질 제조업", g)).toBe(false);
     expect(sectorMisfit("유통·소비재", "기초 화학물질 제조업")).toBe(false);
+  });
+
+  it("L2 소속 (FlyWheel 음식료 흐름은 음식료 종목에만)", () => {
+    const s = rules.narrative_l2_scope;
+    expect(l2Members({ heimdallrSector: "음식료" }, s)).toEqual(["음식료"]);
+    expect(l2Members({ snowballSector: "음식류" }, s)).toEqual(["음식료"]);
+    expect(l2Members({ heimdallrSector: "유통·소비재", krxIndustry: "동·식물성 유지 및 낙농제품 제조업" }, s)).toEqual(["음식료"]);
+    expect(l2Members({ heimdallrSector: "유통·소비재", krxIndustry: "가죽, 가방 및 유사제품 제조업" }, s)).toEqual([]);
+    expect(l2Members({}, s)).toEqual([]);
+    expect(l2Members({ heimdallrSector: "음식료" })).toEqual([]);
+    expect(l2Members({ heimdallrSector: "음식료", snowballSector: "x", krxIndustry: "x" }, [{ l2: "음식료" }])).toEqual([]);
   });
 
   it("기본 now", () => {

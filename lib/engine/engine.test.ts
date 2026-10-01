@@ -157,6 +157,16 @@ describe("axes · queues · regime", () => {
     expect(computeAxes({ ...us, usFilters: null, priUsLite: undefined }, [], A, now)).toMatchObject({ c: false, f: false, p: null });
   });
 
+  it("범위가 정해진 L2 흐름(음식료)은 그 L2 종목에만 붙는다", () => {
+    const food: Signal = { source: "flywheel", source_ref: "p", kind: "industry_narrative", entity_id: null, l1_codes: ["2d"], direction: 1, strength: 10, observed_at: "2026-09-30T00:00:00Z", market_date: null, expires_at: null, evidence: { l2: "음식료" }, dedupe_key: "fw:narr:p" };
+    const bag: EntityCtx = { id: "KR:194370", market: "KR", l1_codes: ["2d"], l2Scope: { scoped: ["음식료"], member: [] } };
+    expect(computeAxes(bag, [food], A, now).n).toBe(false);
+    expect(computeAxes({ ...bag, l2Scope: { scoped: ["음식료"], member: ["음식료"] } }, [food], A, now).n).toBe(true);
+    expect(computeAxes({ ...bag, l2Scope: undefined }, [food], A, now).n).toBe(true);                                  // 범위 규칙 없음 → L1 전체
+    expect(computeAxes(bag, [{ ...food, evidence: {} }], A, now).n).toBe(true);                                        // L2 없는 흐름
+    expect(computeAxes(bag, [{ ...food, kind: "mentor_consensus", source: "sage", evidence: { l2: "음식료" } }], A, now).n).toBe(true);   // 산업 흐름 외 신호는 그대로
+  });
+
   it("큐: 순서대로 한 개", () => {
     const Q = R.queues, P = R.axes.P;
     const base = { n: true, c: true, f: true, p: 30, h: false, families: ["flywheel", "heimdallr"], evidence: {} };

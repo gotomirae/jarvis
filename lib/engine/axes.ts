@@ -19,6 +19,7 @@ export type EntityCtx = {
   usFilters?: string[] | null;          // 미국 F1~F4
   priUsLite?: number | null;            // 미국 가격 위치(간이) — P2 에서는 미계산이면 null
   holding?: { weight: number | null; allowed_weight: number | null; heat_score: number | null } | null;
+  l2Scope?: { scoped: string[]; member: string[] };   // FlyWheel 산업 흐름 중 scoped L2 는 member 일 때만 붙인다(taxonomy narrative_l2_scope)
 };
 
 export type Axes = {
@@ -31,7 +32,11 @@ const active = (s: Signal, now: number) => !s.expires_at || new Date(s.expires_a
 
 export function computeAxes(e: EntityCtx, signals: Signal[], rules: AxesRules, now: Date): Axes {
   const t = now.getTime();
-  const mine = signals.filter((s) => active(s, t) && (s.entity_id === e.id || (s.entity_id === null && s.l1_codes.some((c) => e.l1_codes.includes(c)))));
+  const outOfScope = (s: Signal) => {
+    const l2 = s.kind === "industry_narrative" ? (s.evidence.l2 as string | undefined) : undefined;
+    return !!l2 && !!e.l2Scope?.scoped.includes(l2) && !e.l2Scope.member.includes(l2);
+  };
+  const mine = signals.filter((s) => active(s, t) && (s.entity_id === e.id || (s.entity_id === null && s.l1_codes.some((c) => e.l1_codes.includes(c)) && !outOfScope(s))));
   const best = (kind: Signal["kind"], dir: -1 | 1 = 1) => {
     const xs = mine.filter((s) => s.kind === kind && s.direction === dir);
     return xs.length ? xs.reduce((a, b) => (b.strength > a.strength ? b : a)) : null;

@@ -4,7 +4,9 @@
  *  · 🎯·🔭 에 새로 들어온 종목은 SnowBall draft 로 제출(하루 3건, 같은 종목 7일 1회)
  */
 import { dbDelete, dbInsert, dbSelect, dbSelectAll, dbUpsertBatched } from "@/lib/db";
+import { taxonomyConfig } from "@/lib/config/load";
 import { computeAxes, type Axes, type EntityCtx } from "@/lib/engine/axes";
+import { l2Members } from "@/lib/entities";
 import { assignQueue, type Queue } from "@/lib/engine/queues";
 import { regime } from "@/lib/engine/regime";
 import type { ScreenRow } from "@/lib/engine/normalize";
@@ -47,7 +49,7 @@ export type PipelineOut = { date: string; evaluated: number; queues: Record<stri
 export async function runPipeline(now = new Date(), opts: { submit?: boolean } = {}): Promise<PipelineOut> {
   const R = rules();
   const date = kstDate(now);
-  const [ents, signals, holdings, sr, ee, recentAlerts, reg] = await Promise.all([
+  const [ents, signals, holdings, sr, ee, recentAlerts, reg, krx] = await Promise.all([
     loadEntities(),
     activeSignals(now),
     latestHoldings(),
@@ -55,7 +57,10 @@ export async function runPipeline(now = new Date(), opts: { submit?: boolean } =
     hermes<{ symbol: string; expected_at: string }>("earnings_events", { select: "symbol,expected_at", filters: { expected_at: `gte.${now.toISOString()}` } }),
     dbSelectAll<{ entity_id: string | null }>("notifications", `select=entity_id&kind=eq.holding_alert&created_at=gte.${new Date(now.getTime() - 7 * 86400_000).toISOString()}`),
     currentRegime(),
+    heimdallr<{ code: string; sector: string | null; industry: string | null }>("krx_universe", { select: "code,sector,industry" }),
   ]);
+  const scopes = taxonomyConfig().narrative_l2_scope ?? [];
+  const krxBy = new Map((krx.ok ? krx.data : []).map((k) => [`KR:${k.code}`, k]));
   const screens = new Map((sr.ok ? latestScreens(sr.data) : []).map((s) => [`KR:${s.code}`, s]));
   const usFilters = new Map<string, string[]>();
   for (const s of signals) if (s.kind === "earnings_quality_us" && s.entity_id) usFilters.set(s.entity_id, (s.evidence.flags as string[]) ?? []);
@@ -86,6 +91,7 @@ export async function runPipeline(now = new Date(), opts: { submit?: boolean } =
       screen: scr ? { gate_passed: scr.gate_passed, score_final: scr.score_final, pri: scr.pri, grade: scr.grade } : null,
       usFilters: usFilters.get(id) ?? null, priUsLite: null,
       holding: h ? { weight: h.weight, allowed_weight: h.allowed_weight, heat_score: h.heat_score } : null,
+      l2Scope: { scoped: scopes.map((s) => s.l2), member: l2Members({ snowballSector: h?.sector, heimdallrSector: krxBy.get(id)?.sector, krxIndustry: krxBy.get(id)?.industry }, scopes) },
     };
     const a = computeAxes(ctx, signals, R.axes, now);
     axesById.set(id, a);

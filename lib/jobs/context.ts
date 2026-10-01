@@ -90,7 +90,7 @@ export async function activeSignals(now: Date): Promise<Signal[]> {
   return r.ok ? r.data : [];
 }
 
-export type HoldingSnap = { asset_id: string; ticker: string; name: string; market: string; entity_id: string | null; asset_class: string; weight: number | null; allowed_weight: number | null; heat_score: number | null; invalidation_1?: string | null; invalidation_2?: string | null; invalidation_3?: string | null; open_triggers?: number };
+export type HoldingSnap = { asset_id: string; ticker: string; name: string; market: string; entity_id: string | null; asset_class: string; sector?: string | null; weight: number | null; allowed_weight: number | null; heat_score: number | null; invalidation_1?: string | null; invalidation_2?: string | null; invalidation_3?: string | null; open_triggers?: number };
 
 export async function latestHoldings(): Promise<{ snapshot_at: string | null; positions: HoldingSnap[] }> {
   const r = await dbSelectAll<{ snapshot_at: string; payload: { positions: HoldingSnap[] } }>("holdings_cache", "select=snapshot_at,payload&order=snapshot_at.desc&limit=1");

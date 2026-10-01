@@ -14,7 +14,10 @@ export type TaxonomyRules = {
   overrides?: Override[];
   unmatched_default?: string;
   heimdallr_sector_guard?: { sector: string; etc_if_industry_contains: string[] }[];   // lib/entities.ts sectorMisfit
+  narrative_l2_scope?: L2Scope[];                                                        // lib/entities.ts l2Members
 };
+
+export type L2Scope = { l2: string; snowball_sectors?: string[]; heimdallr_sectors?: string[]; krx_industry_contains?: string[] };
 
 export type HitType = "override" | "special" | "contains" | "partial" | "unmatched";
 export type Hit = { l1: string; type: HitType; kw: string | null; common?: string };

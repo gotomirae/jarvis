@@ -64,6 +64,15 @@ heimdallr_sector_guard:
   - sector: "유통·소비재"
     etc_if_industry_contains: ["화학", "철강", "석유", "광물", "비료", "통신", "방송", "의약", "의료용품"]
 
+# FlyWheel 산업 흐름(L2 단위 신호)을 L1 전체가 아니라 해당 L2 종목에만 붙인다 (사용자 지정 2026-10-01).
+# 소비재(2d)의 L2 는 음식료 하나뿐이라, 이 규칙이 없으면 의류·가방·유통 종목에도 "음식료 흐름"이 매수 근거로 붙는다.
+# 종목이 L2 에 속하는지: SnowBall 섹터 → Heimdallr 섹터 → KSIC 업종(krx_universe.industry) 단어 중 하나라도 맞으면 속함.
+narrative_l2_scope:
+  - l2: "음식료"
+    snowball_sectors: ["음식류"]
+    heimdallr_sectors: ["음식료"]
+    krx_industry_contains: ["식품", "식료품", "음료", "낙농", "곡물", "사료", "담배"]
+
 # 규칙: 위 어디에도 매핑되지 않는 새 라벨은 ETC로 집계하고 taxonomy_pending에 올린다 (사용자 지정)
 unmatched_default: "ETC"
 

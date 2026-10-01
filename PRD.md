@@ -664,7 +664,7 @@ FlyWheel STEP2는 Idea_Generating에서 `created_time` 창(전일 16:00~당일 1
 - **원장 `signal_ledger`**: 큐 진입, 🟢(태그 PB/SW/CU/PEAD_PB), 🟡, 🔵, 인박스, 무시, SnowBall 제출을 기록한다.
   - 진입가 = **신호 다음 첫 거래일 종가**
   - 벤치마크: KOSPI(코스닥 종목은 KOSDAQ) / S&P 500
-  - 측정: D+5·20·60
+  - 측정: D+5·20·40·60 (거래일, D47 — 40 추가). 국내 시세는 거래소 공식 종가(네이버 일봉), 미국은 야후
 - **가져오기(재계산 금지)**: Heimdallr `outcome_tracking`, Sage `mentor_scorecards`, SnowBall `decision_reviews`.
 - **새로 계산**
   - 🟢 태그별 성과
@@ -672,6 +672,7 @@ FlyWheel STEP2는 Idea_Generating에서 `created_time` 창(전일 16:00~당일 1
   - 🟡에서 🟢로 승격된 비율
   - FlyWheel 산업 신호의 L1 바스켓 성과. FlyWheel `signal_lessons.txt`에 제안문으로 전달한다(수동 반영).
   - HermesCall 수혜강도 구간별 성과
+- **피드백 루프(D49)**: 신호 시점 특징을 원장에 고정 저장 → 큐·특징 구간별 성과(`perf_stats`, 매일) → 표본 ≥ 30 구간이 생기면 🎯 추천 순위의 첫 기준(§7.3 게이트 6, 후보 자격은 불변) → 분기 보정 제안(`calibration_reviews`, 자동 적용 없음) → `/scorecard`.
 - **보정**: 분기 1회. 표본 30건 미만 항목은 변경 금지. `rules.yaml` 변경은 PR로 하고 `docs/DECISIONS.md`에 근거를 기록한다(자동 적용 금지). **M1~M5의 "필수" 여부 자체는 사용자 결정 사항이므로 보정 대상이 아니다.** 임계값만 조정한다.
 
 ---
@@ -694,7 +695,8 @@ FlyWheel STEP2는 Idea_Generating에서 `created_time` 창(전일 16:00~당일 1
 | `catalyst_events` | entity_id 또는 l1, title, date 또는 window_end, direction, source, url, origin(snowball/hermes/heimdallr/earnings/yaml), expires_at |
 | `holdings_cache` | snapshot_at, payload |
 | `notifications` | kind, dedupe_key UNIQUE, entity_id, payload, sent_at, telegram_msg_id |
-| `signal_ledger` / `outcomes` | §12 |
+| `signal_ledger` / `outcomes` | §12 (outcomes.horizon_days ∈ 5·20·40·60, horizon_date — 0006) |
+| `perf_stats` / `calibration_reviews` | §12 피드백 루프 (D49, 0006) |
 | `weekly_memos` | week, fact_table, body_md, grounding_ok, notion_url, telegram_sent_at |
 | `inbox_log` | source_ref UNIQUE, notion_page_id |
 | `link_checks` | rule, sample_url, status, checked_at |

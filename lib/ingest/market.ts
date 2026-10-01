@@ -1,5 +1,7 @@
 /**
- * 시세 어댑터 — Yahoo chart API (무료·무키, HermesCall price_history 실측 소스). 예외 없이 Result 반환(불변 규칙 6).
+ * 시세 어댑터 — Yahoo chart API (무료·무키, HermesCall price_history 실측 소스) · 네이버 일봉(국내 공식 종가).
+ * 예외 없이 Result 반환(불변 규칙 6).
+ * ※ 야후 국내 종가는 장 마감 동시호가 전 체결가라 거래소 공식 종가와 1~3% 다르다(10/1 실측, D47) → 성과 원장 국내 시세는 naverDaily.
  */
 import { fail, ok, safeReason, type Result } from "./types";
 
@@ -44,4 +46,28 @@ export async function charts(symbols: string[], range = "5d"): Promise<Record<st
   const rs = await Promise.all(symbols.map((s) => chart(s, range)));
   rs.forEach((r, i) => { if (r.ok) out[symbols[i]] = r.data; });
   return out;
+}
+
+/** 순수 함수: 네이버 fchart XML(`<item data="YYYYMMDD|시|고|저|종|거래량" />`) → 일봉 (날짜 오름차순) */
+export function parseNaverDaily(xml: string): Bar[] {
+  const out: Bar[] = [];
+  for (const m of xml.matchAll(/data="(\d{8})\|[^|]*\|[^|]*\|[^|]*\|([\d.]+)\|/g)) {
+    const close = Number(m[2]);
+    if (close > 0) out.push({ date: `${m[1].slice(0, 4)}-${m[1].slice(4, 6)}-${m[1].slice(6)}`, close });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** 네이버 일봉 — 국내 종목 코드(005930) 또는 지수(KOSPI·KOSDAQ). 거래소 공식 종가 */
+export async function naverDaily(symbol: string, count = 300, f: typeof fetch = fetch): Promise<Result<Bar[]>> {
+  try {
+    const res = await f(`https://fchart.stock.naver.com/sise.nhn?symbol=${encodeURIComponent(symbol)}&timeframe=day&count=${count}&requestType=0`, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; JARVIS-research)" }, signal: AbortSignal.timeout(15_000),
+    });
+    if (res.status !== 200) return fail(`naver ${symbol}: HTTP ${res.status}`, res.status);
+    const bars = parseNaverDaily(await res.text());
+    return bars.length ? ok(bars, 200) : fail(`naver ${symbol}: 데이터 없음`);
+  } catch (e) {
+    return fail(`naver ${symbol}: ${safeReason(e)}`);
+  }
 }

@@ -8,3 +8,29 @@ export function kstString(d: Date = new Date()): string {
 export function kstDate(d: Date = new Date()): string {
   return new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
 }
+
+/**
+ * 브리핑이 속한 날짜 — 저녁 브리핑은 정오 전(자정 넘어 수동 실행 등)이면 전날 저녁분이다.
+ * 10/1 01:30 수동 실행이 10/1 저녁 슬롯을 차지해 19:20 정시 발송이 빠진 사례(D48).
+ */
+export function briefDate(kind: "morning" | "evening", d: Date = new Date()): string {
+  return kind === "evening" ? kstDate(new Date(d.getTime() - 12 * 3600_000)) : kstDate(d);
+}
+
+/**
+ * 정시 슬롯 이름(YYYY-MM-DD-am|pm)이 실행 시각과 맞는지 — 오전 슬롯은 KST 05~12시, 오후 슬롯은 12~24시·같은 날짜.
+ * 다른 슬롯 이름(daily·weekly·manual-…)은 검사하지 않는다. 엉뚱한 시각의 수동 실행이 정시 슬롯을 먼저 차지하면
+ * 정시 잡이 "이미 성공"으로 건너뛰어진다(D48).
+ */
+export function slotTimeOk(slot: string, d: Date = new Date()): boolean {
+  const m = /^(\d{4}-\d{2}-\d{2})-(am|pm)$/.exec(slot);
+  if (!m) return true;
+  const hour = Number(kstString(d).slice(11, 13));
+  return m[1] === kstDate(d) && (m[2] === "am" ? hour >= 5 && hour < 12 : hour >= 12);
+}
+
+/** 분기 첫 토요일(KST) — 신호원 성적표·보정 제안 (PRD §14 분기 첫 토 10:30) */
+export function isFirstSaturdayOfQuarter(d: Date = new Date()): boolean {
+  const k = new Date(d.getTime() + 9 * 3600_000);
+  return [0, 3, 6, 9].includes(k.getUTCMonth()) && k.getUTCDate() <= 7 && k.getUTCDay() === 6;
+}

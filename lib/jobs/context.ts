@@ -6,6 +6,7 @@ import { loadYaml, taxonomyConfig } from "@/lib/config/load";
 import { dbSelectAll } from "@/lib/db";
 import { krCode, marketOf, usSymbol } from "@/lib/entities";
 import type { AxesRules } from "@/lib/engine/axes";
+import type { FeedbackRules } from "@/lib/engine/feedback";
 import type { HoldingRules } from "@/lib/engine/holding-alerts";
 import type { RealizedRules } from "@/lib/engine/industry-growth";
 import type { M3Rules } from "@/lib/engine/m3";
@@ -32,6 +33,8 @@ export type Rules = {
   inbox: { max_per_day: number; hermescall: { stage: string; strength_min: number; or_filters_min: number }; heimdallr: { grades: string[] }; sage: { new_mentors_min: number } };
   market: { morning: MarketSym[]; us_sectors: MarketSym[]; evening: MarketSym[]; regime: { vix: string; kospi: string } };
   telegram: { realtime_max_per_day_excl_urgent: number };
+  feedback: FeedbackRules;
+  outcomes: { horizons_days: number[]; benchmark_symbols: Record<"KOSPI" | "KOSDAQ" | "SPX", { source: "naver" | "yahoo"; sym: string }>; min_samples_for_calibration: number };
 };
 export type MarketSym = { sym: string; label: string; level?: boolean };
 export const rules = () => loadYaml<Rules>("rules.yaml");

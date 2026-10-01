@@ -6,6 +6,8 @@
  *   industry_outlook_collect   M3 ② 무료 검색 수집 (일·수 04:00) [--l1 1b --max 100]
  *   poll                       보유 경고 (30분, 보통은 Vercel 라우트) [--dry true]
  *   brief --kind morning|evening [--force true]
+ *   outcomes_update            신호 원장 동기화(소급 포함) → 진입가·D+5·20·40·60 성과 → 특징별 성과 perf_stats (20:00, D47·D49)
+ *   calibration_review         분기 신호 성적표 + 보정 제안(자동 적용 없음) — 분기 첫 토 10:30 [--force true] [--dry true]
  */
 import { runJob, slotOf } from "@/lib/jobs";
 import { sendBrief } from "@/lib/jobs/brief";
@@ -14,6 +16,8 @@ import { industryGrowth } from "@/lib/jobs/industry-growth";
 import { ingestAll } from "@/lib/jobs/ingest";
 import { runInbox } from "@/lib/jobs/inbox";
 import { collectOutlooks, expireOutlooks } from "@/lib/jobs/outlook";
+import { calibrationReview } from "@/lib/jobs/calibration";
+import { updateOutcomes } from "@/lib/jobs/outcomes";
 import { runPipeline } from "@/lib/jobs/pipeline";
 import { poll } from "@/lib/jobs/poll";
 import { systemAlerts } from "@/lib/jobs/system";
@@ -42,6 +46,8 @@ export const P2_JOBS: Record<string, (args: Record<string, string>) => Promise<v
     return { ...r, expired, system_alerts: await systemAlerts() };
   })),
   poll: async (a) => print(await runJob("poll", slotOf(a), () => poll(new Date(), { dryRun: a.dry === "true" }))),
+  outcomes_update: async (a) => print(await runJob("outcomes_update", slotOf(a), async () => updateOutcomes() as unknown as Record<string, unknown>)),
+  calibration_review: async (a) => print(await runJob("calibration_review", slotOf(a), () => calibrationReview(new Date(), { force: a.force === "true", dryRun: a.dry === "true" }))),
   brief: async (a) => {
     const kind = a.kind === "evening" ? "evening" : "morning";
     print(await runJob(`brief_${kind}`, slotOf(a), () => sendBrief(kind, new Date(), { force: a.force === "true" })));

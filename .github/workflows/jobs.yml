@@ -17,6 +17,7 @@ on:
     - cron: "40 10 * * *"     # 19:40 KST 예비: pipeline pm
     - cron: "50 22 * * *"     # 07:50 KST 예비: 아침 브리핑 (이미 보냈으면 건너뜀)
     - cron: "45 10 * * *"     # 19:45 KST 예비: 저녁 브리핑
+    - cron: "30 11 * * *"     # 20:30 KST 예비: outcomes_update (성과 원장, D47)
   workflow_dispatch:
     inputs:
       job:
@@ -101,6 +102,9 @@ jobs:
       - name: 저녁 브리핑 (예비)
         if: github.event.schedule == '45 10 * * *'
         run: npm run job -- brief --kind evening --slot "$(TZ=Asia/Seoul date +%F)"
+      - name: outcomes_update (예비)
+        if: github.event.schedule == '30 11 * * *'
+        run: npm run job -- outcomes_update --slot "$(TZ=Asia/Seoul date +%F)-daily"
 
       - name: smoke 결과 보관 (상태·개수·호스트만, 값·키 없음)
         if: always()

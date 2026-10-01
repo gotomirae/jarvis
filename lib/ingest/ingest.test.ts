@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseLinkedRow } from "./flywheel";
+import { naverDaily, parseNaverDaily } from "./market";
 import { probeTable, rpc, selectAll } from "./rest";
 import { safeReason } from "./types";
 
@@ -87,5 +88,21 @@ describe("flywheel.parseLinkedRow (P0 실측 형식)", () => {
     expect(parseLinkedRow("AI", page("2026-09-26\n연계종합", "7"))?.strength).toBeNull();
     expect(parseLinkedRow("AI", page("어제\n연계종합", "3"))?.date).toBe("2026-09-26");
     expect(parseLinkedRow("AI", { id: "x", created_time: "2026-09-26T00:00:00Z", properties: {} })).toBeNull();
+  });
+});
+
+describe("market.naverDaily (국내 공식 종가)", () => {
+  const xml = `<chartdata><item data="20261001|266500|276000|264500|274500|13686117" />
+<item data="20260930|274500|276000|267500|269500|16477580" /><item data="20260929|1|1|1|0|1" /></chartdata>`;
+  it("XML → 날짜 오름차순 종가, 0 종가 제외", () => {
+    expect(parseNaverDaily(xml)).toEqual([{ date: "2026-09-30", close: 269500 }, { date: "2026-10-01", close: 274500 }]);
+    expect(parseNaverDaily("<x/>")).toEqual([]);
+  });
+  it("HTTP 오류·빈 응답·예외는 Result 실패", async () => {
+    const f = (status: number, body: string) => (async () => new Response(body, { status })) as unknown as typeof fetch;
+    expect((await naverDaily("005930", 2, f(200, xml))).ok).toBe(true);
+    expect(await naverDaily("005930", 2, f(500, ""))).toMatchObject({ ok: false, status: 500 });
+    expect(await naverDaily("005930", 2, f(200, "<x/>"))).toMatchObject({ ok: false });
+    expect(await naverDaily("005930", 2, (async () => { throw new Error("boom"); }) as unknown as typeof fetch)).toMatchObject({ ok: false });
   });
 });

@@ -4,11 +4,15 @@
  * DB 미설정(로컬 첫 실행 등)이면 기록 없이 그냥 실행한다.
  */
 import { dbConfigured, dbInsert, dbSelect, dbUpdate } from "@/lib/db";
+import { slotTimeOk } from "@/lib/time";
 
 export type JobDetail = Record<string, unknown>;
 
 export function slotOf(args: Record<string, string>): string {
-  return args.slot && args.slot !== "true" ? args.slot : `manual-${new Date().toISOString()}`;
+  if (!args.slot || args.slot === "true") return `manual-${new Date().toISOString()}`;
+  // 엉뚱한 시각의 수동 실행이 정시 슬롯(…-am/-pm)을 차지하면 정시 잡이 건너뛰어진다(D48) → 거부. 수동 실행은 --slot 없이.
+  if (!slotTimeOk(args.slot)) throw new Error(`슬롯 ${args.slot} 은 지금 시각(KST)과 맞지 않습니다 — 수동 실행은 --slot 없이 하세요`);
+  return args.slot;
 }
 
 export async function runJob(job: string, slot: string, fn: () => Promise<JobDetail>): Promise<JobDetail | null> {

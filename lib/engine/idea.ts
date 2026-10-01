@@ -15,13 +15,20 @@ export type IdeaEvidence = {
   chart?: ChartRef | null;     // 일봉으로 계산한 가격·기술 지표(표시 전용)
 };
 
-export type RankInput = { entity_id: string; families: number; p: number | null; industryGrowth: number | null; nextEvent: string | null };
+export type RankInput = { entity_id: string; families: number; p: number | null; industryGrowth: number | null; nextEvent: string | null; perf?: number | null };
 
-/** 추천 순위 (최대 n개) */
+/** perf(과거 성과 기대 초과수익) 큰 순, 없는 후보는 뒤 — 둘 다 없으면 0 */
+const byPerf = (a?: number | null, b?: number | null) => (a == null && b == null ? 0 : a == null ? 1 : b == null ? -1 : b - a);
+
+/**
+ * 추천 순위 (최대 n개). 표본 30건 이상 구간의 과거 성과(perf, lib/engine/feedback.ts)가 있으면 그것이 첫 기준이다
+ * (PRD §7.3 진입 게이트 6 "표본이 30건을 넘으면 성과 순위로 교체", D49). 없으면 규칙 순위.
+ */
 export function rankBuy<T extends RankInput>(xs: T[], n = 5): T[] {
   const inf = Number.POSITIVE_INFINITY;
   return [...xs].sort((a, b) =>
-    b.families - a.families
+    byPerf(a.perf, b.perf)
+    || b.families - a.families
     || (a.p ?? inf) - (b.p ?? inf)
     || (b.industryGrowth ?? -inf) - (a.industryGrowth ?? -inf)
     || (a.nextEvent ?? "9999").localeCompare(b.nextEvent ?? "9999")
@@ -121,6 +128,7 @@ export const EMPTY_IDEA: IdeaEvidence = { thesis: null, growth: null, industry: 
 export type IdeaCard = {
   rank: number; name: string; code: string; industry: string; flag: string;
   thesis: string | null; reasons: string[]; events: string[]; risk: string | null; tech: string | null; links: string;
+  perf?: string | null;        // 과거 성과 피드백 한 줄(lib/engine/feedback.ts perfLine)
 };
 
 export function techLine(t: TechRef | null | undefined): string | null {
@@ -128,8 +136,9 @@ export function techLine(t: TechRef | null | undefined): string | null {
   return [t.macd_note && `MACD ${t.macd_note}`, t.rsi !== null && `RSI ${Math.round(t.rsi)}(${rsiBand(t.rsi)})`, t.price_note && `가격 ${t.price_note}`].filter(Boolean).join(" · ");
 }
 
-export function ideaCard(rank: number, e: { name: string; symbol: string; market: "KR" | "US"; industry: string }, idea: IdeaEvidence, reasons: string[], tech: TechRef | null | undefined, links: string): IdeaCard {
+export function ideaCard(rank: number, e: { name: string; symbol: string; market: "KR" | "US"; industry: string }, idea: IdeaEvidence, reasons: string[], tech: TechRef | null | undefined, links: string, perf: string | null = null): IdeaCard {
   return {
+    perf,
     rank, name: e.name, code: e.symbol, industry: e.industry, flag: e.market === "US" ? "🇺🇸" : "🇰🇷",
     thesis: idea.thesis ? `${cleanThesis(idea.thesis.text)} (${idea.thesis.source}${idea.thesis.as_of ? ` ${idea.thesis.as_of}` : ""})` : null,
     reasons,

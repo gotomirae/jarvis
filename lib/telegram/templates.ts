@@ -3,6 +3,7 @@
  * 종목 링크는 호출부가 lib/links.ts 로 만든 HTML(inlineLinks)·버튼을 넘긴다(불변 규칙 7). 모든 메시지에 "매수 확정 신호 아님"(불변 규칙 3).
  */
 import type { IdeaCard } from "@/lib/engine/idea";
+import type { Proposal } from "@/lib/outcomes/review";
 import { esc, NOT_A_BUY_SIGNAL } from "./format";
 
 const pct = (x: number | null | undefined, digits = 1) => (x === null || x === undefined || !Number.isFinite(x) ? "-" : `${x > 0 ? "+" : ""}${x.toFixed(digits)}%`);
@@ -66,6 +67,7 @@ export function ideaBlock(c: IdeaCard): string[] {
   const out = ["", `${NUM[c.rank - 1] ?? `${c.rank}.`} ${c.flag} <b>${esc(c.name)}</b> (${esc(c.code)})${c.industry ? ` · ${esc(c.industry)}` : ""}`];
   if (c.thesis) out.push("", "💡 <b>투자 아이디어</b>", esc(c.thesis));
   if (c.reasons.length) out.push("", "📈 <b>매수 근거</b>", ...c.reasons.map(esc));
+  if (c.perf) out.push(`🧾 과거 성과: ${esc(c.perf)}`);
   if (c.events.length || c.risk || c.tech) out.push("");
   if (c.events.length) out.push(`⏰ 다음 확인: ${c.events.map(esc).join(" / ")}`);
   if (c.risk) out.push(`⚠️ 리스크: ${esc(c.risk)}`);
@@ -103,4 +105,20 @@ export function briefText(d: BriefData): string {
 // ── 🔧 시스템 이상 ────────────────────────────────────
 export function systemText(title: string, lines: string[]): string {
   return [`🔧 <b>${esc(title)}</b>`, ...lines.map(esc), "", FOOT].join("\n");
+}
+
+export type QueuePerf = { label: string; n: number; median_excess: number | null; hit_rate: number | null; ranking_active: boolean };
+
+/** 📊 분기 신호원 성적표 + 보정 제안 (PRD §12·§14, D49) — 제안만, 적용은 사용자 승인 후 */
+export function calibrationText(period: string, horizon: number, queues: QueuePerf[], proposals: Proposal[], url?: string): string {
+  const out = [`📊 <b>${esc(period)} 신호 성적표 · 보정 제안</b>`, "", `<b>큐별 ${horizon}거래일 뒤 시장 대비 초과수익(중앙값)</b>`];
+  if (!queues.length) out.push("아직 측정이 끝난 신호가 없습니다.");
+  for (const q of queues) out.push(`${esc(q.label)}: ${pct(q.median_excess, 2)}${q.hit_rate === null ? "" : ` · 이긴 비율 ${Math.round(q.hit_rate * 100)}%`} (${q.n}건${q.ranking_active ? " · 추천 순위 반영 중" : " · 표본 부족"})`);
+  out.push("", `<b>보정 제안 ${proposals.length}건</b>${proposals.length ? " — 자동 적용하지 않습니다. 승인하면 설정 변경과 결정 기록을 남깁니다." : " — 바꿀 근거가 충분하지 않습니다(표본 30건 미만 구간은 비교하지 않음)."}`);
+  proposals.forEach((p, i) => {
+    out.push(`${i + 1}. ${p.kind === "threshold" ? "🔧" : "ℹ️"} ${esc(p.title)}${p.rule ? ` — ${esc(String(p.current))} → ${esc(String(p.suggested))}` : ""}`, `   근거: ${esc(p.evidence)}`);
+  });
+  if (url) out.push("", `<a href="${esc(url)}">대시보드 성적표 보기</a>`);
+  out.push("", FOOT);
+  return out.join("\n");
 }

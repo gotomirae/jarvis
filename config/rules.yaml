@@ -176,11 +176,22 @@ inbox:
   heimdallr: {grades: ["★"], stage: 3}
   sage: {new_mentors_min: 2}
 
-outcomes:
+outcomes:                            # 성과 원장 (PRD §12, D47) — lib/outcomes · outcomes_update 20:00
   entry_price: "next_trading_day_close"
-  horizons_days: [5, 20, 60]
+  horizons_days: [5, 20, 40, 60]     # D47: 사용자 지정(D+40 추가). 거래일 기준
   benchmarks: {KOSPI: "KOSPI", KOSDAQ: "KOSDAQ", US: "SPX"}
+  # 시세: 국내 = 네이버 일봉(거래소 공식 종가 — 야후 국내 종가는 동시호가 전 값, D47), 미국 = 야후
+  benchmark_symbols: {KOSPI: {source: naver, sym: "KOSPI"}, KOSDAQ: {source: naver, sym: "KOSDAQ"}, SPX: {source: yahoo, sym: "^GSPC"}}
   min_samples_for_calibration: 30
+
+feedback:                            # 성과 피드백 (PRD §7.3 게이트 6 · §12, D49) — lib/engine/feedback.ts · lib/outcomes/attribution.ts · review.ts
+  primary_horizon: 20                # 순위·카드·보정 기준 기간(거래일) — SC5 와 같은 D+20
+  min_samples: 30                    # 이 표본 미만 구간은 순위·보정에 쓰지 않음(T12 과최적화 방지)
+  shrinkage_k: 30                    # 표본 수 가중 축소: 기대 초과수익 = n/(n+k) × 구간 중앙값
+  dimensions: [families, sources, p_bucket, grade, market, l1]
+  p_buckets: [20, 30, 40]            # 주가 반영도 구간 <20 · 20~30 · 30~40 · ≥40 (40 = axes.P.buy_max 와 맞춤)
+  review:                            # 분기 보정 제안 — 제안만, 자동 적용 금지(PRD §12)
+    min_gap_pctp: 2.0                # 구간 중앙값이 🎯 전체보다 이만큼(%p) 이상 다를 때만 제안
 
 market:                              # 브리핑·레짐 시세 (Yahoo chart, 무료·무키 — lib/ingest/market.ts)
   morning: [{sym: "^GSPC", label: "S&P 500"}, {sym: "^IXIC", label: "NASDAQ"}, {sym: "^SOX", label: "필라델피아 반도체"}, {sym: "^RUT", label: "Russell 2000"}, {sym: "^VIX", label: "VIX", level: true}, {sym: "^TNX", label: "미 10년물", level: true}, {sym: "KRW=X", label: "원/달러", level: true}]

@@ -18,6 +18,7 @@ export const SIGNAL_NAME: Record<string, string> = {
   earnings_quality_us: "HermesCall 실적 품질(미국)", industry_sentiment: "HermesCall 산업 분위기", accel_grade: "Heimdallr 실적 가속 등급", price_reflection: "Heimdallr 주가 반영도",
   holding_risk: "SnowBall 위험 경보", entry_check: "진입 조건 점검", breakout_watch: "실적 돌파",
 };
+export const FAMILY_NAME: Record<string, string> = { flywheel: "FlyWheel", sage: "Sage", hermescall: "HermesCall", heimdallr: "Heimdallr", entry: "진입 조건", snowball: "SnowBall" };
 export const SPECIAL_L1: Record<string, string> = { MACRO: "거시경제", ETF: "ETF", ETC: "기타" };
 
 export const yesNo = (b: boolean | null | undefined) => (b ? "✓" : "—");

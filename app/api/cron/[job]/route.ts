@@ -8,15 +8,15 @@ import { runJob } from "@/lib/jobs";
 import { sendBrief } from "@/lib/jobs/brief";
 import { poll } from "@/lib/jobs/poll";
 import { safeEqual } from "@/lib/telegram/format";
-import { kstDate } from "@/lib/time";
+import { briefDate } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const JOBS: Record<string, (now: Date) => Promise<Record<string, unknown> | null>> = {
   poll: (now) => runJob("poll", `${now.toISOString().slice(0, 15)}0`, () => poll(now)),        // 10분 단위 슬롯
-  brief_morning: (now) => runJob("brief_morning", kstDate(now), () => sendBrief("morning", now)),
-  brief_evening: (now) => runJob("brief_evening", kstDate(now), () => sendBrief("evening", now)),
+  brief_morning: (now) => runJob("brief_morning", briefDate("morning", now), () => sendBrief("morning", now)),
+  brief_evening: (now) => runJob("brief_evening", briefDate("evening", now), () => sendBrief("evening", now)),
 };
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ job: string }> }) {

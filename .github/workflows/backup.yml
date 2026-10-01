@@ -39,7 +39,7 @@ jobs:
           pg_dump "$SUPABASE_DB_URL" --data-only --no-owner --no-privileges \
             -t jarvis.signal_ledger -t jarvis.outcomes -t jarvis.entry_eval -t jarvis.breakout_watch \
             -t jarvis.industry_outlooks -t jarvis.weekly_memos -t jarvis.notifications -t jarvis.queue_items \
-            -t jarvis.taxonomy_labels -t jarvis.taxonomy_pending -t jarvis.inbox_log -t jarvis.cost_log \
+            -t jarvis.taxonomy_labels -t jarvis.taxonomy_pending -t jarvis.inbox_log -t jarvis.cost_log -t jarvis.calibration_reviews \
             | gzip > out/jarvis-data-$D.sql.gz
           ls -la out
       - name: push to private backup repo

@@ -56,7 +56,7 @@ docs/                   START_HERE.md(사용자 체크리스트) · INTEGRATION_
 ```bash
 npm run dev
 npm run typecheck && npm run test && npm run build
-npm run job -- ingest_all | holdings_sync | industry_growth_realized | industry_outlook_collect | catalysts | entry_eval --market KR|US | axes | queues | gate | poll | brief --kind morning|evening | weekly_memo | outcomes_update | taxonomy_sync | entities_sync | link_smoke
+npm run job -- ingest_all | holdings_sync | industry_growth_realized | industry_outlook_collect | catalysts | entry_eval --market KR|US | axes | queues | gate | poll | brief --kind morning|evening | weekly_memo | outcomes_update | calibration_review | taxonomy_sync | entities_sync | link_smoke
 ```
 
 ## 테스트 규칙

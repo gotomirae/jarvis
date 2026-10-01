@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BRIEF_SPLIT, briefText, holdingAlertText, marketLine, systemText, type BriefData } from "./templates";
+import { BRIEF_SPLIT, briefText, calibrationText, holdingAlertText, ideaBlock, marketLine, systemText, type BriefData } from "./templates";
 
 describe("telegram templates", () => {
   it("보유 경고 (부록 B.3) — escape·비중 %·매수 확정 아님", () => {
@@ -64,5 +64,29 @@ describe("telegram templates", () => {
 
   it("시스템 이상", () => {
     expect(systemText("소스 실패", ["heimdallr 2회 <연속>"])).toContain("🔧 <b>소스 실패</b>\nheimdallr 2회 &lt;연속&gt;");
+  });
+});
+
+describe("성과 피드백 표시 (D49)", () => {
+  const card = { rank: 1, name: "A", code: "1", industry: "", flag: "🇰🇷", thesis: null, reasons: ["r"], events: [], risk: null, tech: null, links: "" };
+  it("카드에 과거 성과 줄 — 있을 때만", () => {
+    expect(ideaBlock({ ...card, perf: "기대 <+1%>" })).toContain("🧾 과거 성과: 기대 &lt;+1%&gt;");
+    expect(ideaBlock(card).some((l) => l.includes("과거 성과"))).toBe(false);
+  });
+  it("분기 성적표 — 큐 성과·제안·링크·매수 확정 아님", () => {
+    const t = calibrationText("2027년 1분기", 20,
+      [{ label: "🎯 매수 검토", n: 42, median_excess: 1.234, hit_rate: 0.55, ranking_active: true }, { label: "🔭 선행 레이더", n: 8, median_excess: null, hit_rate: null, ranking_active: false }],
+      [{ kind: "threshold", title: "상한", rule: "axes.P.buy_max", current: 40, suggested: 30, evidence: "e<1>" }, { kind: "info", title: "정보", evidence: "e2" }], "https://j/scorecard");
+    expect(t).toContain("🎯 매수 검토: +1.23% · 이긴 비율 55% (42건 · 추천 순위 반영 중)");
+    expect(t).toContain("🔭 선행 레이더: - (8건 · 표본 부족)");
+    expect(t).toContain("1. 🔧 상한 — 40 → 30");
+    expect(t).toContain("   근거: e&lt;1&gt;");
+    expect(t).toContain("2. ℹ️ 정보\n");
+    expect(t).toContain('<a href="https://j/scorecard">');
+    expect(t).toContain("매수 확정 신호가 아닙니다");
+    const empty = calibrationText("p", 20, [], []);
+    expect(empty).toContain("아직 측정이 끝난 신호가 없습니다.");
+    expect(empty).toContain("바꿀 근거가 충분하지 않습니다");
+    expect(empty).not.toContain("<a href");
   });
 });

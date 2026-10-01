@@ -101,7 +101,7 @@ jobs:
         run: npm run job -- brief --kind morning --slot "$(TZ=Asia/Seoul date +%F)"
       - name: 저녁 브리핑 (예비)
         if: github.event.schedule == '45 10 * * *'
-        run: npm run job -- brief --kind evening --slot "$(TZ=Asia/Seoul date +%F)"
+        run: npm run job -- brief --kind evening --slot "$(TZ=Asia/Seoul date -d '12 hours ago' +%F)"   # 자정 넘어 지연 실행돼도 그날 저녁분(D48)
       - name: outcomes_update (예비)
         if: github.event.schedule == '30 11 * * *'
         run: npm run job -- outcomes_update --slot "$(TZ=Asia/Seoul date +%F)-daily"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { briefDate, isFirstSaturdayOfQuarter, kstDate, kstString, slotTimeOk } from "./time";
+import { briefDate, briefSlotOk, isFirstSaturdayOfQuarter, kstDate, kstString, slotTimeOk } from "./time";
 
 describe("time", () => {
   it("formats KST", () => {
@@ -38,5 +38,17 @@ describe("isFirstSaturdayOfQuarter", () => {
     expect(isFirstSaturdayOfQuarter(new Date("2027-02-06T10:30:00+09:00"))).toBe(false);
     expect(isFirstSaturdayOfQuarter(new Date("2027-01-01T10:30:00+09:00"))).toBe(false);
     expect(typeof isFirstSaturdayOfQuarter()).toBe("boolean");
+  });
+});
+
+describe("briefSlotOk (지연된 예비 실행)", () => {
+  const at = (kst: string) => new Date(`${kst}+09:00`);
+  it("저녁 예비가 자정 넘어 돌면 다음 날 슬롯을 거부", () => {
+    expect(briefSlotOk("evening", "2026-10-02", at("2026-10-02T02:08:00"))).toBe(false);
+    expect(briefSlotOk("evening", "2026-10-01", at("2026-10-02T02:08:00"))).toBe(true);
+    expect(briefSlotOk("evening", "2026-10-02", at("2026-10-02T19:45:00"))).toBe(true);
+    expect(briefSlotOk("morning", "2026-10-02", at("2026-10-02T07:50:00"))).toBe(true);
+    expect(briefSlotOk("morning", "manual-x", at("2026-10-02T07:50:00"))).toBe(true);
+    expect(briefSlotOk("morning", "2026-10-02")).toBeTypeOf("boolean");
   });
 });

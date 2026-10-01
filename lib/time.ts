@@ -18,6 +18,14 @@ export function briefDate(kind: "morning" | "evening", d: Date = new Date()): st
 }
 
 /**
+ * 브리핑 슬롯(YYYY-MM-DD)이 지금 실행이 속한 브리핑 날짜와 같은지. 다르면 몇 시간 늦게 시작된 예비 실행이다
+ * (10/2 02:08 — 19:45 예비가 6시간 지연돼 "10-02" 슬롯으로 돌며 그날 저녁 정시 발송을 막음, D48). 날짜 모양이 아니면 검사 안 함.
+ */
+export function briefSlotOk(kind: "morning" | "evening", slot: string, d: Date = new Date()): boolean {
+  return !/^\d{4}-\d{2}-\d{2}$/.test(slot) || slot === briefDate(kind, d);
+}
+
+/**
  * 정시 슬롯 이름(YYYY-MM-DD-am|pm)이 실행 시각과 맞는지 — 오전 슬롯은 KST 05~12시, 오후 슬롯은 12~24시·같은 날짜.
  * 다른 슬롯 이름(daily·weekly·manual-…)은 검사하지 않는다. 엉뚱한 시각의 수동 실행이 정시 슬롯을 먼저 차지하면
  * 정시 잡이 "이미 성공"으로 건너뛰어진다(D48).

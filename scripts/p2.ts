@@ -10,6 +10,7 @@
  *   calibration_review         분기 신호 성적표 + 보정 제안(자동 적용 없음) — 분기 첫 토 10:30 [--force true] [--dry true]
  */
 import { runJob, slotOf } from "@/lib/jobs";
+import { briefDate, briefSlotOk } from "@/lib/time";
 import { sendBrief } from "@/lib/jobs/brief";
 import { collectCatalysts } from "@/lib/jobs/catalysts";
 import { industryGrowth } from "@/lib/jobs/industry-growth";
@@ -50,6 +51,9 @@ export const P2_JOBS: Record<string, (args: Record<string, string>) => Promise<v
   calibration_review: async (a) => print(await runJob("calibration_review", slotOf(a), () => calibrationReview(new Date(), { force: a.force === "true", dryRun: a.dry === "true" }))),
   brief: async (a) => {
     const kind = a.kind === "evening" ? "evening" : "morning";
-    print(await runJob(`brief_${kind}`, slotOf(a), () => sendBrief(kind, new Date(), { force: a.force === "true" })));
+    const now = new Date();
+    // 몇 시간 늦게 시작된 예비 실행이 다음 날 슬롯을 차지하지 않게 — 슬롯 날짜 ≠ 브리핑 날짜면 기록 없이 건너뜀 (D48)
+    if (a.slot && a.slot !== "true" && !briefSlotOk(kind, a.slot, now)) return print({ skipped: `슬롯 ${a.slot} ≠ 브리핑 날짜 ${briefDate(kind, now)} — 지연된 예비 실행으로 보고 건너뜀` });
+    print(await runJob(`brief_${kind}`, slotOf(a), () => sendBrief(kind, now, { force: a.force === "true" })));
   },
 };

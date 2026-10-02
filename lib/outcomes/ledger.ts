@@ -8,7 +8,7 @@
 import { marketDate, type Market } from "./returns";
 
 export type Side = "buy" | "sell";
-export const QUEUE_SIDE: Record<string, Side> = { buy: "buy", radar: "buy", pullback_wait: "buy", take_profit: "sell", holding_alert: "sell" };
+export const QUEUE_SIDE: Record<string, Side> = { buy: "buy", radar: "buy", pullback_wait: "buy", take_profit: "sell", holding_alert: "sell", green: "buy", yellow: "buy", blue: "buy" };
 
 export type Benchmark = "KOSPI" | "KOSDAQ" | "SPX";
 
@@ -16,7 +16,7 @@ export type QueueItem = { date: string; entity_id: string; queue: string; reason
 export type SubmitNote = { entity_id: string | null; dedupe_key: string; sent_at: string | null; payload: Record<string, unknown> | null };
 
 export type LedgerInsert = {
-  event_type: "queue" | "snowball_submit";
+  event_type: "queue" | "snowball_submit" | "green" | "yellow" | "blue";
   entity_id: string;
   market: Market;
   tag: string;
@@ -83,4 +83,40 @@ export function yahooCandidates(entityId: string, known: string | null): string[
   const [m, s] = entityId.split(":");
   if (m === "US") return [s.replace(/\./g, "-")];   // BRK.B → 야후 BRK-B
   return known ? [known] : [`${s}.KQ`, `${s}.KS`];
+}
+
+export type EntryEvalRow = { date: string; entity_id: string; market: Market; level: string; tag: string | null; invalidation_price: number | null; evidence: { families?: string[]; p?: number | null; grade?: string | null; missing?: string[] } | null };
+export type BreakoutRow = { entity_id: string; source: string; d0: string; d0_low: number | null };
+
+/**
+ * 🟢·🟡 진입 판정 → 원장 (PRD §12). 같은 종목·같은 단계가 이어지는 동안은 1건(직전 같은 단계 평가가 gapDays 넘게 떨어져 있으면 새 구간).
+ * 신호 시점 특징(계열·반영도·등급·산업)을 바로 고정 저장한다 — 평가일이 곧 시장 날짜.
+ */
+export function ledgerFromEntry(rows: EntryEvalRow[], l1Of: (id: string) => string | null, gapDays = 5): LedgerInsert[] {
+  const out: LedgerInsert[] = [];
+  const last = new Map<string, string>();
+  for (const r of [...rows].sort((a, b) => a.date.localeCompare(b.date))) {
+    if (r.level !== "green" && r.level !== "yellow") continue;
+    const k = `${r.level}:${r.entity_id}`;
+    const prev = last.get(k);
+    last.set(k, r.date);
+    if (prev && (new Date(`${r.date}T00:00:00Z`).getTime() - new Date(`${prev}T00:00:00Z`).getTime()) / 86400_000 <= gapDays) continue;
+    const ev = r.evidence ?? {};
+    out.push({
+      event_type: r.level, entity_id: r.entity_id, market: r.market, tag: r.tag ?? r.level, level: "buy", signal_date: r.date, benchmark: r.market === "US" ? "SPX" : null,
+      payload: { tag: r.tag, invalidation_price: r.invalidation_price, missing: ev.missing ?? [],
+        features: { families: [...(ev.families ?? [])].sort(), p: ev.p ?? null, grade: ev.grade ?? null, market: r.market, l1: l1Of(r.entity_id) }, features_source: "entry_eval" },
+      dedupe_key: `${r.level}:${r.entity_id}:${r.date}`,
+    });
+  }
+  return out;
+}
+
+/** 🔵 실적 돌파 → 원장 (진입 신호 아님 — 돌파 이후 성과를 따로 본다) */
+export function ledgerFromBreakouts(rows: BreakoutRow[]): LedgerInsert[] {
+  return rows.flatMap((b) => {
+    const market = marketOfId(b.entity_id);
+    return market ? [{ event_type: "blue" as const, entity_id: b.entity_id, market, tag: b.source, level: "buy" as const, signal_date: b.d0, benchmark: market === "US" ? "SPX" as const : null,
+      payload: { source: b.source, d0_low: b.d0_low }, dedupe_key: `blue:${b.entity_id}:${b.source}:${b.d0}` }] : [];
+  });
 }

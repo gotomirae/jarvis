@@ -9,12 +9,14 @@ import type { AxesEvidence } from "@/lib/engine/explain";
 import { featuresOf, perfLine, perfPrior, type PerfStat } from "@/lib/engine/feedback";
 import { buyReasons, consensusOf, EMPTY_IDEA, ideaCard, rankBuy } from "@/lib/engine/idea";
 import { FAMILY_NAME } from "@/lib/labels";
+import { TAG_NAME } from "@/lib/engine/entry-view";
+import { esc } from "@/lib/telegram/format";
 import { QUEUE_LABEL, type Queue } from "@/lib/engine/queues";
 import { env } from "@/lib/env";
 import { read as heimdallr } from "@/lib/ingest/heimdallr";
 import { read as hermes } from "@/lib/ingest/hermescall";
 import { charts } from "@/lib/ingest/market";
-import { dashboardButtons, linkLine, rows, type LinkEntity } from "@/lib/links";
+import { dashboardButtons, inlineLinks, linkLine, rows, type LinkEntity } from "@/lib/links";
 import { sendMessage } from "@/lib/telegram/send";
 import { BRIEF_SPLIT, briefText, type BriefData } from "@/lib/telegram/templates";
 import { briefDate, kstDate, kstString } from "@/lib/time";
@@ -93,19 +95,41 @@ export async function buildBrief(kind: "morning" | "evening", now = new Date()):
     schedule.lines.push(`${who}: ${c.title} (${c.source})`);
   }
 
+  // 🟢 🟡 🔵 (추천 시장, PRD 부록 B.2) — entry_eval 최신 평가일 · 최근 3일 🔵
+  const entry = await entryLines(focus, now, ents, ctx);
   const al = alerts.ok ? alerts.data : [];
   return {
     kind, date,
     market: market.map((m) => ({ label: m.label, last: quotes[m.sym]?.last ?? null, change_pct: quotes[m.sym]?.change_pct ?? null, level: m.level })),
     sectors: sectors.map((s) => ({ label: s.label, change_pct: quotes[s.sym]?.change_pct ?? null })),
     regime: { risk_off: reg.risk_off, reasons: reg.reasons },
-    counts: { green: 0, yellow: 0, blue: 0, alert: al.length },
+    counts: { ...entry.counts, alert: al.length }, entries: entry.lines,
     alertsPaused: (await getState<{ paused?: boolean }>("holding_alert_pause"))?.paused === true,
     earnings, focus, ideas, buyTotal: buys.length, others,
     holding: al.slice(0, 8).map((a) => `⚠️ ${a.payload?.name ?? a.entity_id ?? "-"}: ${a.payload?.summary ?? ""}`),
     schedule: { ...schedule, lines: schedule.lines.slice(0, 10) },
     asOf: kstString(now),
   };
+}
+
+const COND_SHORT: Record<string, string> = { M1: "실적·주가", M2: "MACD", M3: "산업 성장", M4: "이벤트", M5: "수급" };
+
+async function entryLines(market: "KR" | "US", now: Date, ents: Awaited<ReturnType<typeof loadEntities>>, ctx: { links: ReturnType<typeof linksConfig>; taxonomy: ReturnType<typeof taxonomyConfig>; jarvisUrl?: string | null }) {
+  const since = kstDate(new Date(now.getTime() - 4 * 86400_000));
+  const last = await dbSelect<{ date: string }>("entry_eval", `select=date&market=eq.${market}&date=gte.${since}&order=date.desc&limit=1`);
+  const d = last.ok ? last.data[0]?.date : undefined;
+  const ev = d ? await dbSelectAll<{ entity_id: string; level: string; tag: string | null; evidence: { p?: number | null; missing?: string[] } }>("entry_eval", `select=entity_id,level,tag,evidence&market=eq.${market}&date=eq.${d}&level=in.(green,yellow)`) : { ok: true as const, data: [] };
+  const bw = await dbSelectAll<{ entity_id: string; source: string; d0: string }>("breakout_watch", `select=entity_id,source,d0&d0=gte.${kstDate(new Date(now.getTime() - 3 * 86400_000))}&order=d0.desc`);
+  const rowsE = (ev.ok ? ev.data : []).filter((x) => ents.byId.has(x.entity_id));
+  const blues = (bw.ok ? bw.data : []).filter((b) => b.entity_id.startsWith(`${market}:`) && ents.byId.has(b.entity_id));
+  const link = (id: string) => inlineLinks(ents.byId.get(id) as unknown as LinkEntity, ctx);
+  const nm = (id: string) => `<b>${esc(ents.byId.get(id)!.name)}</b>`;
+  const lines = [
+    ...rowsE.filter((x) => x.level === "green").map((x) => `🟢 ${nm(x.entity_id)} — ${x.tag ? esc(TAG_NAME[x.tag as keyof typeof TAG_NAME]) : "진입"} · 주가 반영도 ${x.evidence.p == null ? "-" : Math.round(x.evidence.p)}  ${link(x.entity_id)}`),
+    ...rowsE.filter((x) => x.level === "yellow").slice(0, 5).map((x) => `🟡 ${nm(x.entity_id)} — 빠진 조건: ${esc((x.evidence.missing ?? []).map((m) => COND_SHORT[m] ?? m).join("·") || "게이트")}  ${link(x.entity_id)}`),
+    ...blues.slice(0, 3).map((b) => `🔵 ${nm(b.entity_id)} — 실적 돌파(${b.source === "K1" ? "국내" : "미국"}, ${b.d0.slice(5).replace("-", "/")}) · 진입 신호 아님, 60거래일 관찰  ${link(b.entity_id)}`),
+  ];
+  return { counts: { green: rowsE.filter((x) => x.level === "green").length, yellow: rowsE.filter((x) => x.level === "yellow").length, blue: blues.length }, lines };
 }
 
 /** 최신 성과 스냅샷(🎯 매수 검토, 기준 기간) — outcomes_update 가 매일 20:00 에 쓴다. 없으면 빈 배열(규칙 순위) */

@@ -22,7 +22,7 @@ export async function calibrationReview(now = new Date(), opts: { force?: boolea
   const asOf = last.ok ? last.data[0]?.as_of ?? null : null;
   const st = asOf ? await dbSelectAll<StatRow>("perf_stats", `select=scope,dimension,bucket,horizon_days,n,median_excess,mean_excess,hit_rate,median_ret,enough&as_of=eq.${asOf}`) : null;
   const stats = st?.ok ? st.data.map((s) => ({ ...s, median_excess: s.median_excess === null ? null : Number(s.median_excess), hit_rate: s.hit_rate === null ? null : Number(s.hit_rate) })) : [];
-  const label = (q: string) => QUEUE_LABEL[q as Queue] ?? q;
+  const label = (q: string) => ({ green: "🟢 진입 신호", yellow: "🟡 관찰", blue: "🔵 실적 돌파" } as Record<string, string>)[q] ?? QUEUE_LABEL[q as Queue] ?? q;
   const proposals = reviewProposals(stats, { buy_max: R.axes.P.buy_max, min_signal_families: R.queues.buy.min_signal_families }, F, label);
   const queues = stats.filter((s) => s.dimension === "all" && s.horizon_days === F.primary_horizon)
     .map((s) => ({ label: label(s.scope), n: s.n, median_excess: s.median_excess, hit_rate: s.hit_rate, ranking_active: s.scope === "buy" && s.n >= F.min_samples }));

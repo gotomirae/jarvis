@@ -42,7 +42,7 @@ lib/taxonomy/           match.ts (참조 구현과 동일 결과, 커버리지 1
 lib/links.ts            링크 빌더 (순수 함수 + naver_us 코드 해석 어댑터 분리)
 lib/ingest/             flywheel · sage · hermescall · heimdallr · snowball · market · notion
 lib/engine/             normalize · axes · regime · industry-growth(M3 ①) · outlook/(M3 ② search · fetch · extract · adopt — 무료·LLM 없음) · catalysts(M4) · entry(🟢/🟡/🔵) · queues · gate · pri-us-lite
-lib/outcomes/           ledger · returns · scorecard
+lib/outcomes/           ledger · returns · scorecard · attribution · review
 lib/memo/               fact-table · prompt · grounding
 lib/telegram/           send · templates · commands · keyboards
 lib/llm/                router

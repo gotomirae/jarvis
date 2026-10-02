@@ -162,3 +162,23 @@ describe("scorecard", () => {
     expect(s.map((r) => `${r.event_type}:${r.market}`)).toEqual(["queue:KR", "queue:US", "snowball_submit:KR"]);
   });
 });
+
+describe("ledger — 🟢🟡🔵 (P3)", () => {
+  it("단계별 연속 구간 1건, 특징 고정 저장", async () => {
+    const { ledgerFromEntry, ledgerFromBreakouts } = await import("./ledger");
+    const ev = { families: ["sage", "heimdallr"], p: 30, grade: "★", missing: ["M4"] };
+    const rows = ledgerFromEntry([
+      { date: "2026-10-05", entity_id: "KR:1", market: "KR", level: "yellow", tag: "PB", invalidation_price: 90, evidence: ev },
+      { date: "2026-10-01", entity_id: "KR:1", market: "KR", level: "yellow", tag: "PB", invalidation_price: 90, evidence: ev },
+      { date: "2026-10-20", entity_id: "KR:1", market: "KR", level: "yellow", tag: null, invalidation_price: null, evidence: null },
+      { date: "2026-10-02", entity_id: "US:A", market: "US", level: "green", tag: "SW", invalidation_price: 10, evidence: {} },
+      { date: "2026-10-02", entity_id: "US:B", market: "US", level: "none", tag: null, invalidation_price: null, evidence: null },
+    ], (id) => (id === "KR:1" ? "1b" : null));
+    expect(rows.map((r) => r.dedupe_key)).toEqual(["yellow:KR:1:2026-10-01", "green:US:A:2026-10-02", "yellow:KR:1:2026-10-20"]);
+    expect(rows[0]).toMatchObject({ event_type: "yellow", tag: "PB", level: "buy", benchmark: null, payload: { features: { families: ["heimdallr", "sage"], p: 30, grade: "★", market: "KR", l1: "1b" }, missing: ["M4"] } });
+    expect(rows[1]).toMatchObject({ event_type: "green", benchmark: "SPX", payload: { features: { families: [], p: null, grade: null, l1: null } } });
+    expect(rows[2]).toMatchObject({ tag: "yellow", payload: { missing: [] } });
+    const b = ledgerFromBreakouts([{ entity_id: "KR:2", source: "K1", d0: "2026-10-01", d0_low: 5 }, { entity_id: "US:C", source: "H1", d0: "2026-10-01", d0_low: null }, { entity_id: "X:1", source: "K1", d0: "2026-10-01", d0_low: null }]);
+    expect(b.map((x) => [x.dedupe_key, x.benchmark])).toEqual([["blue:KR:2:K1:2026-10-01", null], ["blue:US:C:H1:2026-10-01", "SPX"]]);
+  });
+});

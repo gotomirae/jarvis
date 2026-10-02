@@ -13,6 +13,7 @@ export type HoldingRules = {
   heimdallr_score_delta_max: number;
   mentor_flip_min: number;
   mentor_flip_window_days: number;
+  setup_invalidation_window_days?: number;
   snowball_risk: { rule_types: Record<string, string[]>; drawdown_max_pct: number; drawdown_step_pct: number; dedupe_days: number };
   thesis_break_trigger: { thesis_link: string; direction: string; alert_on: string[] };
 };

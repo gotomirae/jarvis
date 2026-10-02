@@ -1,7 +1,7 @@
 import { Empty, Footer, Guide, Nav, Section } from "@/app/_components/ui";
 import { taxonomyConfig } from "@/lib/config/load";
 import { DIMENSION_NAME } from "@/lib/engine/feedback";
-import { QUEUE_LABEL, type Queue } from "@/lib/engine/queues";
+import { QUEUE_LABEL } from "@/lib/engine/queues";
 import { rules } from "@/lib/jobs/context";
 import { fmtPct } from "@/lib/format";
 import { FAMILY_NAME } from "@/lib/labels";
@@ -15,7 +15,8 @@ type Stat = { scope: string; dimension: string; bucket: string; horizon_days: nu
 type Review = { id: number; period: string; review_date: string; proposals: Proposal[]; status: string; note: string | null };
 
 const STATUS: Record<string, string> = { open: "검토 대기", no_change: "변경 없음", applied: "적용함", rejected: "반려", partial: "일부 적용" };
-const ORDER: Queue[] = ["buy", "radar", "pullback_wait", "take_profit", "holding_alert"];
+const ORDER: string[] = ["green", "yellow", "blue", "buy", "radar", "pullback_wait", "take_profit", "holding_alert"];
+const LABEL: Record<string, string> = { ...QUEUE_LABEL, green: "🟢 진입 신호", yellow: "🟡 관찰", blue: "🔵 실적 돌파" };
 
 /** 신호 성적표 (PRD §8 /scorecard, §12, D49) — 보기 전용. 보정은 제안만 하고 적용은 사용자 승인 후 */
 export default async function Scorecard() {
@@ -50,7 +51,7 @@ export default async function Scorecard() {
               <thead className="text-xs text-neutral-500 text-left"><tr><th className={th}>큐</th>{H.map((h) => <th key={h} className={th}>{h}거래일 뒤</th>)}</tr></thead>
               <tbody>
                 {ORDER.filter((q) => H.some((h) => get(q, h))).map((q) => (
-                  <tr key={q} className="border-t border-neutral-100 dark:border-neutral-900"><td className="py-1 pr-3">{QUEUE_LABEL[q]}</td>{H.map((h) => <td key={h} className="py-1 pr-3">{cell(get(q, h))}</td>)}</tr>
+                  <tr key={q} className="border-t border-neutral-100 dark:border-neutral-900"><td className="py-1 pr-3">{LABEL[q] ?? q}</td>{H.map((h) => <td key={h} className="py-1 pr-3">{cell(get(q, h))}</td>)}</tr>
                 ))}
               </tbody>
             </table>

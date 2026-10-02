@@ -1,6 +1,7 @@
 /**
  * P2 잡 진입점 — 로직은 lib/jobs/* (Vercel 라우트와 공유). 모두 --slot 멱등.
- *   pipeline --slot <이름>     ingest_all → catalysts → axes·queues·SnowBall 제출 (07:12·19:10)
+ *   pipeline --slot <이름>     ingest_all → catalysts → axes·queues·SnowBall 제출 → entry_eval(🟢🟡🔵) → inbox (07:12·19:10)
+ *   entry_eval [--send false]  🟢 진입 신호·🟡 관찰·🔵 돌파 단독 실행(21:40 재시도 — 원천 지연 대비)
  *   ingest_all · catalysts · inbox   단독 실행 (inbox = FlyWheel Idea_Generating 투입, --dry true)
  *   industry_growth_realized   M3 종합 → industry_heat (07:00·19:00)
  *   industry_outlook_collect   M3 ② 무료 검색 수집 (일·수 04:00) [--l1 1b --max 100]
@@ -18,6 +19,7 @@ import { ingestAll } from "@/lib/jobs/ingest";
 import { runInbox } from "@/lib/jobs/inbox";
 import { collectOutlooks, expireOutlooks } from "@/lib/jobs/outlook";
 import { calibrationReview } from "@/lib/jobs/calibration";
+import { runEntryEval } from "@/lib/jobs/entry";
 import { updateOutcomes } from "@/lib/jobs/outcomes";
 import { runPipeline } from "@/lib/jobs/pipeline";
 import { poll } from "@/lib/jobs/poll";
@@ -33,9 +35,12 @@ export const P2_JOBS: Record<string, (args: Record<string, string>) => Promise<v
     print(await runJob("ingest_all", slot, () => ingestAll()));
     print(await runJob("catalysts", slot, () => collectCatalysts()));
     print(await runJob("pipeline", slot, async () => runPipeline(new Date(), { submit: a.submit !== "false" }) as unknown as Record<string, unknown>));
+    // 진입 판정이 실패해도 인박스·시스템 알림은 계속(실패는 job_runs 에 남는다)
+    print(await runJob("entry_eval", slot, () => runEntryEval(new Date(), { send: a.send !== "false" })).catch((e) => ({ entry_eval_error: e instanceof Error ? e.message : String(e) })));
     print(await runJob("inbox", slot, () => runInbox()));
     print({ system_alerts: await systemAlerts() });
   },
+  entry_eval: async (a) => print(await runJob("entry_eval", slotOf(a), () => runEntryEval(new Date(), { send: a.send !== "false" }))),
   inbox: async (a) => print(await runJob("inbox", slotOf(a), () => runInbox(new Date(), { dryRun: a.dry === "true" }))),
   industry_growth_realized: async (a) => print(await runJob("industry_growth_realized", slotOf(a), async () => {
     const r = await industryGrowth();

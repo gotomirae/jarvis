@@ -8,6 +8,7 @@ import { krCode, marketOf, usSymbol } from "@/lib/entities";
 import type { AxesRules } from "@/lib/engine/axes";
 import type { FeedbackRules } from "@/lib/engine/feedback";
 import type { HoldingRules } from "@/lib/engine/holding-alerts";
+import type { PriUsWeights } from "@/lib/engine/pri-us-lite";
 import type { RealizedRules } from "@/lib/engine/industry-growth";
 import type { M3Rules } from "@/lib/engine/m3";
 import type { NormalizeRules } from "@/lib/engine/normalize";
@@ -22,7 +23,11 @@ import { confirmedOverrides } from "@/lib/taxonomy-store";
 export type Rules = {
   normalize: NormalizeRules;
   axes: AxesRules & { P: PRules };
-  regime: RegimeRules;
+  regime: RegimeRules & { risk_off_effects: { weight_multiplier: number; buy_requires: { kr_grade: string; us_filters_all: string[] } } };
+  entry_gate: { risk_off_weight_multiplier: number; pri_hard_max: number; weight_capacity_required: boolean; first_tranche: number };
+  gate: { daily_green_max: Record<"KR" | "US", number>; resend_block_trading_days: number };
+  breakout_watch: { K1_kr: { arm_days: number }; H1_us: { arm_days: number } };
+  pri_us_lite: { weights: PriUsWeights };
   queues: QueueRules & { holding_alert: HoldingRules; snowball_submit: { queues: string[]; max_per_day: number; dedupe_days: number } };
   entry_core: {
     M3_industry_high_growth: M3Rules & { realized: RealizedRules; us_major_broker: { growth_min_pct: number; max_published_age_days: number; horizon_end_max_years_ahead: number; adoption: AdoptionRules & { date_mismatch_max_days: number; tier_b_requires_meta_date: boolean } } };

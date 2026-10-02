@@ -13,7 +13,7 @@ import { featuresOf, type SignalFeatures } from "@/lib/engine/feedback";
 import type { AxesEvidence } from "@/lib/engine/explain";
 import { read as heimdallr } from "@/lib/ingest/heimdallr";
 import { chart, naverDaily } from "@/lib/ingest/market";
-import { ledgerFromQueues, ledgerFromSubmits, benchmarkFor, yahooCandidates, type Benchmark, type QueueItem, type Side, type SubmitNote } from "@/lib/outcomes/ledger";
+import { ledgerFromBreakouts, ledgerFromEntry, ledgerFromQueues, ledgerFromSubmits, benchmarkFor, type BreakoutRow, type EntryEvalRow, yahooCandidates, type Benchmark, type QueueItem, type Side, type SubmitNote } from "@/lib/outcomes/ledger";
 import { lastCompleteDate, measure, type Bar, type Market } from "@/lib/outcomes/returns";
 import { attribute, type Sample } from "@/lib/outcomes/attribution";
 import { scorecard, type ScoreInput } from "@/lib/outcomes/scorecard";
@@ -59,15 +59,19 @@ async function benchSeries(src: { source: "naver" | "yahoo"; sym: string }): Pro
   return q.ok ? q.data.closes : null;
 }
 
-export async function syncLedger(): Promise<{ queue: number; submits: number; inserted: number; features_attached: number }> {
-  const [qi, sn] = await Promise.all([
+export async function syncLedger(): Promise<Record<string, number>> {
+  const [qi, sn, ee, bw, ents] = await Promise.all([
     dbSelectAll<QueueItem>("queue_items", "select=date,entity_id,queue,reason,first_seen&order=date.asc,entity_id.asc"),
     dbSelectAll<SubmitNote>("notifications", "select=entity_id,dedupe_key,sent_at,payload&kind=eq.snowball_submit&order=created_at.asc"),
+    dbSelectAll<EntryEvalRow>("entry_eval", "select=date,entity_id,market,level,tag,invalidation_price,evidence&level=in.(green,yellow)&order=date.asc,entity_id.asc"),
+    dbSelectAll<BreakoutRow>("breakout_watch", "select=entity_id,source,d0,d0_low&order=id.asc"),
+    loadEntities(),
   ]);
   if (!qi.ok) throw new Error(qi.reason);
   const ids = [...qi.data.map((q) => q.entity_id), ...(sn.ok ? sn.data.map((n) => n.entity_id ?? "") : [])];
   const yahoo = await krYahoo(ids);
-  const rows = [...ledgerFromQueues(qi.data, yahoo), ...ledgerFromSubmits(sn.ok ? sn.data : [], yahoo)];
+  const rows = [...ledgerFromQueues(qi.data, yahoo), ...ledgerFromSubmits(sn.ok ? sn.data : [], yahoo),
+    ...ledgerFromEntry(ee.ok ? ee.data : [], (id) => ents.byId.get(id)?.primary_l1 ?? null), ...ledgerFromBreakouts(bw.ok ? bw.data : [])];
   const existing = await dbSelectAll<{ dedupe_key: string }>("signal_ledger", "select=dedupe_key&order=id.asc");
   if (!existing.ok) throw new Error(existing.reason);
   const have = new Set(existing.data.map((r) => r.dedupe_key));
@@ -77,7 +81,8 @@ export async function syncLedger(): Promise<{ queue: number; submits: number; in
     if (!w.ok) throw new Error(w.reason);
   }
   const features = await attachFeatures();
-  return { queue: rows.filter((r) => r.event_type === "queue").length, submits: rows.filter((r) => r.event_type === "snowball_submit").length, inserted: fresh.length, features_attached: features };
+  const count = (t: string) => rows.filter((r) => r.event_type === t).length;
+  return { queue: count("queue"), submits: count("snowball_submit"), green: count("green"), yellow: count("yellow"), blue: count("blue"), inserted: fresh.length, features_attached: features };
 }
 
 /** 큐 원장 행에 신호 시점 특징을 고정 저장 — 그날(queue_date) axes_daily 근거 + 종목 대표 산업. 이미 있으면 건드리지 않음 */
@@ -173,8 +178,8 @@ export async function updateOutcomes(now = new Date()) {
     if (!l) continue;
     const ret = Number(o.ret_pct), ex = o.excess_pct === null ? null : Number(o.excess_pct);
     score.push({ event_type: l.event_type, tag: l.tag, level: l.level, market: l.market, horizon_days: o.horizon_days, ret_pct: ret, excess_pct: ex });
-    // 성과 귀속은 큐 진입만(제출은 같은 신호의 중복이라 제외)
-    if (l.event_type === "queue") samples.push({ scope: l.tag, level: l.level, horizon_days: o.horizon_days, ret_pct: ret, excess_pct: ex, features: (l.payload.features as SignalFeatures | undefined) ?? null });
+    // 성과 귀속: 큐 진입은 큐별, 🟢🟡🔵 는 단계별(제출은 같은 신호의 중복이라 제외)
+    if (l.event_type !== "snowball_submit") samples.push({ scope: l.event_type === "queue" ? l.tag : l.event_type, level: l.level, horizon_days: o.horizon_days, ret_pct: ret, excess_pct: ex, features: (l.payload.features as SignalFeatures | undefined) ?? null });
   }
   return {
     ledger, measured_targets: pending.length, entries_filled: entries, outcomes_inserted: inserted,

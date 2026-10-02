@@ -1,5 +1,5 @@
 /**
- * axes → queues → SnowBall 제출 (PRD §6.2~6.4, §14 07:10·19:10). 🟢 판정(entry_eval·gate)은 P3.
+ * axes → queues → SnowBall 제출 (PRD §6.2~6.4, §14 07:10·19:10). 🟢 판정은 이어서 entry_eval(lib/jobs/entry.ts).
  *  · 대상: 유효 신호가 있거나 보유 중인 개별 종목(asset_class=stock) — ETF·펀드는 신호 대상 아님(SnowBall 인계)
  *  · 🎯·🔭 에 새로 들어온 종목은 SnowBall draft 로 제출(하루 3건, 같은 종목 7일 1회)
  */
@@ -20,6 +20,7 @@ import { kstDate } from "@/lib/time";
 import { activeSignals, latestHoldings, loadEntities, rules, type EntityIndex } from "./context";
 import { ideaEvidence } from "./idea";
 import { latestScreens } from "./ingest";
+import { priUsLiteMap } from "./pri-us";
 import { techRefs } from "./tech";
 
 export async function currentRegime(): Promise<{ risk_off: boolean; reasons: string[]; vix: number | null; snowball: number | null }> {
@@ -77,6 +78,8 @@ export async function runPipeline(now = new Date(), opts: { submit?: boolean } =
   const targets = new Set<string>([...heldById.keys()]);
   for (const s of signals) if (s.entity_id && s.kind !== "holding_risk") targets.add(s.entity_id);
   const krDays = krDaysToEarnings(now);
+  // 미국 주가 반영도(간이, PRD §7.6) — P축·💰·⏳ 판정에 사용
+  const priUs = await priUsLiteMap([...targets].filter((id) => id.startsWith("US:")).map((id) => id.slice(3)), now);
 
   const axesRows: Record<string, unknown>[] = [];
   const queueRows: { entity_id: string; queue: Queue; reason: Record<string, unknown> }[] = [];
@@ -89,7 +92,7 @@ export async function runPipeline(now = new Date(), opts: { submit?: boolean } =
     const ctx: EntityCtx = {
       id, market: e.market, l1_codes: e.l1_codes,
       screen: scr ? { gate_passed: scr.gate_passed, score_final: scr.score_final, pri: scr.pri, grade: scr.grade } : null,
-      usFilters: usFilters.get(id) ?? null, priUsLite: null,
+      usFilters: usFilters.get(id) ?? null, priUsLite: e.market === "US" ? priUs.get(e.symbol.toUpperCase()) ?? null : null,
       holding: h ? { weight: h.weight, allowed_weight: h.allowed_weight, heat_score: h.heat_score } : null,
       l2Scope: { scoped: scopes.map((s) => s.l2), member: l2Members({ snowballSector: h?.sector, heimdallrSector: krxBy.get(id)?.sector, krxIndustry: krxBy.get(id)?.industry }, scopes) },
     };

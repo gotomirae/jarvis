@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BRIEF_SPLIT, briefText, calibrationText, holdingAlertText, ideaBlock, marketLine, systemText, type BriefData } from "./templates";
+import { BRIEF_SPLIT, briefText, calibrationText, greenText, holdingAlertText, ideaBlock, marketLine, systemText, type BriefData } from "./templates";
 
 describe("telegram templates", () => {
   it("보유 경고 (부록 B.3) — escape·비중 %·매수 확정 아님", () => {
@@ -88,5 +88,30 @@ describe("성과 피드백 표시 (D49)", () => {
     expect(empty).toContain("아직 측정이 끝난 신호가 없습니다.");
     expect(empty).toContain("바꿀 근거가 충분하지 않습니다");
     expect(empty).not.toContain("<a href");
+  });
+});
+
+describe("🟢 진입 신호 메시지 (부록 B.1)", () => {
+  const v = { market: "KR" as const, name: "리노<공업>", code: "058470", tag: "PB" as const, families: ["heimdallr", "sage", "x"], p: 31.4, lines: ["✅ ① a", "✅ ② b"], invalidation: "238,500원 (10일 최저가)", firstWeightPct: 2, riskOff: false };
+  it("조건 줄·무효화·1차 비중·escape·매수 확정 아님", () => {
+    const t = greenText(v);
+    expect(t).toContain("🟢 <b>진입 신호</b> · 눌림 · 🇰🇷 <b>리노&lt;공업&gt;</b> (058470)");
+    expect(t).toContain("합의한 신호: Heimdallr · Sage · x · 주가 반영도 31\n");
+    expect(t).toContain("✅ ① a\n✅ ② b");
+    expect(t).toContain("무효화: 종가 < 238,500원 (10일 최저가) · 1차 비중 2.0%(허용 비중의 1/3)");
+    expect(t).toContain("매수 확정 신호가 아닙니다");
+    expect(t).not.toContain("대용 지표");
+  });
+  it("미국·태그 없음·비중 미상·위험 회피", () => {
+    const u = greenText({ ...v, market: "US", tag: null, families: [], p: null, invalidation: null, firstWeightPct: null, riskOff: true });
+    expect(u).toContain("🟢 <b>진입 신호</b> · 🇺🇸");
+    expect(u).toContain("합의한 신호: - · 주가 반영도 -(간이)");
+    expect(u).toContain("무효화: 종가 < - · 1차 비중: SnowBall 허용 비중의 1/3");
+    expect(u).toContain("대용 지표");
+    expect(greenText({ ...v, riskOff: true })).toContain("위험 회피 국면이라 절반");
+  });
+  it("브리핑에 🟢🟡🔵 줄", () => {
+    const base = { kind: "evening" as const, date: "d", market: [], regime: { risk_off: false, reasons: [] }, counts: { green: 1, yellow: 0, blue: 0, alert: 0 }, earnings: { title: "t", lines: [] }, focus: "KR" as const, ideas: [], buyTotal: 0, others: [], holding: [], schedule: { title: "s", lines: [] }, asOf: "x" };
+    expect(briefText({ ...base, entries: ["🟢 <b>A</b> — 눌림"] })).toContain("보유 경고 0\n🟢 <b>A</b> — 눌림");
   });
 });

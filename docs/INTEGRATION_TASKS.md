@@ -160,3 +160,11 @@
 3. **스케줄 이동**: `.github/workflows/strategy.yml` cron을 `0 23 * * 5`(토 08:00)에서 `0 9 * * 5`(**금 18:00 KST**)로 바꾼다.
 4. 대시보드 검색 파라미터 `?q=`·`?date=`는 JARVIS 링크가 사용한다. 이름을 바꾸지 않는다.
 5. anon SELECT 확인: `mentions`, `mentor_scorecards`, `strategy_reports`, `mentors`. 불가하면 읽기 전용 RPC를 제공한다.
+
+---
+
+## F. 정시 실행 (Heimdallr · HermesCall) — P3 운영 개선 (2026-10-02 JARVIS 실측)
+
+- **문제**: Heimdallr `daily_digest`(17:37·18:17·19:07, entry_checks 포함)와 HermesCall `entry_checks_us`(06:40)가 GitHub schedule 에 의존 → 10/1 17:37 실행이 00:37 에 시작(7시간 지연), entry_checks_us 첫 예약 실행 누락. JARVIS 는 원천 지연이면 🟢 를 만들지 않으므로(D50) 신호가 하루 늦어진다.
+- **권장**: JARVIS D7 과 같은 방식 — 각 프로젝트 Supabase pg_cron → GitHub `workflow_dispatch` 정시 호출(Vault 토큰), 기존 schedule 은 예비로 유지, 잡은 멱등(이미 성공한 날이면 즉시 종료).
+- **D10**: JARVIS 🟢 병행 2주(~2026-10-16) 후 Heimdallr `TECHNICAL_TELEGRAM_ENABLED=False`, HermesCall `KR_TECH_IDEAS_TELEGRAM=false` 로 원 프로젝트 기술적 알림 텔레그램만 중단(DB 기록 유지) — 사용자 결정.

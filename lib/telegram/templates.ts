@@ -2,7 +2,10 @@
  * 텔레그램 메시지 템플릿 (PRD §9.2, 부록 B) — 순수 함수. 동적 텍스트는 모두 esc() 를 거친다(불변 규칙 8).
  * 종목 링크는 호출부가 lib/links.ts 로 만든 HTML(inlineLinks)·버튼을 넘긴다(불변 규칙 7). 모든 메시지에 "매수 확정 신호 아님"(불변 규칙 3).
  */
+import { TAG_NAME } from "@/lib/engine/entry-view";
+import type { Tag } from "@/lib/engine/entry";
 import type { IdeaCard } from "@/lib/engine/idea";
+import { FAMILY_NAME } from "@/lib/labels";
 import type { Proposal } from "@/lib/outcomes/review";
 import { esc, NOT_A_BUY_SIGNAL } from "./format";
 
@@ -42,6 +45,7 @@ export type BriefData = {
   sectors?: { label: string; change_pct: number | null }[];
   regime: { risk_off: boolean; reasons: string[] };
   counts: { green: number; yellow: number; blue: number; alert: number };
+  entries?: string[];                                 // 🟢 🟡 🔵 한 줄씩(이름·사유·텍스트 링크 — brief.ts 가 escape 해서 만든 HTML)
   alertsPaused?: boolean;                             // 보유 경고 알림 일시 정지(/alerts off)
   earnings: { title: string; lines: string[] };
   focus: "KR" | "US";                                 // 추천 대상 시장 (아침 미국 · 저녁 국내)
@@ -85,6 +89,7 @@ export function briefText(d: BriefData): string {
   }
   out.push(d.regime.risk_off ? `🔴 시장 국면: 위험 회피 — ${esc(d.regime.reasons.join(", "))} (진입 1차 비중 절반)` : "🟢 시장 국면: 정상");
   out.push(`🚦 진입 신호 ${d.counts.green} · 관찰 ${d.counts.yellow} · 실적 돌파 ${d.counts.blue} · 보유 경고 ${d.counts.alert}${d.alertsPaused ? " (⏸ 알림 정지 중)" : ""}`);
+  if (d.entries?.length) out.push(...d.entries);
 
   const where = d.focus === "US" ? "🇺🇸 미국 우선" : "🇰🇷 국내 우선";
   out.push("", RULE, `🎯 <b>매수 검토 추천</b> (${where}) ${d.ideas.length ? `TOP ${d.ideas.length}${d.buyTotal > d.ideas.length ? ` / 전체 ${d.buyTotal}` : ""}` : "— 오늘 없음"}`, RULE);
@@ -119,6 +124,27 @@ export function calibrationText(period: string, horizon: number, queues: QueuePe
     out.push(`${i + 1}. ${p.kind === "threshold" ? "🔧" : "ℹ️"} ${esc(p.title)}${p.rule ? ` — ${esc(String(p.current))} → ${esc(String(p.suggested))}` : ""}`, `   근거: ${esc(p.evidence)}`);
   });
   if (url) out.push("", `<a href="${esc(url)}">대시보드 성적표 보기</a>`);
+  out.push("", FOOT);
+  return out.join("\n");
+}
+
+// ── 🟢 진입 신호 (부록 B.1, D38 약어 없이) ───────────────
+export type GreenView = {
+  market: "KR" | "US"; name: string; code: string; tag: Tag | null;
+  families: string[]; p: number | null;
+  lines: string[];                     // lib/engine/entry-view condLines
+  invalidation: string | null; firstWeightPct: number | null; riskOff: boolean;
+};
+
+export function greenText(v: GreenView): string {
+  const flag = v.market === "KR" ? "🇰🇷" : "🇺🇸";
+  const head = `🟢 <b>진입 신호</b>${v.tag ? ` · ${esc(TAG_NAME[v.tag])}` : ""} · ${flag} <b>${esc(v.name)}</b> (${esc(v.code)})`;
+  const fam = v.families.map((f) => FAMILY_NAME[f] ?? f).join(" · ");
+  const out = [head, `합의한 신호: ${esc(fam || "-")} · 주가 반영도 ${v.p === null ? "-" : Math.round(v.p)}${v.market === "US" ? "(간이)" : ""}`, "━━━━ 필수 조건 5개 ━━━━", ...v.lines.map(esc), "━━━━━━━━━━━━━━"];
+  const weight = v.firstWeightPct === null ? "1차 비중: SnowBall 허용 비중의 1/3" : `1차 비중 ${v.firstWeightPct.toFixed(1)}%(허용 비중의 1/3${v.riskOff ? " · 위험 회피 국면이라 절반" : ""})`;
+  out.push(`무효화: 종가 < ${esc(v.invalidation ?? "-")} · ${weight}`);
+  out.push("분할 진입: 1차 → 무효화선 위 5거래일 유지·20일선 회복 시 2차 → 다음 실적 확인 시 3차");
+  if (v.market === "US") out.push("※ 미국 수급은 투자자별 자료가 없어 대용 지표(종가 상승·거래량)입니다");
   out.push("", FOOT);
   return out.join("\n");
 }

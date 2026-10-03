@@ -104,7 +104,7 @@ jobs:
         run: npm run job -- brief --kind evening --slot "$(TZ=Asia/Seoul date -d '12 hours ago' +%F)"   # 자정 넘어 지연 실행돼도 그날 저녁분(D48)
       - name: outcomes_update (예비)
         if: github.event.schedule == '30 11 * * *'
-        run: npm run job -- outcomes_update --slot "$(TZ=Asia/Seoul date +%F)-daily"
+        run: npm run job -- outcomes_update --slot "$(TZ=Asia/Seoul date -d '12 hours ago' +%F)-daily"   # 자정 넘어 지연 실행돼도 그날 몫(D48)
 
       - name: smoke 결과 보관 (상태·개수·호스트만, 값·키 없음)
         if: always()

@@ -193,6 +193,25 @@ feedback:                            # 성과 피드백 (PRD §7.3 게이트 6 �
   review:                            # 분기 보정 제안 — 제안만, 자동 적용 금지(PRD §12)
     min_gap_pctp: 2.0                # 구간 중앙값이 🎯 전체보다 이만큼(%p) 이상 다를 때만 제안
 
+weekly:                              # 🏛️ 주간 투자위원회 (PRD §10, P4) — lib/jobs/weekly.ts
+  market:                            # Ⅰ-1 시장 요약 (야후 chart; KOSPI·KOSDAQ 은 네이버 공식 종가)
+    returns: [{sym: "KOSPI", label: "KOSPI", source: naver}, {sym: "KOSDAQ", label: "KOSDAQ", source: naver}, {sym: "^GSPC", label: "S&P 500"}, {sym: "^IXIC", label: "NASDAQ"}, {sym: "^SOX", label: "필라델피아 반도체"}, {sym: "^RUT", label: "Russell 2000"}]
+    levels: [{sym: "^VIX", label: "VIX"}, {sym: "^TNX", label: "미 10년물 금리(%)"}, {sym: "DX-Y.NYB", label: "달러인덱스"}, {sym: "KRW=X", label: "원/달러"}, {sym: "CL=F", label: "WTI"}]
+  basket_min_market_cap_krw: 100000000000   # 국내 산업 바스켓: 시총 1,000억 이상 (PRD §10.3)
+  basket_min_members: 3
+  cash_band: {normal: "10~20%", risk_off: "30~50%"}   # Ⅱ-1 권장 현금 비중 밴드 (규칙 기반, 판정 아님)
+  buy_list_max: 5
+  flywheel_report_query: "주간 투자 전략 리포트"     # 노션 제목 "2026-W40 주간 투자 전략 리포트"
+  publish_deadline_kst: "10:30"      # FlyWheel 리포트가 없으면 이 시각까지 재확인 후 "미도착"으로 발행
+
+llm:                                 # LLM 은 주간 메모 서술에만 (불변 규칙 5) — lib/llm/router.ts
+  effort: "high"                     # 10/3 실측: medium 은 "숫자는 표식으로만" 규칙을 2회 연속 어김 → high (주 1회, 월 ≈$1)
+  max_tokens: 16000
+  prices_per_mtok:                   # cost_log 기록용 (2026-09 공시가, 입력/출력 $/1M 토큰)
+    claude-sonnet-5: {input: 2.0, output: 10.0}
+    claude-sonnet-5-5: {input: 2.0, output: 10.0}
+    claude-opus-5-5: {input: 4.0, output: 20.0}
+
 market:                              # 브리핑·레짐 시세 (Yahoo chart, 무료·무키 — lib/ingest/market.ts)
   morning: [{sym: "^GSPC", label: "S&P 500"}, {sym: "^IXIC", label: "NASDAQ"}, {sym: "^SOX", label: "필라델피아 반도체"}, {sym: "^RUT", label: "Russell 2000"}, {sym: "^VIX", label: "VIX", level: true}, {sym: "^TNX", label: "미 10년물", level: true}, {sym: "KRW=X", label: "원/달러", level: true}]
   us_sectors: [{sym: "XLK", label: "기술"}, {sym: "XLC", label: "커뮤니케이션"}, {sym: "XLY", label: "경기소비"}, {sym: "XLF", label: "금융"}, {sym: "XLV", label: "헬스케어"}, {sym: "XLI", label: "산업재"}, {sym: "XLE", label: "에너지"}, {sym: "XLU", label: "유틸리티"}]

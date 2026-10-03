@@ -71,3 +71,27 @@ export async function naverDaily(symbol: string, count = 300, f: typeof fetch = 
     return fail(`naver ${symbol}: ${safeReason(e)}`);
   }
 }
+
+export type InvestorFlow = { date: string; personal: number; foreign: number; institutional: number };
+
+/** 순수 함수: 네이버 지수 투자자 동향 JSON({bizdate, personalValue:"-17,897", …}, 단위 억원) → 숫자 */
+export function parseNaverTrend(json: unknown): InvestorFlow | null {
+  const j = json as { bizdate?: string; personalValue?: string; foreignValue?: string; institutionalValue?: string } | null;
+  const n = (v?: string) => (v === undefined ? NaN : Number(v.replace(/[+,]/g, "")));
+  if (!j?.bizdate || !/^\d{8}$/.test(j.bizdate)) return null;
+  const f = { personal: n(j.personalValue), foreign: n(j.foreignValue), institutional: n(j.institutionalValue) };
+  if (![f.personal, f.foreign, f.institutional].every(Number.isFinite)) return null;
+  return { date: `${j.bizdate.slice(0, 4)}-${j.bizdate.slice(4, 6)}-${j.bizdate.slice(6)}`, ...f };
+}
+
+/** 네이버 지수(KOSPI·KOSDAQ) 하루 투자자별 순매수(억원) */
+export async function naverInvestorTrend(index: "KOSPI" | "KOSDAQ", ymd: string, f: typeof fetch = fetch): Promise<Result<InvestorFlow>> {
+  try {
+    const res = await f(`https://m.stock.naver.com/api/index/${index}/trend?bizdate=${ymd.replace(/-/g, "")}`, { headers: { "User-Agent": "Mozilla/5.0 (compatible; JARVIS-research)" }, signal: AbortSignal.timeout(15_000) });
+    if (res.status !== 200) return fail(`naver trend ${index}: HTTP ${res.status}`, res.status);
+    const v = parseNaverTrend(await res.json());
+    return v ? ok(v, 200) : fail(`naver trend ${index}: 형식 다름`);
+  } catch (e) {
+    return fail(`naver trend ${index}: ${safeReason(e)}`);
+  }
+}

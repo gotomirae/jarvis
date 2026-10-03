@@ -39,6 +39,12 @@ export type Rules = {
   market: { morning: MarketSym[]; us_sectors: MarketSym[]; evening: MarketSym[]; regime: { vix: string; kospi: string } };
   telegram: { realtime_max_per_day_excl_urgent: number };
   feedback: FeedbackRules;
+  weekly: {
+    market: { returns: { sym: string; label: string; source?: "naver" | "yahoo" }[]; levels: { sym: string; label: string }[] };
+    basket_min_market_cap_krw: number; basket_min_members: number; cash_band: { normal: string; risk_off: string };
+    buy_list_max: number; flywheel_report_query: string; publish_deadline_kst: string;
+  };
+  llm: { effort: string; max_tokens: number; prices_per_mtok: Record<string, { input: number; output: number }> };
   outcomes: { horizons_days: number[]; benchmark_symbols: Record<"KOSPI" | "KOSDAQ" | "SPX", { source: "naver" | "yahoo"; sym: string }>; min_samples_for_calibration: number };
 };
 export type MarketSym = { sym: string; label: string; level?: boolean };

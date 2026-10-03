@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseLinkedRow } from "./flywheel";
-import { naverDaily, parseNaverDaily } from "./market";
+import { naverDaily, naverInvestorTrend, parseNaverDaily, parseNaverTrend } from "./market";
+import { notionId } from "./notion";
 import { probeTable, rpc, selectAll } from "./rest";
 import { safeReason } from "./types";
 
@@ -104,5 +105,30 @@ describe("market.naverDaily (국내 공식 종가)", () => {
     expect(await naverDaily("005930", 2, f(500, ""))).toMatchObject({ ok: false, status: 500 });
     expect(await naverDaily("005930", 2, f(200, "<x/>"))).toMatchObject({ ok: false });
     expect(await naverDaily("005930", 2, (async () => { throw new Error("boom"); }) as unknown as typeof fetch)).toMatchObject({ ok: false });
+  });
+});
+
+describe("market.naverInvestorTrend (지수 투자자 동향, 억원)", () => {
+  it("파싱", () => {
+    expect(parseNaverTrend({ bizdate: "20261002", personalValue: "-17,897", foreignValue: "-1,080", institutionalValue: "+4,155" })).toEqual({ date: "2026-10-02", personal: -17897, foreign: -1080, institutional: 4155 });
+    expect(parseNaverTrend({ bizdate: "x" })).toBeNull();
+    expect(parseNaverTrend(null)).toBeNull();
+    expect(parseNaverTrend({ bizdate: "20261002", personalValue: "-1" })).toBeNull();
+  });
+  it("Result", async () => {
+    const f = (status: number, body: unknown) => (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+    expect((await naverInvestorTrend("KOSPI", "2026-10-02", f(200, { bizdate: "20261002", personalValue: "1", foreignValue: "2", institutionalValue: "3" }))).ok).toBe(true);
+    expect(await naverInvestorTrend("KOSPI", "2026-10-02", f(404, {}))).toMatchObject({ ok: false, status: 404 });
+    expect(await naverInvestorTrend("KOSDAQ", "2026-10-02", f(200, {}))).toMatchObject({ ok: false });
+    expect(await naverInvestorTrend("KOSDAQ", "2026-10-02", (async () => { throw new Error("x"); }) as unknown as typeof fetch)).toMatchObject({ ok: false });
+  });
+});
+
+describe("notion.notionId", () => {
+  it("주소·하이픈 ID·없음", () => {
+    expect(notionId("https://www.notion.so/5-JARVIS-3a99c770aa6180e98874f0a264ef61b1?pvs=4")).toBe("3a99c770aa6180e98874f0a264ef61b1");
+    expect(notionId("3a99c770-aa61-80e9-8874-f0a264ef61b1")).toBe("3a99c770aa6180e98874f0a264ef61b1");
+    expect(notionId("nothing")).toBeNull();
+    expect(notionId(undefined)).toBeNull();
   });
 });

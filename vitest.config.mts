@@ -10,7 +10,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: [
-        "lib/engine/**/*.ts", "lib/taxonomy/**/*.ts", "lib/outcomes/**/*.ts", "lib/memo/grounding.ts",
+        "lib/engine/**/*.ts", "lib/taxonomy/**/*.ts", "lib/outcomes/**/*.ts", "lib/memo/grounding.ts", "lib/memo/fact-table.ts", "lib/memo/compose.ts",
         "lib/links.ts", "lib/entities.ts", "lib/public-api.ts", "lib/labels.ts", "lib/env.ts", "lib/time.ts", "lib/format.ts", "lib/telegram/format.ts", "lib/telegram/commands.ts", "lib/telegram/templates.ts",
       ],
       exclude: ["**/*.test.ts", "**/index.ts"],

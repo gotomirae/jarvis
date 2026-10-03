@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BRIEF_SPLIT, briefText, calibrationText, greenText, holdingAlertText, ideaBlock, marketLine, systemText, type BriefData } from "./templates";
+import { BRIEF_SPLIT, briefText, calibrationText, greenText, weeklyText, holdingAlertText, ideaBlock, marketLine, systemText, type BriefData } from "./templates";
 
 describe("telegram templates", () => {
   it("보유 경고 (부록 B.3) — escape·비중 %·매수 확정 아님", () => {
@@ -113,5 +113,28 @@ describe("🟢 진입 신호 메시지 (부록 B.1)", () => {
   it("브리핑에 🟢🟡🔵 줄", () => {
     const base = { kind: "evening" as const, date: "d", market: [], regime: { risk_off: false, reasons: [] }, counts: { green: 1, yellow: 0, blue: 0, alert: 0 }, earnings: { title: "t", lines: [] }, focus: "KR" as const, ideas: [], buyTotal: 0, others: [], holding: [], schedule: { title: "s", lines: [] }, asOf: "x" };
     expect(briefText({ ...base, entries: ["🟢 <b>A</b> — 눌림"] })).toContain("보유 경고 0\n🟢 <b>A</b> — 눌림");
+  });
+});
+
+describe("🏛️ 주간 투자위원회 요약 (P4)", () => {
+  const v = { week: "2026-W40", range: "09-28 ~ 10-02", stance: "정상 · 현금 10~20%", market: ["KOSPI -1.1%", "S&P <500> -0.3%"], krTop: ["반도체 +9.8%"], krBottom: ["여행 -1.8%"], buy: ["🟢 HJ중공업"],
+    scenarios: [{ name: "Bull", probability: 30 }], decisions: ["결정1"], grounded: true, note: null, flywheel: "FlyWheel 주간 리포트 도착", url: "https://j/weekly", notionUrl: "https://n" };
+  it("서술 통과", () => {
+    const t = weeklyText(v);
+    expect(t).toContain("🏛️ <b>JARVIS 주간 투자위원회 2026-W40</b>");
+    expect(t).toContain("S&amp;P &lt;500&gt; -0.3%");
+    expect(t).toContain("🏭 국내 산업 ▲ 반도체 +9.8% / ▼ 여행 -1.8%");
+    expect(t).toContain("🔮 시나리오: Bull 30%");
+    expect(t).toContain("1. 결정1");
+    expect(t).toContain('<a href="https://j/weekly">대시보드 전문</a> · <a href="https://n">노션</a>');
+    expect(t).toContain("매수 확정 신호가 아닙니다");
+  });
+  it("표만·빈 목록·링크 없음", () => {
+    const t = weeklyText({ ...v, krTop: [], buy: [], scenarios: [], decisions: [], grounded: false, note: null, url: null, notionUrl: null });
+    expect(t).toContain("🎯 매수 검토: 없음");
+    expect(t).toContain("⚠️ 서술 없이 표·목록만 발행");
+    expect(t).not.toContain("🏭");
+    expect(t).not.toContain("🔗");
+    expect(weeklyText({ ...v, krBottom: [], grounded: false, note: "검증 실패" })).toContain("▲ 반도체 +9.8%\n");
   });
 });

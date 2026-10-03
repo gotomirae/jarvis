@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 export function Nav() {
-  const items: [string, string][] = [["/", "오늘"], ["/entry", "진입 보드"], ["/portfolio", "내 보유 종목"], ["/growth", "산업 성장 근거"], ["/scorecard", "신호 성적표"], ["/taxonomy", "산업 분류"]];
+  const items: [string, string][] = [["/", "오늘"], ["/entry", "진입 보드"], ["/portfolio", "내 보유 종목"], ["/radar", "산업 레이더"], ["/growth", "산업 성장 근거"], ["/weekly", "주간 투자위원회"], ["/scorecard", "신호 성적표"], ["/health", "시스템 상태"], ["/taxonomy", "산업 분류"]];
   return (
     <nav className="flex flex-wrap gap-3 text-sm border-b border-neutral-200 dark:border-neutral-800 pb-2">
       <span className="font-bold">JARVIS</span>

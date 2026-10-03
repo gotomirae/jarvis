@@ -42,3 +42,19 @@ export function isFirstSaturdayOfQuarter(d: Date = new Date()): boolean {
   const k = new Date(d.getTime() + 9 * 3600_000);
   return [0, 3, 6, 9].includes(k.getUTCMonth()) && k.getUTCDate() <= 7 && k.getUTCDay() === 6;
 }
+
+/**
+ * 주간 메모가 다루는 주(월~금, KST) — 토·일에 돌면 이번 주, 평일에 돌면 지난주. 라벨은 ISO 주차("2026-W40").
+ */
+export function memoWeek(d: Date = new Date()): { week: string; start: string; end: string } {
+  const k = new Date(`${kstDate(d)}T00:00:00Z`);
+  const dow = k.getUTCDay();                                   // 0=일 … 6=토
+  const back = dow === 6 ? 1 : dow === 0 ? 2 : dow + 2;        // 가장 가까운 지난 금요일까지
+  const end = new Date(k.getTime() - back * 86400_000);
+  const start = new Date(end.getTime() - 4 * 86400_000);
+  const thu = new Date(end.getTime() - 86400_000);             // ISO 주차 = 목요일이 속한 해
+  const jan1 = Date.UTC(thu.getUTCFullYear(), 0, 1);
+  const wk = Math.floor((thu.getTime() - jan1) / 86400_000 / 7) + 1;
+  const iso = (x: Date) => x.toISOString().slice(0, 10);
+  return { week: `${thu.getUTCFullYear()}-W${String(wk).padStart(2, "0")}`, start: iso(start), end: iso(end) };
+}

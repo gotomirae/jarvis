@@ -6,7 +6,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { linksConfig } from "@/lib/config/load";
 import { env } from "@/lib/env";
-import { dbInsert } from "@/lib/db";
+import { dbInsert, dbSelect } from "@/lib/db";
+import { kstString } from "@/lib/time";
 import { collectStatus } from "@/lib/status";
 import { handleCommand } from "@/lib/telegram/commands";
 import { safeEqual } from "@/lib/telegram/format";
@@ -31,6 +32,24 @@ export async function POST(req: NextRequest) {
   const reply = await handleCommand(text, {
     dashboards: linksConfig().dashboards, jarvisUrl: e.JARVIS_URL, status: collectStatus,
     setAlertPause: async (paused) => { await dbInsert("bot_state", [{ key: "holding_alert_pause", value: { paused, at: new Date().toISOString(), by: "telegram" }, updated_at: new Date().toISOString() }], { upsertOn: "key" }); },
+    weekly: async () => {
+      const r = await dbSelect<{ week: string; grounding_ok: boolean | null; created_at: string; notion_url: string | null }>("weekly_memos", "select=week,grounding_ok,created_at,notion_url&order=week.desc&limit=1");
+      const w = r.ok ? r.data[0] : undefined;
+      return w ? { week: w.week, grounded: !!w.grounding_ok, publishedKst: kstString(new Date(w.created_at)), notionUrl: w.notion_url } : null;
+    },
+    entry: async () => {
+      const latest = async (m: string) => { const r = await dbSelect<{ date: string }>("entry_eval", `select=date&market=eq.${m}&order=date.desc&limit=1`); return r.ok ? r.data[0]?.date ?? null : null; };
+      const [kr, us] = await Promise.all([latest("KR"), latest("US")]);
+      const dates = [kr, us].filter(Boolean).join(",");
+      const ev = dates ? await dbSelect<{ entity_id: string; level: string; market: string; date: string }>("entry_eval", `select=entity_id,level,market,date&date=in.(${dates})&level=in.(green,yellow)`) : { ok: true as const, data: [] };
+      const rows = (ev.ok ? ev.data : []).filter((x) => (x.market === "KR" ? x.date === kr : x.date === us));
+      const bw = await dbSelect<{ entity_id: string }>("breakout_watch", `select=entity_id&armed_until=gte.${new Date().toISOString().slice(0, 10)}`);
+      const ids = [...new Set([...rows.map((x) => x.entity_id), ...(bw.ok ? bw.data.map((x) => x.entity_id) : [])])];
+      const en = ids.length ? await dbSelect<{ id: string; name: string }>("entities", `select=id,name&id=in.(${ids.map((i) => `"${i}"`).join(",")})`) : { ok: true as const, data: [] };
+      const nm = new Map((en.ok ? en.data : []).map((x) => [x.id, x.name]));
+      const name = (id: string) => nm.get(id) ?? id;
+      return { kr, us, green: rows.filter((x) => x.level === "green").map((x) => name(x.entity_id)), yellow: rows.filter((x) => x.level === "yellow").map((x) => name(x.entity_id)), blue: (bw.ok ? bw.data : []).map((x) => name(x.entity_id)) };
+    },
   });
   if (reply) {
     const r = await sendMessage(chatId, reply.text, reply.buttons);

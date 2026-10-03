@@ -52,3 +52,15 @@ describe("briefSlotOk (지연된 예비 실행)", () => {
     expect(briefSlotOk("morning", "2026-10-02")).toBeTypeOf("boolean");
   });
 });
+
+describe("memoWeek", async () => {
+  const { memoWeek } = await import("./time");
+  it("토·일은 이번 주, 평일은 지난주 — ISO 주차", () => {
+    expect(memoWeek(new Date("2026-10-03T09:30:00+09:00"))).toEqual({ week: "2026-W40", start: "2026-09-28", end: "2026-10-02" });
+    expect(memoWeek(new Date("2026-10-04T09:30:00+09:00")).week).toBe("2026-W40");
+    expect(memoWeek(new Date("2026-10-05T09:30:00+09:00")).end).toBe("2026-10-02");
+    expect(memoWeek(new Date("2026-10-09T23:00:00+09:00")).end).toBe("2026-10-02");
+    expect(memoWeek(new Date("2027-01-02T09:30:00+09:00"))).toEqual({ week: "2026-W53", start: "2026-12-28", end: "2027-01-01" });
+    expect(memoWeek().week).toMatch(/^\d{4}-W\d{2}$/);
+  });
+});

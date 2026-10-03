@@ -8,6 +8,7 @@
  *   poll                       보유 경고 (30분, 보통은 Vercel 라우트) [--dry true]
  *   brief --kind morning|evening [--force true]
  *   outcomes_update            신호 원장 동기화(소급 포함) → 진입가·D+5·20·40·60 성과 → 특징별 성과 perf_stats (20:00, D47·D49)
+ *   weekly_memo [--force true] [--dry true]   🏛️ 주간 투자위원회 (토 09:30, FlyWheel 리포트 대기 ~10:30) — dry 는 smoke-out/weekly_memo.md 만
  *   calibration_review         분기 신호 성적표 + 보정 제안(자동 적용 없음) — 분기 첫 토 10:30 [--force true] [--dry true]
  */
 import { runJob, slotOf } from "@/lib/jobs";
@@ -20,6 +21,7 @@ import { runInbox } from "@/lib/jobs/inbox";
 import { collectOutlooks, expireOutlooks } from "@/lib/jobs/outlook";
 import { calibrationReview } from "@/lib/jobs/calibration";
 import { runEntryEval } from "@/lib/jobs/entry";
+import { runWeekly } from "@/lib/jobs/weekly";
 import { updateOutcomes } from "@/lib/jobs/outcomes";
 import { runPipeline } from "@/lib/jobs/pipeline";
 import { poll } from "@/lib/jobs/poll";
@@ -53,6 +55,11 @@ export const P2_JOBS: Record<string, (args: Record<string, string>) => Promise<v
   })),
   poll: async (a) => print(await runJob("poll", slotOf(a), () => poll(new Date(), { dryRun: a.dry === "true" }))),
   outcomes_update: async (a) => print(await runJob("outcomes_update", slotOf(a), async () => updateOutcomes() as unknown as Record<string, unknown>)),
+  weekly_memo: async (a) => {
+    const r = await runJob("weekly_memo", slotOf(a), () => runWeekly(new Date(), { force: a.force === "true", dryRun: a.dry === "true" }));
+    if (a.dry === "true" && r?.md) { const fs = await import("node:fs"); fs.mkdirSync("smoke-out", { recursive: true }); fs.writeFileSync("smoke-out/weekly_memo.md", String(r.md)); delete r.md; }
+    print(r);
+  },
   calibration_review: async (a) => print(await runJob("calibration_review", slotOf(a), () => calibrationReview(new Date(), { force: a.force === "true", dryRun: a.dry === "true" }))),
   brief: async (a) => {
     const kind = a.kind === "evening" ? "evening" : "morning";

@@ -148,3 +148,24 @@ export function greenText(v: GreenView): string {
   out.push("", FOOT);
   return out.join("\n");
 }
+
+// ── 🏛️ 주간 투자위원회 요약 (PRD §10.4 ④) ───────────────
+export type WeeklyView = {
+  week: string; range: string; stance: string; market: string[]; krTop: string[]; krBottom: string[]; buy: string[];
+  scenarios: { name: string; probability: number }[]; decisions: string[]; grounded: boolean; note: string | null; flywheel: string;
+  url: string | null; notionUrl: string | null;
+};
+
+export function weeklyText(v: WeeklyView): string {
+  const out = [`🏛️ <b>JARVIS 주간 투자위원회 ${esc(v.week)}</b>`, esc(v.range), "", `🧭 ${esc(v.stance)}`, `📈 ${v.market.map(esc).join(" · ")}`];
+  if (v.krTop.length) out.push(`🏭 국내 산업 ▲ ${v.krTop.map(esc).join(", ")}${v.krBottom.length ? ` / ▼ ${v.krBottom.map(esc).join(", ")}` : ""}`);
+  out.push(`🎯 매수 검토: ${v.buy.length ? v.buy.map(esc).join(" · ") : "없음"}`);
+  if (v.scenarios.length) out.push(`🔮 시나리오: ${v.scenarios.map((s) => `${esc(s.name)} ${s.probability}%`).join(" · ")}`);
+  if (v.decisions.length) out.push("", "<b>이번 주말 결정할 것</b>", ...v.decisions.map((d, i) => `${i + 1}. ${esc(d)}`));
+  if (!v.grounded) out.push("", `⚠️ ${esc(v.note ?? "서술 없이 표·목록만 발행")}`);
+  out.push("", `📚 ${esc(v.flywheel)}`);
+  const links = [v.url && `<a href="${esc(v.url)}">대시보드 전문</a>`, v.notionUrl && `<a href="${esc(v.notionUrl)}">노션</a>`].filter(Boolean);
+  if (links.length) out.push(`🔗 ${links.join(" · ")}`);
+  out.push("", FOOT);
+  return out.join("\n");
+}

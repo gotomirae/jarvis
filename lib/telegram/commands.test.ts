@@ -68,8 +68,36 @@ describe("telegram commands", () => {
   it("help, planned and unknown commands; plain text ignored", async () => {
     expect((await handleCommand("/start", ctx))?.text).toContain("/status · /links");
     expect((await handleCommand("/help", ctx))?.text).toContain("/entry");
-    expect((await handleCommand("/entry", ctx))?.text).toContain("P3");
+    expect((await handleCommand("/radar", ctx))?.text).toContain("P4");
     expect((await handleCommand("/foo", ctx))?.text).toContain("알 수 없는 명령: /foo");
     expect(await handleCommand("안녕", ctx)).toBeNull();
+  });
+});
+
+describe("/week · /entry (P4)", async () => {
+  const { handleCommand, renderWeek, renderEntry } = await import("./commands");
+  const base = { dashboards: {}, jarvisUrl: "https://j.app/", status: async () => ({ nowKst: "", env: {}, db: { ok: true }, jobs: [], sources: [] }) };
+  it("/week: 최신 메모 링크 · 없음", async () => {
+    const r = await handleCommand("/week", { ...base, weekly: async () => ({ week: "2026-W40", grounded: false, publishedKst: "2026-10-03 09:31", notionUrl: "https://n/x" }) });
+    expect(r?.text).toContain("🏛️ <b>주간 투자위원회 2026-W40</b>");
+    expect(r?.text).toContain("서술 없이 표·목록만");
+    expect(r?.text).toContain('href="https://j.app/weekly?week=2026-W40"');
+    expect(r?.text).toContain('href="https://n/x"');
+    expect(renderWeek(null, null).text).toContain("아직 발행된");
+    const g = renderWeek({ week: "W", grounded: true, publishedKst: "t", notionUrl: null }, null).text;
+    expect(g).not.toContain("🔗");
+    expect(g).not.toContain("표·목록만");
+  });
+  it("/entry: 단계별 목록·8개 초과 생략", async () => {
+    const r = await handleCommand("/entry", { ...base, entry: async () => ({ kr: "2026-10-02", us: null, green: ["한화에어로스페이스"], yellow: [], blue: Array.from({ length: 9 }, (_, i) => `B${i}`) }) });
+    expect(r?.text).toContain("국내 2026-10-02 · 미국 - 평가");
+    expect(r?.text).toContain("🟢 진입 신호 1: 한화에어로스페이스");
+    expect(r?.text).toContain("🟡 관찰 0\n");
+    expect(r?.text).toContain(" 외");
+    expect(r?.text).toContain('href="https://j.app/entry"');
+    expect(renderEntry({ kr: null, us: null, green: [], yellow: [], blue: [] }, undefined).text).not.toContain("🔗");
+  });
+  it("ctx 가 없으면 준비 중 안내로", async () => {
+    expect((await handleCommand("/week", base))?.text).toContain("알 수 없는 명령");
   });
 });

@@ -45,15 +45,16 @@ describe("links — 종목 링크 세트 (PRD §9.4)", () => {
       snowball: "https://snowball-heritage.vercel.app/ironman/asset/a-1",
       sage: "https://sage-gotomiraes-projects.vercel.app/?q=SK%ED%95%98%EC%9D%B4%EB%8B%89%EC%8A%A4&date=30d",
       flywheel: "https://www.notion.so/b239c770aa6182eeb66a014414648adc",
-      naver: "https://m.stock.naver.com/domestic/stock/000660/total",
+      naver: "https://stock.naver.com/domestic/stock/000660/price",
       stockeasy: "https://stockeasy.intellio.kr/stock-analysis/stock-info/000660",
     });
   });
 
-  it("미국: Heimdallr·StockEasy 없음, 네이버는 해석된 코드", () => {
+  it("미국: Heimdallr 없음, 네이버는 해석된 코드, StockEasy 는 미국 종목분석", () => {
     const keys = stockLinks(nvda, ctx).map((x) => x.key);
-    expect(keys).toEqual(["jarvis", "hermescall", "snowball", "sage", "flywheel", "naver"]);
-    expect(stockUrl("naver", nvda, ctx)).toBe("https://m.stock.naver.com/worldstock/stock/NVDA.O/total");
+    expect(keys).toEqual(["jarvis", "hermescall", "snowball", "sage", "flywheel", "naver", "stockeasy"]);
+    expect(stockUrl("naver", nvda, ctx)).toBe("https://stock.naver.com/worldstock/stock/NVDA.O/price");
+    expect(stockUrl("stockeasy", nvda, ctx)).toBe("https://stockeasy.intellio.kr/us/stock-info/NVDA");
   });
 
   it("SnowBall 자산 없음·HermesCall 분석 없음 → 폴백", () => {
@@ -81,7 +82,8 @@ describe("links — 종목 링크 세트 (PRD §9.4)", () => {
     expect(stockLinks(hynix, noJarvis).map((x) => x.key)).not.toContain("jarvis");
     expect(stockUrl("sage", { ...hynix, name: "" }, ctx)).toBeNull();
     expect(stockUrl("nope", hynix, ctx)).toBeNull();
-    expect(stockUrl("stockeasy", nvda, ctx)).toBeNull();
+    const krOnly = { ...ctx, links: { ...ctx.links, stock: { ...ctx.links.stock, stockeasy: { ...ctx.links.stock.stockeasy, us: undefined } } } };
+    expect(stockUrl("stockeasy", nvda, krOnly)).toBeNull();      // 시장 주소가 없으면 생략
     const bare = { ...ctx, links: { ...ctx.links, stock: { naver: { label: "N", markets: ["KR", "US"] as ("KR" | "US")[] }, x: { label: "X", markets: ["KR"] as ("KR" | "US")[] } } } };
     expect(stockUrl("naver", hynix, bare)).toBeNull();
     expect(stockUrl("naver", nvda, bare)).toBeNull();
@@ -90,17 +92,17 @@ describe("links — 종목 링크 세트 (PRD §9.4)", () => {
 
   it("키보드 배치는 layout 을 따르고 빈 행을 뺀다", () => {
     expect(stockKeyboard(hynix, ctx).map((r) => r.length)).toEqual([3, 3, 2]);
-    expect(stockKeyboard(nvda, { ...ctx, jarvisUrl: null }).map((r) => r.map((b) => b.text))).toEqual([["⚡ HermesCall"], ["❄️ SnowBall", "🧙 Sage", "🔄 FlyWheel"], ["🟢 네이버증권"]]);
-    const onlyKr = { ...ctx, links: { ...ctx.links, layout: { stock_card_rows: [["stockeasy"], ["naver"]] } } };
-    expect(stockKeyboard(nvda, onlyKr)).toHaveLength(1);
+    expect(stockKeyboard(nvda, { ...ctx, jarvisUrl: null }).map((r) => r.map((b) => b.text))).toEqual([["⚡ HermesCall"], ["❄️ SnowBall", "🧙 Sage", "🔄 FlyWheel"], ["🟢 네이버증권", "📈 StockEasy"]]);
+    const onlyHd = { ...ctx, links: { ...ctx.links, layout: { stock_card_rows: [["heimdallr"], ["naver"]] } } };
+    expect(stockKeyboard(nvda, onlyHd)).toHaveLength(1);
   });
 
   it("여러 종목 메시지 텍스트 링크 (HTML escape)", () => {
     expect(inlineLinks({ ...hynix, name: "A&B<주>" }, ctx)).toBe(
-      'A&amp;B&lt;주&gt; · <a href="https://m.stock.naver.com/domestic/stock/000660/total">네이버</a> · <a href="https://stockeasy.intellio.kr/stock-analysis/stock-info/000660">StockEasy</a> · <a href="https://heimdallr-call.vercel.app/stock/000660">Heimdallr</a> · <a href="https://jarvis.example.app/stock/KR%3A000660">JARVIS</a>');
-    expect(inlineLinks(nvda, { ...ctx, jarvisUrl: undefined })).toBe('NVIDIA · <a href="https://m.stock.naver.com/worldstock/stock/NVDA.O/total">네이버</a>');
-    expect(linkLine(nvda, { ...ctx, jarvisUrl: undefined })).toBe('🔗 <a href="https://m.stock.naver.com/worldstock/stock/NVDA.O/total">네이버</a> · <a href="https://hermes-call-psi.vercel.app/screener">HermesCall</a>');
-    expect(linkLine(hynix, ctx)).toContain("🔗 <a href=\"https://m.stock.naver.com/domestic/stock/000660/total\">네이버</a> · ");
+      'A&amp;B&lt;주&gt; · <a href="https://stock.naver.com/domestic/stock/000660/price">네이버</a> · <a href="https://stockeasy.intellio.kr/stock-analysis/stock-info/000660">StockEasy</a> · <a href="https://heimdallr-call.vercel.app/stock/000660">Heimdallr</a> · <a href="https://jarvis.example.app/stock/KR%3A000660">JARVIS</a>');
+    expect(inlineLinks(nvda, { ...ctx, jarvisUrl: undefined })).toBe('NVIDIA · <a href="https://stock.naver.com/worldstock/stock/NVDA.O/price">네이버</a> · <a href="https://stockeasy.intellio.kr/us/stock-info/NVDA">StockEasy</a>');
+    expect(linkLine(nvda, { ...ctx, jarvisUrl: undefined })).toBe('🔗 <a href="https://stock.naver.com/worldstock/stock/NVDA.O/price">네이버</a> · <a href="https://stockeasy.intellio.kr/us/stock-info/NVDA">StockEasy</a> · <a href="https://hermes-call-psi.vercel.app/screener">HermesCall</a>');
+    expect(linkLine(hynix, ctx)).toContain("🔗 <a href=\"https://stock.naver.com/domestic/stock/000660/price\">네이버</a> · ");
     const none = { ...ctx, links: { ...ctx.links, stock: {} } };
     expect(linkLine(nvda, none)).toBe("");
   });

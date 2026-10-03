@@ -102,7 +102,8 @@ export function stockUrl(key: string, e: LinkEntity, ctx: LinkCtx): string | nul
   const rule = ctx.links.stock[key];
   if (!rule || !rule.markets.includes(e.market)) return null;
   const v = vars(e, ctx);
-  if (key === "naver") {
+  // 시장별 주소(kr·us)가 있는 규칙(네이버·StockEasy): 시장 주소 → 미국 폴백. 없으면 공통 url
+  if (rule.kr || rule.us) {
     if (e.market === "KR") return rule.kr ? fillTemplate(rule.kr, v) : null;
     return (rule.us ? fillTemplate(rule.us, v) : null) ?? (rule.us_fallback ? fillTemplate(rule.us_fallback, v) : null);
   }

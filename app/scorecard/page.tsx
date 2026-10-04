@@ -38,20 +38,20 @@ export default async function Scorecard() {
     .sort((a, b) => a.dimension.localeCompare(b.dimension) || (b.median_excess ?? -999) - (a.median_excess ?? -999));
   const buyAll = get("buy", F.primary_horizon);
   const th = "py-1 pr-3 font-normal";
-  const cell = (s: Stat | undefined) => (s ? <>{fmtPct(s.median_excess, 2)}<span className="text-neutral-500"> · {s.hit_rate === null ? "-" : `${Math.round(s.hit_rate * 100)}%`} · {s.n}건</span></> : "—");
+  const cell = (s: Stat | undefined) => (s ? <>{fmtPct(s.median_excess, 2)}<span className="text-sub"> · {s.hit_rate === null ? "-" : `${Math.round(s.hit_rate * 100)}%`} · {s.n}건</span></> : "—");
 
   return (
-    <main className="mx-auto max-w-6xl p-4 space-y-6">
+    <main className="mx-auto max-w-6xl px-4 py-4 space-y-8">
       <Nav />
       <Section title="큐별 성과 — 시장 대비 초과수익" count={led.count ?? 0}>
         <Guide>각 칸 = 초과수익 중앙값 · 이긴 비율 · 측정 건수. 진입가는 신호 다음 거래일 종가, 기준은 KOSPI·KOSDAQ·S&amp;P 500. 매도 쪽(⚠️·💰)은 경고 뒤 시장보다 약했으면 이긴 것입니다. 표본 {F.min_samples}건 미만은 참고만 합니다.</Guide>
         {stats.length ? (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto glass rounded-xl px-3">
             <table className="w-full text-sm">
-              <thead className="text-xs text-neutral-500 text-left"><tr><th className={th}>큐</th>{H.map((h) => <th key={h} className={th}>{h}거래일 뒤</th>)}</tr></thead>
+              <thead className="text-xs text-sub text-left"><tr><th className={th}>큐</th>{H.map((h) => <th key={h} className={th}>{h}거래일 뒤</th>)}</tr></thead>
               <tbody>
                 {ORDER.filter((q) => H.some((h) => get(q, h))).map((q) => (
-                  <tr key={q} className="border-t border-neutral-100 dark:border-neutral-900"><td className="py-1 pr-3">{LABEL[q] ?? q}</td>{H.map((h) => <td key={h} className="py-1 pr-3">{cell(get(q, h))}</td>)}</tr>
+                  <tr key={q} className="border-t border-line/50"><td className="py-1 pr-3">{LABEL[q] ?? q}</td>{H.map((h) => <td key={h} className="py-1 pr-3">{cell(get(q, h))}</td>)}</tr>
                 ))}
               </tbody>
             </table>
@@ -65,12 +65,12 @@ export default async function Scorecard() {
           {buyAll ? ` 현재 🎯 전체 ${buyAll.n}건 — ${buyAll.n >= F.min_samples ? "순위 반영 중" : "표본 부족, 기존 규칙 순위 사용 중"}.` : ""}
         </Guide>
         {buyDims.length ? (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto glass rounded-xl px-3">
             <table className="w-full text-sm">
-              <thead className="text-xs text-neutral-500 text-left"><tr><th className={th}>기준</th><th className={th}>구간</th><th className={th}>초과수익 중앙값</th><th className={th}>이긴 비율</th><th className={th}>건수</th><th className={th}>순위 반영</th></tr></thead>
+              <thead className="text-xs text-sub text-left"><tr><th className={th}>기준</th><th className={th}>구간</th><th className={th}>초과수익 중앙값</th><th className={th}>이긴 비율</th><th className={th}>건수</th><th className={th}>순위 반영</th></tr></thead>
               <tbody>
                 {buyDims.map((s) => (
-                  <tr key={`${s.dimension}|${s.bucket}`} className="border-t border-neutral-100 dark:border-neutral-900">
+                  <tr key={`${s.dimension}|${s.bucket}`} className="border-t border-line/50">
                     <td className="py-1 pr-3">{DIMENSION_NAME[s.dimension] ?? s.dimension}</td><td className="py-1 pr-3">{bucketName(s.dimension, s.bucket)}</td>
                     <td className="py-1 pr-3">{fmtPct(s.median_excess, 2)}</td><td className="py-1 pr-3">{s.hit_rate === null ? "-" : `${Math.round(s.hit_rate * 100)}%`}</td>
                     <td className="py-1 pr-3">{s.n}</td><td className="py-1 pr-3">{s.n >= F.min_samples ? "✓" : "—"}</td>
@@ -85,11 +85,11 @@ export default async function Scorecard() {
       <Section title="분기 보정 제안">
         <Guide>분기 첫 토요일 10:30에 성적표와 함께 만듭니다. 설정은 자동으로 바뀌지 않습니다 — 승인한 제안만 설정 변경과 결정 기록(DECISIONS)으로 반영합니다. 필수 조건 M1~M5 자체는 대상이 아닙니다.</Guide>
         {reviews.length ? reviews.map((r) => (
-          <div key={r.id} className="text-sm space-y-1 border-t border-neutral-100 dark:border-neutral-900 pt-2">
+          <div key={r.id} className="text-sm space-y-1 border-t border-line/50 pt-2">
             <div className="font-medium">{r.period} ({r.review_date}) · {STATUS[r.status] ?? r.status}{r.note ? ` — ${r.note}` : ""}</div>
             {r.proposals.length ? (
               <ol className="list-decimal pl-5 text-xs space-y-1">
-                {r.proposals.map((p, i) => <li key={i}>{p.kind === "threshold" ? "🔧" : "ℹ️"} {p.title}{p.rule ? ` — ${p.current} → ${p.suggested}` : ""}<div className="text-neutral-500">{p.evidence}</div></li>)}
+                {r.proposals.map((p, i) => <li key={i}>{p.kind === "threshold" ? "🔧" : "ℹ️"} {p.title}{p.rule ? ` — ${p.current} → ${p.suggested}` : ""}<div className="text-sub">{p.evidence}</div></li>)}
               </ol>
             ) : <Empty text="제안 없음" />}
           </div>

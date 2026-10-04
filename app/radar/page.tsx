@@ -11,7 +11,7 @@ type Sig = { kind: string; source: string; l1_codes: string[]; entity_id: string
 type Q = { entity_id: string; queue: string };
 
 const BASIS: Record<string, string> = { realized: "실적", us_major_broker: "증권사", outlook: "전망" };
-const tone = (v: number | null, hi: number, mid: number) => (v === null ? "" : v >= hi ? "bg-emerald-100 dark:bg-emerald-950" : v >= mid ? "bg-amber-50 dark:bg-amber-950" : "");
+const tone = (v: number | null, hi: number, mid: number) => (v === null ? "" : v >= hi ? "bg-good/20" : v >= mid ? "bg-gold/15" : "");
 
 /** 산업 레이더 (PRD §8 /radar) — 노션 산업 18개: 고성장 근거 3종 · 산업 흐름 강도 · 신호 수 · 바스켓 성과 · 큐 종목 수. 보기 전용 */
 export default async function Radar() {
@@ -39,20 +39,20 @@ export default async function Radar() {
     .sort((a, b) => Number(!!b.h?.m3_pass) - Number(!!a.h?.m3_pass) || (b.h?.n_score ?? -1) - (a.h?.n_score ?? -1));
   const th = "py-1 pr-3 font-normal";
   return (
-    <main className="mx-auto max-w-6xl p-4 space-y-6">
+    <main className="mx-auto max-w-6xl px-4 py-4 space-y-8">
       <Nav />
       <Section title="산업 레이더 (노션 산업 18개)">
         <Guide>고성장 = 실제 실적·미국 대형 증권사 전망·전망 자료 중 하나라도 15% 이상. 산업 흐름 강도는 FlyWheel 신호(0~10). 신호 수는 최근 14일 출처별 건수, 큐는 최신 판정의 매수 검토·선행 레이더·보유 경고 종목 수. 바스켓은 국내 동일가중(주간 투자위원회가 매주 갱신).</Guide>
         {rows.length ? (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto glass rounded-xl px-3">
             <table className="w-full text-sm">
-              <thead className="text-xs text-neutral-500 text-left"><tr>
+              <thead className="text-xs text-sub text-left"><tr>
                 <th className={th}>산업</th><th className={th}>고성장</th><th className={th}>근거</th><th className={th}>실적 매출 중앙값</th><th className={th}>흐름 강도</th><th className={th}>실적 촉매</th>
                 <th className={th}>FlyWheel·Sage·HermesCall·Heimdallr 신호</th><th className={th}>🎯·🔭·⚠️</th><th className={th}>바스켓 1주·1개월</th>
               </tr></thead>
               <tbody>
                 {rows.map(({ r, h, s, q }) => (
-                  <tr key={r.code} className="border-t border-neutral-100 dark:border-neutral-900">
+                  <tr key={r.code} className="border-t border-line/50">
                     <td className="py-1 pr-3">{r.name}</td>
                     <td className="py-1 pr-3">{h?.m3_pass ? "✅" : "—"}</td>
                     <td className="py-1 pr-3 text-xs">{Object.entries(h?.m3_basis?.bases ?? {}).filter(([, v]) => v).map(([k]) => BASIS[k] ?? k).join("·") || "-"}</td>

@@ -3,7 +3,7 @@ import { featuresOf, type FeedbackRules } from "@/lib/engine/feedback";
 import { attribute, type Sample, type StatRow } from "./attribution";
 import { reviewProposals } from "./review";
 
-const cfg: FeedbackRules = { primary_horizon: 20, min_samples: 3, shrinkage_k: 30, dimensions: ["families", "sources", "p_bucket", "market", "l1"], p_buckets: [20, 30, 40], review: { min_gap_pctp: 2 } };
+const cfg: FeedbackRules = { primary_horizon: 20, min_samples: 3, shrinkage_k: 30, dimensions: ["families", "sources", "p_bucket", "market", "l1"], p_buckets: [20, 30, 40], timing_score_buckets: [1, 4], review: { min_gap_pctp: 2 } };
 const fKR = featuresOf({ families: ["heimdallr", "sage"], p: 35, market: "KR", l1: "1b" });
 
 describe("attribute", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseLinkedRow } from "./flywheel";
-import { naverDaily, naverInvestorTrend, parseNaverDaily, parseNaverTrend } from "./market";
+import { naverDaily, naverInvestorTrend, naverStockFlow, parseNaverDaily, parseNaverStockTrend, parseNaverTrend } from "./market";
 import { notionId } from "./notion";
 import { probeTable, rpc, selectAll } from "./rest";
 import { safeReason } from "./types";
@@ -121,6 +121,24 @@ describe("market.naverInvestorTrend (지수 투자자 동향, 억원)", () => {
     expect(await naverInvestorTrend("KOSPI", "2026-10-02", f(404, {}))).toMatchObject({ ok: false, status: 404 });
     expect(await naverInvestorTrend("KOSDAQ", "2026-10-02", f(200, {}))).toMatchObject({ ok: false });
     expect(await naverInvestorTrend("KOSDAQ", "2026-10-02", (async () => { throw new Error("x"); }) as unknown as typeof fetch)).toMatchObject({ ok: false });
+  });
+});
+
+describe("market.naverStockFlow (종목 투자자 동향, 주)", () => {
+  const row = (d: string, f: string, o: string, i?: string) => ({ itemCode: "005930", bizdate: d, foreignerPureBuyQuant: f, organPureBuyQuant: o, ...(i ? { individualPureBuyQuant: i } : {}) });
+  it("파싱: 날짜 오름차순·부호·쉼표, 형식 다른 행 제외", () => {
+    expect(parseNaverStockTrend([row("20261002", "-350,942", "+614,278", "-2,217,946"), row("20261001", "+1", "0"), row("x", "1", "1"), row("20260930", "a", "1"), null])).toEqual([
+      { date: "2026-10-01", foreign: 1, institution: 0, individual: 0 },
+      { date: "2026-10-02", foreign: -350942, institution: 614278, individual: -2217946 },
+    ]);
+    expect(parseNaverStockTrend({})).toEqual([]);
+  });
+  it("Result", async () => {
+    const f = (status: number, body: unknown) => (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+    expect((await naverStockFlow("005930", 5, f(200, [row("20261002", "1", "2")]))).ok).toBe(true);
+    expect(await naverStockFlow("005930", 5, f(500, []))).toMatchObject({ ok: false, status: 500 });
+    expect(await naverStockFlow("005930", 5, f(200, []))).toMatchObject({ ok: false });
+    expect(await naverStockFlow("005930", 5, (async () => { throw new Error("x"); }) as unknown as typeof fetch)).toMatchObject({ ok: false });
   });
 });
 

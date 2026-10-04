@@ -52,12 +52,12 @@ export default async function StockPage({ params, searchParams }: { params: Prom
   const links = stockLinks(e, { links: linksConfig(), taxonomy: tx, jarvisUrl: env().JARVIS_URL });
 
   return (
-    <main className="mx-auto max-w-3xl p-4 space-y-6">
+    <main className="mx-auto max-w-3xl px-4 py-4 space-y-8">
       <Nav />
       <header className="space-y-1">
-        <h1 className="text-2xl font-bold">{e.market === "KR" ? "🇰🇷" : "🇺🇸"} {e.name} <span className="text-base font-normal text-neutral-500">{e.symbol}</span></h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">산업: {e.l1_codes.map(l1Name).join(" + ")} <span className="text-xs text-neutral-500">(분류 근거: {BASIS_NAME[e.l1_basis ?? "none"] ?? e.l1_basis})</span> · {CLASS[e.asset_class] ?? e.asset_class}{e.snowball_asset_id ? " · SnowBall에 보유 또는 관심 등록" : ""}</p>
-        {e.aliases.length > 0 && <p className="text-xs text-neutral-500">다른 이름: {e.aliases.join(", ")}</p>}
+        <h1 className="text-2xl font-bold">{e.market === "KR" ? "🇰🇷" : "🇺🇸"} {e.name} <span className="text-base font-normal text-sub">{e.symbol}</span></h1>
+        <p className="text-sm text-sub">산업: {e.l1_codes.map(l1Name).join(" + ")} <span className="text-xs text-sub">(분류 근거: {BASIS_NAME[e.l1_basis ?? "none"] ?? e.l1_basis})</span> · {CLASS[e.asset_class] ?? e.asset_class}{e.snowball_asset_id ? " · SnowBall에 보유 또는 관심 등록" : ""}</p>
+        {e.aliases.length > 0 && <p className="text-xs text-sub">다른 이름: {e.aliases.join(", ")}</p>}
         <LinkRow links={links} />
       </header>
 
@@ -72,15 +72,15 @@ export default async function StockPage({ params, searchParams }: { params: Prom
         {a ? (
           <table className="text-sm">
             <tbody>
-              <tr><td className="pr-4 text-neutral-500">산업·종목 이야기</td><td>{yesNo(a.n_on)} <span className="text-xs text-neutral-500">FlyWheel 산업 흐름·위키 언급, Sage 멘토 합의</span></td></tr>
-              <tr><td className="pr-4 text-neutral-500">실적 촉매</td><td>{yesNo(a.c_on)} <span className="text-xs text-neutral-500">HermesCall 미국 실적 수혜·가이던스</span></td></tr>
-              <tr><td className="pr-4 text-neutral-500">실적 숫자</td><td>{yesNo(a.f_on)} <span className="text-xs text-neutral-500">Heimdallr 게이트·점수(미국은 성장 가속·이익률 개선)</span></td></tr>
-              <tr><td className="pr-4 text-neutral-500">주가 반영도</td><td>{a.p_value !== null ? `${Math.round(a.p_value)}/100 (${pLevel(a.p_value)})` : "계산 전"}</td></tr>
-              <tr><td className="pr-4 text-neutral-500">보유</td><td>{a.h_held ? "보유 중" : "보유 안 함"}</td></tr>
+              <tr><td className="pr-4 text-sub">산업·종목 이야기</td><td>{yesNo(a.n_on)} <span className="text-xs text-sub">FlyWheel 산업 흐름·위키 언급, Sage 멘토 합의</span></td></tr>
+              <tr><td className="pr-4 text-sub">실적 촉매</td><td>{yesNo(a.c_on)} <span className="text-xs text-sub">HermesCall 미국 실적 수혜·가이던스</span></td></tr>
+              <tr><td className="pr-4 text-sub">실적 숫자</td><td>{yesNo(a.f_on)} <span className="text-xs text-sub">Heimdallr 게이트·점수(미국은 성장 가속·이익률 개선)</span></td></tr>
+              <tr><td className="pr-4 text-sub">주가 반영도</td><td>{a.p_value !== null ? `${Math.round(a.p_value)}/100 (${pLevel(a.p_value)})` : "계산 전"}</td></tr>
+              <tr><td className="pr-4 text-sub">보유</td><td>{a.h_held ? "보유 중" : "보유 안 함"}</td></tr>
             </tbody>
           </table>
         ) : <Empty text="아직 평가되지 않았습니다(종목 신호나 보유가 있을 때 평가)." />}
-        {qs.length > 0 && <p className="text-xs text-neutral-500">최근 목록 이력: {qs.map((q) => `${q.date.slice(5)} ${QUEUE_NAME[q.queue]}`).join(" · ")}</p>}
+        {qs.length > 0 && <p className="text-xs text-sub">최근 목록 이력: {qs.map((q) => `${q.date.slice(5)} ${QUEUE_NAME[q.queue]}`).join(" · ")}</p>}
       </Section>
 
       <Section title="산업 고성장 여부">
@@ -98,7 +98,7 @@ export default async function StockPage({ params, searchParams }: { params: Prom
       <Section title="앞으로 6개월 안의 상승 이벤트" count={events.length}>
         <Guide>SnowBall 트리거·HermesCall 분석·Heimdallr 분석·실적 일정(컨센서스 상향)·수동 일정에서 모은 이벤트입니다. “~날짜”는 그 날짜까지의 기간을 뜻합니다.</Guide>
         {events.length === 0 ? <Empty text="없음" /> : (
-          <ul className="text-sm list-disc pl-5 space-y-0.5">{events.slice(0, 12).map((x, i) => <li key={i}>{x.date ?? `~${x.window_end}`} · {x.title} <span className="text-xs text-neutral-500">({x.source})</span></li>)}</ul>
+          <ul className="text-sm list-disc pl-5 space-y-0.5">{events.slice(0, 12).map((x, i) => <li key={i}>{x.date ?? `~${x.window_end}`} · {x.title} <span className="text-xs text-sub">({x.source})</span></li>)}</ul>
         )}
       </Section>
 
@@ -107,7 +107,7 @@ export default async function StockPage({ params, searchParams }: { params: Prom
           <ul className="text-sm space-y-0.5">
             {signals.slice(0, 30).map((s, i) => (
               <li key={i}>{String(s.observed_at).slice(0, 10)} · {SIGNAL_NAME[s.kind as string] ?? s.kind} · {direction(s.direction as number)} · 강도 {s.strength}/10
-                {"l1_codes" in s && (s.l1_codes as string[])?.length ? <span className="text-xs text-neutral-500"> ({(s.l1_codes as string[]).map(l1Name).join(", ")} 산업 전체)</span> : null}</li>
+                {"l1_codes" in s && (s.l1_codes as string[])?.length ? <span className="text-xs text-sub"> ({(s.l1_codes as string[]).map(l1Name).join(", ")} 산업 전체)</span> : null}</li>
             ))}
           </ul>
         )}
@@ -117,7 +117,7 @@ export default async function StockPage({ params, searchParams }: { params: Prom
         <Guide>이 종목을 SnowBall 아이디어 초안으로 보냅니다(매수·논지 입력은 SnowBall에서).</Guide>
         <form action={submitToSnowball}>
           <input type="hidden" name="entity_id" value={e.id} />
-          <button className="rounded border border-neutral-400 px-3 py-1 text-sm">SnowBall 아이디어 초안으로 보내기</button>
+          <button className="rounded border border-line px-3 py-1 text-sm">SnowBall 아이디어 초안으로 보내기</button>
         </form>
         {sp.submitted && <p className="text-sm">{sp.submitted === "ok" ? "✅ SnowBall 아이디어 초안으로 보냈습니다." : `❌ ${sp.submitted}`}</p>}
       </Section>

@@ -5,10 +5,11 @@
  *  · 첫 파이프라인 실행일(원장 시작일)의 큐는 새 신호가 아니라 시작 시점에 이미 있던 상태 → payload.initial_state=true
  * 매수 쪽(🎯·🔭·⏳)은 초과수익이 클수록, 매도 쪽(⚠️·💰)은 초과수익이 작을수록(이후 하락) 좋은 신호다.
  */
+import type { SignalFeatures } from "@/lib/engine/feedback";
 import { marketDate, type Market } from "./returns";
 
 export type Side = "buy" | "sell";
-export const QUEUE_SIDE: Record<string, Side> = { buy: "buy", radar: "buy", pullback_wait: "buy", take_profit: "sell", holding_alert: "sell", green: "buy", yellow: "buy", blue: "buy" };
+export const QUEUE_SIDE: Record<string, Side> = { buy: "buy", radar: "buy", pullback_wait: "buy", take_profit: "sell", holding_alert: "sell", green: "buy", yellow: "buy", blue: "buy", pick: "buy", pick_all: "buy" };
 
 export type Benchmark = "KOSPI" | "KOSDAQ" | "SPX";
 
@@ -16,7 +17,7 @@ export type QueueItem = { date: string; entity_id: string; queue: string; reason
 export type SubmitNote = { entity_id: string | null; dedupe_key: string; sent_at: string | null; payload: Record<string, unknown> | null };
 
 export type LedgerInsert = {
-  event_type: "queue" | "snowball_submit" | "green" | "yellow" | "blue";
+  event_type: "queue" | "snowball_submit" | "green" | "yellow" | "blue" | "pick";
   entity_id: string;
   market: Market;
   tag: string;
@@ -119,4 +120,37 @@ export function ledgerFromBreakouts(rows: BreakoutRow[]): LedgerInsert[] {
     return market ? [{ event_type: "blue" as const, entity_id: b.entity_id, market, tag: b.source, level: "buy" as const, signal_date: b.d0, benchmark: market === "US" ? "SPX" as const : null,
       payload: { source: b.source, d0_low: b.d0_low }, dedupe_key: `blue:${b.entity_id}:${b.source}:${b.d0}` }] : [];
   });
+}
+
+export type PickCandidate = { id: string; picked: boolean; rank: number | null; features?: SignalFeatures | null };
+export type PickNote = { kind: string; sent_at: string | null; payload: { ideas?: string[]; candidates?: PickCandidate[] } | null };
+
+/**
+ * 🎯 브리핑 후보 → 원장 `pick` (사후 검증, D54). 추천한 종목(tag top)과 추천하지 않은 후보(tag candidate)를 모두 남긴다 —
+ * 선별 기준이 실제로 승률을 높였는지 비교하고, 제외한 구간도 계속 측정하기 위해서다.
+ * 종목·시장 날짜당 1건(아침·저녁 브리핑이 같은 시장 날짜면 합침 — 한 번이라도 추천했으면 top). 옛 브리핑(ideas 코드만)은 추천분만 특징 없이.
+ */
+export function ledgerFromPicks(notes: PickNote[], idOf: (code: string) => string | null): LedgerInsert[] {
+  const out = new Map<string, LedgerInsert>();
+  for (const n of [...notes].filter((x) => x.sent_at).sort((a, b) => String(a.sent_at).localeCompare(String(b.sent_at)))) {
+    const cands: PickCandidate[] = n.payload?.candidates
+      ?? (n.payload?.ideas ?? []).map((c, i) => ({ id: idOf(c) ?? "", picked: true, rank: i + 1, features: null }));
+    for (const c of cands) {
+      const market = marketOfId(c.id);
+      if (!market) continue;
+      const signal_date = marketDate(new Date(n.sent_at as string), market);
+      const key = `pick:${c.id}:${signal_date}`;
+      const prev = out.get(key);
+      if (prev) {
+        if (c.picked && !prev.payload.picked) Object.assign(prev, { tag: "top", payload: { ...prev.payload, picked: true, rank: c.rank, brief: n.kind } });
+        continue;
+      }
+      out.set(key, {
+        event_type: "pick", entity_id: c.id, market, tag: c.picked ? "top" : "candidate", level: "buy", signal_date, benchmark: market === "US" ? "SPX" : null,
+        payload: { picked: c.picked, rank: c.rank, brief: n.kind, signal_at: iso(n.sent_at as string), features: c.features ?? null, features_source: c.features ? "brief" : null },
+        dedupe_key: key,
+      });
+    }
+  }
+  return [...out.values()];
 }

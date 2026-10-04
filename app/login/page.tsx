@@ -27,17 +27,17 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const msg = sp.error === "invalid" ? "이메일 또는 비밀번호가 맞지 않습니다."
     : sp.error === "forbidden" ? "허용되지 않은 계정입니다."
     : sp.error === "config" ? "환경변수(Supabase URL·anon 키)가 설정되지 않았습니다." : null;
-  const input = "w-full rounded border border-neutral-300 dark:border-neutral-700 bg-transparent px-3 py-2";
+  const input = "w-full rounded-lg border border-line bg-panel/80 px-3 py-2 text-white placeholder:text-sub";
   return (
-    <main className="mx-auto max-w-sm p-6 space-y-4">
-      <h1 className="text-2xl font-bold">JARVIS 로그인</h1>
+    <main className="mx-auto max-w-md p-6 pt-16 space-y-5">
+      <h1 className="text-center"><span className="jarvis-logo text-7xl sm:text-8xl inline-block">JARVIS</span><span className="block mt-1 text-sub text-sm">🔐 로그인</span></h1>
       <form action={signIn} className="space-y-3">
         <input name="email" type="email" required autoComplete="username" placeholder="이메일" className={input} />
         <input name="password" type="password" required autoComplete="current-password" placeholder="비밀번호" className={input} />
-        <button className="w-full rounded bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 py-2 font-medium">로그인</button>
+        <button className="w-full rounded bg-gold text-ink font-semibold py-2 font-medium">로그인</button>
       </form>
-      {msg && <p className="text-sm text-red-600">{msg}</p>}
-      <p className="text-xs text-neutral-500">한 번 로그인하면 이 브라우저에서는 유지됩니다. 비밀번호 변경: PC에서 <code>npm run job -- set_password</code></p>
+      {msg && <p className="text-sm text-hot">{msg}</p>}
+      <p className="text-xs text-sub">한 번 로그인하면 이 브라우저에서는 유지됩니다. 비밀번호 변경: PC에서 <code>npm run job -- set_password</code></p>
     </main>
   );
 }

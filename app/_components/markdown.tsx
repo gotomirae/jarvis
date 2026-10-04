@@ -17,21 +17,21 @@ export function Markdown({ md }: { md: string }) {
       i--;
       const [head, ...body] = rows;
       out.push(
-        <div key={k} className="overflow-x-auto">
+        <div key={k} className="overflow-x-auto glass rounded-xl px-3">
           <table className="w-full text-sm my-1">
-            <thead className="text-xs text-neutral-500 text-left"><tr>{head.map((h, j) => <th key={j} className="py-1 pr-3 font-normal">{h}</th>)}</tr></thead>
-            <tbody>{body.map((r, j) => <tr key={j} className="border-t border-neutral-100 dark:border-neutral-900">{r.map((c, m) => <td key={m} className="py-1 pr-3 align-top">{c}</td>)}</tr>)}</tbody>
+            <thead className="text-xs text-sub text-left"><tr>{head.map((h, j) => <th key={j} className="py-1 pr-3 font-normal">{h}</th>)}</tr></thead>
+            <tbody>{body.map((r, j) => <tr key={j} className="border-t border-line/50">{r.map((c, m) => <td key={m} className="py-1 pr-3 align-top">{c}</td>)}</tr>)}</tbody>
           </table>
         </div>,
       );
       continue;
     }
     const strip = (s: string) => s.replace(/\*\*/g, "");
-    if (l.startsWith("### ")) out.push(<h3 key={k} className="font-semibold mt-3">{strip(l.slice(4))}</h3>);
-    else if (l.startsWith("## ")) out.push(<h2 key={k} className="text-lg font-semibold mt-5">{strip(l.slice(3))}</h2>);
-    else if (l.startsWith("# ")) out.push(<h1 key={k} className="text-xl font-bold">{strip(l.slice(2))}</h1>);
+    if (l.startsWith("### ")) out.push(<h3 key={k} className="font-semibold mt-3 text-arc">{strip(l.slice(4))}</h3>);
+    else if (l.startsWith("## ")) out.push(<h2 key={k} className="text-xl font-bold mt-6 text-gold">{strip(l.slice(3))}</h2>);
+    else if (l.startsWith("# ")) out.push(<h1 key={k} className="text-2xl font-extrabold">{strip(l.slice(2))}</h1>);
     else if (l.startsWith("- ")) out.push(<li key={k} className="ml-5 list-disc text-sm">{strip(l.slice(2))}</li>);
-    else if (l.startsWith("> ")) out.push(<blockquote key={k} className="border-l-2 border-neutral-300 pl-3 text-sm text-neutral-600 dark:text-neutral-400">{strip(l.slice(2))}</blockquote>);
+    else if (l.startsWith("> ")) out.push(<blockquote key={k} className="border-l-2 border-line pl-3 text-sm text-sub">{strip(l.slice(2))}</blockquote>);
     else out.push(<p key={k} className={`text-sm ${l.startsWith("**") ? "font-medium mt-2" : ""}`}>{strip(l)}</p>);
   }
   return <div className="space-y-1">{out}</div>;

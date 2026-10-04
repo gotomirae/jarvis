@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { bucketsOf, featuresOf, pBucket, perfLine, perfPrior, type FeedbackRules, type PerfStat } from "./feedback";
 import { rankBuy } from "./idea";
 
-const cfg: FeedbackRules = { primary_horizon: 20, min_samples: 30, shrinkage_k: 30, dimensions: ["families", "sources", "p_bucket", "grade", "market", "l1"], p_buckets: [40, 20, 30], review: { min_gap_pctp: 2 } };
+const cfg: FeedbackRules = { primary_horizon: 20, min_samples: 30, shrinkage_k: 30, dimensions: ["families", "sources", "p_bucket", "grade", "market", "l1"], p_buckets: [40, 20, 30], timing_score_buckets: [1, 4], review: { min_gap_pctp: 2 } };
 const f = featuresOf({ families: ["sage", "heimdallr"], p: 25, grade: "★", market: "KR", l1: "1b" });
 const st = (dimension: string, bucket: string, n: number, median_excess: number | null, extra: Partial<PerfStat> = {}): PerfStat => ({ scope: "buy", dimension, bucket, horizon_days: 20, n, median_excess, hit_rate: 0.6, ...extra });
 
@@ -25,6 +25,19 @@ describe("feedback 구간", () => {
     ]);
     const g = featuresOf({ families: ["a", "b", "c", "d"], p: null, market: "US" });
     expect(bucketsOf(g, cfg).filter((b) => ["families", "grade", "l1"].includes(b.dimension)).map((b) => b.bucket)).toEqual(["4+", "없음", "없음"]);
+  });
+});
+
+describe("타이밍 차원 (D54) — 타이밍이 있는 특징(브리핑 후보)에만", () => {
+  const tc = { ...cfg, dimensions: ["market", "timing_verdict", "timing_score", "timing_check"] as FeedbackRules["dimensions"] };
+  it("단계·점수 구간·항목별", () => {
+    const g = featuresOf({ p: 20, market: "KR", timing: { score: 5, verdict: "high", checks: { p: "pass", rsi: "fail" } } });
+    expect(g.timing).toEqual({ score: 5, verdict: "high", checks: { p: "pass", rsi: "fail" } });
+    expect(bucketsOf(g, tc)).toEqual([
+      { dimension: "all", bucket: "all" }, { dimension: "market", bucket: "KR" }, { dimension: "timing_verdict", bucket: "high" },
+      { dimension: "timing_score", bucket: "≥4" }, { dimension: "timing_check", bucket: "p:pass" }, { dimension: "timing_check", bucket: "rsi:fail" },
+    ]);
+    expect(bucketsOf(featuresOf({ p: 20, market: "KR" }), tc)).toEqual([{ dimension: "all", bucket: "all" }, { dimension: "market", bucket: "KR" }]);
   });
 });
 

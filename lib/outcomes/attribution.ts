@@ -12,7 +12,7 @@ export type StatRow = PerfStat & { mean_excess: number | null; median_ret: numbe
 
 const r2 = (x: number) => Math.round(x * 100) / 100;
 
-export function attribute(samples: Sample[], cfg: Pick<FeedbackRules, "dimensions" | "p_buckets" | "min_samples">): StatRow[] {
+export function attribute(samples: Sample[], cfg: Pick<FeedbackRules, "dimensions" | "p_buckets" | "timing_score_buckets" | "min_samples">): StatRow[] {
   const groups = new Map<string, { scope: string; level: Side; dimension: string; bucket: string; horizon_days: number; xs: Sample[] }>();
   for (const s of samples) {
     const buckets = s.features ? bucketsOf(s.features, cfg) : [{ dimension: "all", bucket: "all" }];

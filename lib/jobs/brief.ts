@@ -6,8 +6,13 @@ import { linksConfig, taxonomyConfig } from "@/lib/config/load";
 import { dbInsert, dbSelect, dbSelectAll } from "@/lib/db";
 import { getState } from "./poll";
 import type { AxesEvidence } from "@/lib/engine/explain";
-import { featuresOf, perfLine, perfPrior, type PerfStat } from "@/lib/engine/feedback";
+import { perfLine, type PerfStat } from "@/lib/engine/feedback";
 import { buyReasons, consensusOf, EMPTY_IDEA, ideaCard, rankBuy } from "@/lib/engine/idea";
+import { assess, type Policy } from "@/lib/engine/pick-policy";
+import { issues } from "@/lib/engine/timing";
+import { yahooCandidates } from "@/lib/outcomes/ledger";
+import { recHistory, recLine, type BriefNote } from "@/lib/outcomes/rec-history";
+import { closeOnOrBefore, lastCompleteDate } from "@/lib/outcomes/returns";
 import { FAMILY_NAME } from "@/lib/labels";
 import { TAG_NAME } from "@/lib/engine/entry-view";
 import { esc } from "@/lib/telegram/format";
@@ -15,7 +20,7 @@ import { QUEUE_LABEL, type Queue } from "@/lib/engine/queues";
 import { env } from "@/lib/env";
 import { read as heimdallr } from "@/lib/ingest/heimdallr";
 import { read as hermes } from "@/lib/ingest/hermescall";
-import { charts } from "@/lib/ingest/market";
+import { chart, charts, naverDaily } from "@/lib/ingest/market";
 import { dashboardButtons, inlineLinks, linkLine, rows, type LinkEntity } from "@/lib/links";
 import { sendMessage } from "@/lib/telegram/send";
 import { BRIEF_SPLIT, briefText, type BriefData } from "@/lib/telegram/templates";
@@ -24,9 +29,10 @@ import { loadEntities, rules } from "./context";
 import { currentRegime } from "./pipeline";
 
 const OTHERS: Queue[] = ["radar", "pullback_wait", "take_profit"];
-const MAX_IDEAS = 5;
 
-export async function buildBrief(kind: "morning" | "evening", now = new Date()): Promise<BriefData> {
+export type PickLog = { picks: { id: string; rank: number; price: number | null; price_date: string | null }[]; candidates: unknown[]; policy_as_of: string | null };
+
+export async function buildBrief(kind: "morning" | "evening", now = new Date()): Promise<BriefData & { pickLog: PickLog }> {
   const R = rules();
   const date = briefDate(kind, now);
   const market = kind === "morning" ? R.market.morning : R.market.evening;
@@ -49,26 +55,42 @@ export async function buildBrief(kind: "morning" | "evening", now = new Date()):
   const ax = buys.length ? await dbSelectAll<{ entity_id: string; evidence: AxesEvidence }>("axes_daily", `select=entity_id,evidence&date=eq.${date}&entity_id=in.(${buys.map((i) => `"${i.entity_id}"`).join(",")})`) : { ok: true as const, data: [] };
   const evBy = new Map((ax.ok ? ax.data : []).map((a) => [a.entity_id, a.evidence]));
 
-  // 🎯 추천: (과거 성과 표본 30건 이상이면 기대 초과수익 →) 신호 계열 수 → 주가 반영도(낮을수록) → 산업 실제 성장률 → 가까운 이벤트 순 최대 5개 (D49)
+  // 🎯 추천 (D53·D54): 후보마다 ⏱️ 지금 매수 매력을 판정 → TOP 자격(기본: ⏸️ 대기 제외 + 사후 검증으로 배운 기준) →
+  //    (과거 성과 표본 30건 이상이면 기대 초과수익 →) 매수 매력 점수 → 신호 계열 수 → 주가 반영도(낮을수록) → 산업 실제 성장률 → 가까운 이벤트 순 최대 top_max 개.
   //    추천 시장(아침 미국 · 저녁 국내)을 먼저 채우고, 모자라면 다른 시장으로 채운다 (아침 07:30 은 국내 장 시작 전이라 국내 추천도 유효)
-  const stats = await latestPerfStats();
+  const [stats, policy, notes] = await Promise.all([latestPerfStats(), currentPolicy(), briefNotes()]);
+  const today = kstDate(now);
   const scored = buys.map((b) => {
     const ev = evBy.get(b.entity_id) ?? {};
     const e = ents.byId.get(b.entity_id)!;
     const p = (b.reason as { p?: number | null }).p ?? null;
-    const prior = perfPrior(featuresOf({ families: ev.families, p, grade: ev.F?.grade, market: e.market, l1: e.primary_l1 }), stats, "buy", R.feedback);
-    return { ...b, ev, families: ev.families?.length ?? 0, p, industryGrowth: ev.idea?.industry?.realized_median ?? null, nextEvent: ev.next_event ?? null, perf: prior.score, prior };
+    const a = assess({ ev, p, market: e.market, l1: e.primary_l1, riskOff: reg.risk_off, today }, R, policy, stats);
+    return { ...b, e, ev, a, families: ev.families?.length ?? 0, p, industryGrowth: ev.idea?.industry?.realized_median ?? null, nextEvent: ev.next_event ?? null, perf: a.prior.score, timing: a.timing.score };
   });
   const bucketName = (d: string, b: string) => (d === "l1" ? l1Name.get(b) ?? b : d === "sources" ? FAMILY_NAME[b] ?? b : d === "families" ? `${b}개` : d === "market" ? (b === "KR" ? "국내" : "미국") : b);
-  const first = rankBuy(scored.filter((b) => ents.byId.get(b.entity_id)!.market === focus), MAX_IDEAS);
-  const ranked = [...first, ...rankBuy(scored.filter((b) => ents.byId.get(b.entity_id)!.market !== focus), MAX_IDEAS - first.length)];
+  const MAX = R.pick_policy.top_max;
+  const ok = scored.filter((b) => b.a.admit.ok);
+  const first = rankBuy(ok.filter((b) => b.e.market === focus), MAX);
+  const ranked = [...first, ...rankBuy(ok.filter((b) => b.e.market !== focus), MAX - first.length)];
+  const hist = recHistory(notes, (c) => idOfCode(c, ents));
+  const prices = new Map(await Promise.all(ranked.map(async (b) => [b.entity_id, await priceRef(b.entity_id, now, hist.get(b.entity_id)?.first_at ?? null)] as const)));
   const ideas = ranked.map((b, i) => {
-    const e = ents.byId.get(b.entity_id)!;
+    const e = b.e;
     const idea = b.ev.idea ?? EMPTY_IDEA;
-    const reasons = buyReasons({ idea, p: b.p, consensus: consensusOf(b.ev), grade: b.ev.F?.grade ?? null, score: b.ev.F?.score ?? null });
+    const reasons = buyReasons({ idea, consensus: consensusOf(b.ev), grade: b.ev.F?.grade ?? null, score: b.ev.F?.score ?? null });
     const industry = idea.industry?.name ?? (e.primary_l1 ? l1Name.get(e.primary_l1) ?? "" : "");
-    return ideaCard(i + 1, { name: e.name, symbol: e.symbol, market: e.market, industry }, idea, reasons, b.ev.tech, linkLine(e as unknown as LinkEntity, ctx), perfLine(b.prior, R.feedback, bucketName));
+    const h = hist.get(b.entity_id), px = prices.get(b.entity_id);
+    const history = recLine({ nth: (h?.count ?? 0) + 1, first_at: h?.first_at ?? null, first_price: h?.first_price ?? px?.first ?? null, cur_price: px?.price ?? null, cur_date: px?.date ?? null, currency: e.market === "KR" ? "KRW" : "USD" });
+    return ideaCard(i + 1, { name: e.name, symbol: e.symbol, market: e.market, industry }, idea, reasons, b.ev.tech, linkLine(e as unknown as LinkEntity, ctx), perfLine(b.a.prior, R.feedback, bucketName), { timing: b.a.timing, history });
   });
+  const picked = new Map(ranked.map((b, i) => [b.entity_id, i + 1]));
+  const waiting = scored.filter((b) => !b.a.admit.ok).sort((x, y) => y.a.timing.score - x.a.timing.score)
+    .map((b) => ({ name: b.e.name, why: [b.a.admit.why[0], issues(b.a.timing)].filter(Boolean).join(" — ") }));
+  const pickLog = {
+    picks: ranked.map((b) => ({ id: b.entity_id, rank: picked.get(b.entity_id) as number, price: prices.get(b.entity_id)?.price ?? null, price_date: prices.get(b.entity_id)?.date ?? null })),
+    candidates: scored.map((b) => ({ id: b.entity_id, picked: picked.has(b.entity_id), rank: picked.get(b.entity_id) ?? null, features: b.a.features })),
+    policy_as_of: policy?.as_of ?? null,
+  };
   const others = OTHERS.map((q) => ({ icon: QUEUE_LABEL[q].split(" ")[0], label: QUEUE_LABEL[q].replace(/^\S+\s/, ""), names: mine.filter((x) => x.queue === q).map((x) => ents.byId.get(x.entity_id)!.name) }));
 
   // 실적: 아침 = 밤사이 HermesCall 미국 발표, 저녁 = 오늘 Heimdallr ★○
@@ -80,7 +102,7 @@ export async function buildBrief(kind: "morning" | "evening", now = new Date()):
     const nt = await heimdallr<{ code: string; kind: string; payload: { grade?: string; score?: number } | null; sent_at: string }>("notifications", { select: "code,kind,payload,sent_at", filters: { sent_at: `gte.${since24}`, kind: "in.(flash,upgrade)" } });
     for (const x of nt.ok ? nt.data : []) {
       const g = x.payload?.grade;
-      if (g === "★" || g === "○") earnings.lines.push(`${g} ${ents.byId.get(`KR:${x.code}`)?.name ?? x.code} (${x.code}) 점수 ${x.payload?.score ?? "-"}`);
+      if (g === "★" || g === "○") earnings.lines.push(`${g} ${ents.byId.get(`KR:${x.code}`)?.name ?? x.code} (${x.code}) 점수 ${x.payload?.score == null ? "-" : Math.round(x.payload.score * 10) / 10}`);
     }
   }
 
@@ -105,7 +127,7 @@ export async function buildBrief(kind: "morning" | "evening", now = new Date()):
     regime: { risk_off: reg.risk_off, reasons: reg.reasons },
     counts: { ...entry.counts, alert: al.length }, entries: entry.lines,
     alertsPaused: (await getState<{ paused?: boolean }>("holding_alert_pause"))?.paused === true,
-    earnings, focus, ideas, buyTotal: buys.length, others,
+    earnings, focus, ideas, buyTotal: buys.length, others, waiting, policy: policyNote(policy), pickLog,
     holding: al.slice(0, 8).map((a) => `⚠️ ${a.payload?.name ?? a.entity_id ?? "-"}: ${a.payload?.summary ?? ""}`),
     schedule: { ...schedule, lines: schedule.lines.slice(0, 10) },
     asOf: kstString(now),
@@ -132,14 +154,46 @@ async function entryLines(market: "KR" | "US", now: Date, ents: Awaited<ReturnTy
   return { counts: { green: rowsE.filter((x) => x.level === "green").length, yellow: rowsE.filter((x) => x.level === "yellow").length, blue: blues.length }, lines };
 }
 
-/** 최신 성과 스냅샷(🎯 매수 검토, 기준 기간) — outcomes_update 가 매일 20:00 에 쓴다. 없으면 빈 배열(규칙 순위) */
+/** 최신 성과 스냅샷(🎯 매수 검토 · 브리핑 후보 전체, 기준 기간) — outcomes_update 가 매일 20:00 에 쓴다. 없으면 빈 배열(규칙 순위) */
 async function latestPerfStats(): Promise<PerfStat[]> {
   const h = rules().feedback.primary_horizon;
   const last = await dbSelect<{ as_of: string }>("perf_stats", "select=as_of&order=as_of.desc&limit=1");
   const asOf = last.ok ? last.data[0]?.as_of : undefined;
   if (!asOf) return [];
-  const r = await dbSelectAll<PerfStat>("perf_stats", `select=scope,dimension,bucket,horizon_days,n,median_excess,hit_rate&as_of=eq.${asOf}&scope=eq.buy&horizon_days=eq.${h}`);
+  const r = await dbSelectAll<PerfStat>("perf_stats", `select=scope,dimension,bucket,horizon_days,n,median_excess,hit_rate&as_of=eq.${asOf}&scope=in.(buy,${rules().pick_policy.scope})&horizon_days=eq.${h}`);
   return r.ok ? r.data : [];
+}
+
+/** 사후 검증으로 배운 추천 기준 — outcomes_update 가 bot_state.pick_policy 에 매일 쓴다 */
+export async function currentPolicy(): Promise<Policy | null> {
+  return (await getState<{ policy?: Policy }>("pick_policy"))?.policy ?? null;
+}
+
+function policyNote(p: Policy | null): string | null {
+  if (!p?.overall || !p.overall.n) return null;
+  const o = p.overall;
+  const head = `사후 검증 ${o.n}건 · ${p.horizon}거래일 뒤 승률 ${o.hit_rate === null ? "-" : `${Math.round(o.hit_rate * 100)}%`}`;
+  if (!p.exclude.length) return `${head} — 아직 추가로 뺀 기준 없음`;
+  return `${head} — ${p.applied ? "제외 적용 중" : "제외 제안(미적용)"}: ${p.exclude.slice(0, 3).map((x) => x.title).join(" · ")}`;
+}
+
+/** 지난 브리핑(발송 성공) — 추천 횟수·첫 추천가 */
+async function briefNotes(): Promise<BriefNote[]> {
+  const r = await dbSelectAll<BriefNote>("notifications", "select=sent_at,payload&kind=in.(brief_morning,brief_evening)&sent_at=not.is.null&order=sent_at.asc");
+  return r.ok ? r.data : [];
+}
+
+/** 옛 브리핑 payload.ideas(종목 코드) → 종목 ID */
+const idOfCode = (code: string, ents: Awaited<ReturnType<typeof loadEntities>>) => (ents.byId.has(`KR:${code}`) ? `KR:${code}` : ents.byId.has(`US:${code}`) ? `US:${code}` : null);
+
+/** 추천 기준가 = 지금 확정된 마지막 종가 (국내 네이버 공식 종가 · 미국 야후 — 성과 원장과 같은 출처). 첫 추천가가 없던 옛 브리핑은 그날 종가로 */
+async function priceRef(id: string, now: Date, firstAt: string | null): Promise<{ price: number | null; date: string | null; first: number | null }> {
+  const market = id.startsWith("US:") ? "US" : "KR";
+  const bars = market === "KR" ? await naverDaily(id.slice(3), 300) : await chart(yahooCandidates(id, null)[0], "1y").then((r) => (r.ok ? { ok: true as const, data: r.data.closes } : r));
+  if (!bars.ok) return { price: null, date: null, first: null };
+  const cur = closeOnOrBefore(bars.data, lastCompleteDate(now, market));
+  const first = firstAt ? closeOnOrBefore(bars.data, lastCompleteDate(new Date(firstAt), market)) : null;
+  return { price: cur?.close ?? null, date: cur?.date ?? null, first: first?.close ?? null };
 }
 
 export async function sendBrief(kind: "morning" | "evening", now = new Date(), opts: { force?: boolean } = {}): Promise<Record<string, unknown>> {
@@ -151,7 +205,7 @@ export async function sendBrief(kind: "morning" | "evening", now = new Date(), o
   const chat = env().TELEGRAM_CHAT_ID;
   const buttons = rows(dashboardButtons(linksConfig().dashboards, env().JARVIS_URL), 3);
   const r = chat ? await sendMessage(chat, briefText(data), buttons, BRIEF_SPLIT) : { ok: false as const, reason: "TELEGRAM_CHAT_ID 미설정" };
-  await dbInsert("notifications", [{ kind: `brief_${kind}`, dedupe_key: key, payload: { ideas: data.ideas.map((c) => c.code), buy_total: data.buyTotal, alerts: data.counts.alert, error: r.ok ? undefined : r.reason, scheduled_kst: kind === "morning" ? "07:30" : "19:20" },
+  await dbInsert("notifications", [{ kind: `brief_${kind}`, dedupe_key: key, payload: { ideas: data.ideas.map((c) => c.code), ...data.pickLog, buy_total: data.buyTotal, alerts: data.counts.alert, error: r.ok ? undefined : r.reason, scheduled_kst: kind === "morning" ? "07:30" : "19:20" },
     sent_at: r.ok ? new Date().toISOString() : null, telegram_msg_id: r.ok ? r.data[0] : null }], { upsertOn: "dedupe_key" });
   if (!r.ok) throw new Error(`브리핑 발송 실패: ${r.reason}`);
   return { sent: key, ideas: data.ideas.map((c) => c.code), alerts: data.counts.alert, sent_at_kst: kstString(new Date()) };

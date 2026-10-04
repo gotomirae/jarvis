@@ -17,49 +17,56 @@ describe("telegram templates", () => {
     expect(holdingAlertText({ market: null, name: "펀드", code: "F", causes: [], thesisLink: null, weight: 0, allowed: 0, heat: 0, pri: 0 })).toContain("<b>보유 경고</b> ·  <b>펀드</b>");
   });
 
-  it("브리핑 (부록 B.2) — 🎯 추천 카드 최대 5개·그 밖의 관찰 요약", () => {
+  it("브리핑 (부록 B.2, D53) — 시장 줄마다 이모지·지금 사기 좋은 TOP·대기 목록·사후 검증 요약", () => {
     const card = {
       rank: 1, name: "저스템", code: "417840", industry: "반도체", flag: "🇰🇷",
-      thesis: "습도제어 <과점>", reasons: ["① 실적 가속: 매출 +159%", "② 주가 덜 반영: 33/100"],
+      thesis: "습도제어 <과점>", reasons: ["① 실적 가속: 매출 +159%"], history: "🔁 3번째 추천 · 첫 추천 09/27 12,000원 → 13,200원 +10.0% 📈",
+      verdict: "🔥 지금 매수 매력 높음 (점수 +6)", timing: ["✅ 주가 반영도 33/100", "✅ 기관 2일 연속 순매수"],
       events: ["~11/30 3Q 실적 (Heimdallr 분석)"], risk: "일회성 가능성 → 확인: 3Q 매출", tech: "RSI 55(중립)", links: '🔗 <a href="u">네이버</a>',
     };
     const d: BriefData = {
       kind: "evening", date: "2026-10-22",
-      market: [{ label: "KOSPI", last: 2600, change_pct: 0.8 }, { label: "원/달러", last: 1350.5, change_pct: -0.1, level: true }, { label: "X", last: null, change_pct: null }],
+      market: [{ label: "KOSPI", last: 2600, change_pct: 0.8 }, { label: "원/달러", last: 1350.5, change_pct: -0.1, level: true }, { label: "X", last: null, change_pct: null }, { label: "Y", last: 1, change_pct: 0 }],
       sectors: [{ label: "A", change_pct: 1 }, { label: "B", change_pct: -2 }, { label: "C", change_pct: null }, { label: "D", change_pct: 0.5 }],
       regime: { risk_off: true, reasons: ["VIX 30 ≥ 25 & KOSPI < 60일선"] },
       counts: { green: 1, yellow: 3, blue: 2, alert: 0 }, alertsPaused: true,
       earnings: { title: "오늘 국내 실적", lines: ["★ 리노공업 (058470)"] },
-      focus: "KR", buyTotal: 8,
-      ideas: [card, { ...card, rank: 2, name: "B", code: "1", industry: "", thesis: null, reasons: [], events: [], risk: null, tech: null, links: "" }, { ...card, rank: 7 }],
+      focus: "KR", buyTotal: 8, policy: "사후 검증 42건 · 20거래일 뒤 승률 58% — 제외 적용 중: RSI 과열 탈락",
+      ideas: [card, { ...card, rank: 2, name: "B", code: "1", industry: "", history: null, verdict: null, timing: [], thesis: null, reasons: [], events: [], risk: null, tech: null, links: "" }, { ...card, rank: 7 }],
+      waiting: [{ name: "<W>", why: "기본 기준: ⏸️ 대기" }, ...Array.from({ length: 6 }, (_, i) => ({ name: `w${i}`, why: "" }))],
       others: [{ icon: "🔭", label: "선행 레이더", names: ["a", "b", "c", "d", "e", "f", "g"] }, { icon: "⏳", label: "눌림 대기", names: [] }],
       holding: ["⚠️ a: b"], schedule: { title: "내일 일정", lines: ["<x>"] }, asOf: "2026-10-22 19:20",
     };
     const t = briefText(d);
-    expect(t).toContain("🌙 <b>2026-10-22 저녁 브리핑</b>");
-    expect(t).toContain("📈 KOSPI +0.8% · 원/달러 1,350.5 (-0.1%) · X -");
-    expect(t).toContain("🏭 섹터 ▲ A +1.0%, D +0.5% / ▼ B -2.0%, D +0.5%");
-    expect(t).toContain("🔴 시장 국면: 위험 회피 — VIX 30 ≥ 25 &amp; KOSPI &lt; 60일선 (진입 1차 비중 절반)");
-    expect(t).toContain("보유 경고 0 (⏸ 알림 정지 중)");
-    expect(t).toContain("🎯 <b>매수 검토 추천</b> (🇰🇷 국내 우선) TOP 3 / 전체 8");
-    expect(t).toContain('1️⃣ 🇰🇷 <b>저스템</b> (417840) · 반도체\n\n💡 <b>투자 아이디어</b>\n습도제어 &lt;과점&gt;\n\n📈 <b>매수 근거</b>\n① 실적 가속: 매출 +159%\n② 주가 덜 반영: 33/100\n\n⏰ 다음 확인: ~11/30 3Q 실적 (Heimdallr 분석)\n⚠️ 리스크: 일회성 가능성 → 확인: 3Q 매출\n📊 기술적 참고(판정 미사용): RSI 55(중립)\n🔗 <a href="u">네이버</a>');
+    expect(t).toContain("🌙 <b>JARVIS 저녁 브리핑</b>\n📆 2026-10-22 (목)\n\n━━━━━━━━━━━━━━\n🌎 <b>오늘 국내 시장</b>\n━━━━━━━━━━━━━━\n📈 KOSPI +0.8%\n📉 원/달러 1,350.5 (-0.1%)\n➖ X -\n➖ Y 0.0%");
+    expect(t).toContain("💪 강한 섹터: A +1.0% · D +0.5%\n🥶 약한 섹터: B -2.0% · D +0.5%");
+    expect(t).toContain("🔴 <b>시장 국면: 위험 회피</b>\n   ↳ VIX 30 ≥ 25 &amp; KOSPI &lt; 60일선 (진입 1차 비중 절반)");
+    expect(t).toContain("🚦 <b>오늘의 신호</b>\n🟢 진입 1 · 🟡 관찰 3 · 🔵 실적 돌파 2 · ⚠️ 보유 경고 0 (⏸ 알림 정지 중)");
+    expect(t).toContain("🎯 <b>매수 검토 추천</b> · 🇰🇷 국내 우선\n✨ 지금 사기 좋은 종목 <b>TOP 3</b> (후보 8개 중)\n📐 사후 검증 42건");
+    expect(t).toContain('1️⃣ 🇰🇷 <b>저스템</b> (417840) · 반도체\n🔁 3번째 추천 · 첫 추천 09/27 12,000원 → 13,200원 +10.0% 📈\n<b>🔥 지금 매수 매력 높음 (점수 +6)</b>\n\n💡 <b>투자 아이디어</b>\n습도제어 &lt;과점&gt;\n\n🏢 <b>좋은 기업인가</b>\n① 실적 가속: 매출 +159%\n\n⏱️ <b>지금 사기 좋은가</b>\n✅ 주가 반영도 33/100\n✅ 기관 2일 연속 순매수\n\n⏰ 다음 확인: ~11/30 3Q 실적 (Heimdallr 분석)\n⚠️ 리스크: 일회성 가능성 → 확인: 3Q 매출\n📊 기술적 참고(판정 미사용): RSI 55(중립)\n🔗 <a href="u">네이버</a>');
     expect(t).toContain("2️⃣ 🇰🇷 <b>B</b> (1)\n");
     expect(t).toContain("7. 🇰🇷 <b>저스템</b>");
+    expect(t).toContain("⏸️ <b>좋은 기업이지만 지금은 대기</b> (7)\n· &lt;W&gt; — 기본 기준: ⏸️ 대기\n· w0\n");
+    expect(t).toContain("· 외 1개 (대시보드)");
     expect(t).toContain("🔭 선행 레이더 7: a · b · c · d · e · f 외");
     expect(t).not.toContain("눌림 대기");
     expect(t).toContain("📣 <b>오늘 국내 실적</b>\n· ★ 리노공업 (058470)");
     expect(t).toContain("📅 <b>내일 일정</b>\n· &lt;x&gt;");
-    const m = briefText({ ...d, kind: "morning", focus: "US", market: [], sectors: [{ label: "A", change_pct: null }], regime: { risk_off: false, reasons: [] }, alertsPaused: false, earnings: { title: "t", lines: [] }, ideas: [], buyTotal: 0, others: [], holding: [], schedule: { title: "s", lines: [] } });
-    expect(m).toContain("☀️");
+    expect(t).toContain("🕒 <i>기준 2026-10-22 19:20 KST</i>");
+    const m = briefText({ ...d, kind: "morning", date: "bad", focus: "US", market: [], sectors: [{ label: "A", change_pct: null }], regime: { risk_off: false, reasons: [] }, alertsPaused: false, earnings: { title: "t", lines: [] }, ideas: [], buyTotal: 0, policy: null, waiting: undefined, others: [], holding: [], schedule: { title: "s", lines: [] } });
+    expect(m).toContain("☀️ <b>JARVIS 아침 브리핑</b>\n📆 bad\n");
+    expect(m).toContain("🌎 <b>밤사이 미국 시장</b>");
     expect(m).toContain("시세 수집 실패");
-    expect(m).toContain("🟢 시장 국면: 정상");
-    expect(m).toContain("🎯 <b>매수 검토 추천</b> (🇺🇸 미국 우선) — 오늘 없음");
+    expect(m).toContain("🟢 <b>시장 국면: 정상</b>");
+    expect(m).toContain("🎯 <b>매수 검토 추천</b> · 🇺🇸 미국 우선\n✨ 오늘은 지금 사기 좋은 종목이 없습니다\n━");
     expect(m).not.toContain("섹터");
     expect(m).not.toContain("그 밖의");
-    expect(briefText({ ...d, sectors: undefined, buyTotal: 3 })).toContain("TOP 3\n");
+    expect(m).not.toContain("대기");
+    expect(briefText({ ...d, ideas: [], buyTotal: 4 })).toContain("✨ 오늘은 지금 사기 좋은 종목이 없습니다 (후보 4개 모두 타이밍 대기)");
+    expect(briefText({ ...d, sectors: undefined, buyTotal: 3 })).toContain("(후보 3개 중)");
     expect(marketLine({ label: "S&P 500", last: 5000, change_pct: Infinity })).toBe("S&amp;P 500 -");
-    expect(["1️⃣ 🇰🇷 x", "7. x", "━━", "👀 x", "📣 x", "💼 x", "📅 x"].every((l) => BRIEF_SPLIT.test(l))).toBe(true);
-    expect(["💡 x", "📈 x", "① x", "2026 x"].some((l) => BRIEF_SPLIT.test(l))).toBe(false);
+    expect(["1️⃣ 🇰🇷 x", "7. x", "━━", "👀 x", "📣 x", "💼 x", "📅 x", "🚦 x", "⏸️ <b>x"].every((l) => BRIEF_SPLIT.test(l))).toBe(true);
+    expect(["💡 x", "📈 x", "① x", "2026 x", "⏸️ x"].some((l) => BRIEF_SPLIT.test(l))).toBe(false);
   });
 
   it("시스템 이상", () => {
@@ -69,7 +76,7 @@ describe("telegram templates", () => {
 
 describe("성과 피드백 표시 (D49)", () => {
   const card = { rank: 1, name: "A", code: "1", industry: "", flag: "🇰🇷", thesis: null, reasons: ["r"], events: [], risk: null, tech: null, links: "" };
-  it("카드에 과거 성과 줄 — 있을 때만", () => {
+  it("카드에 과거 성과 줄 — 있을 때만(링크 바로 위)", () => {
     expect(ideaBlock({ ...card, perf: "기대 <+1%>" })).toContain("🧾 과거 성과: 기대 &lt;+1%&gt;");
     expect(ideaBlock(card).some((l) => l.includes("과거 성과"))).toBe(false);
   });

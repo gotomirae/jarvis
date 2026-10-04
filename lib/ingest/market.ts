@@ -95,3 +95,30 @@ export async function naverInvestorTrend(index: "KOSPI" | "KOSDAQ", ymd: string,
     return fail(`naver trend ${index}: ${safeReason(e)}`);
   }
 }
+
+export type StockFlow = { date: string; foreign: number; institution: number; individual: number };
+
+/** 순수 함수: 네이버 종목 투자자 동향 JSON([{bizdate, foreignerPureBuyQuant:"-350,942", organPureBuyQuant, individualPureBuyQuant}], 단위 주) → 날짜 오름차순 */
+export function parseNaverStockTrend(json: unknown): StockFlow[] {
+  if (!Array.isArray(json)) return [];
+  const n = (v: unknown) => (typeof v === "string" ? Number(v.replace(/[+,]/g, "")) : NaN);
+  const out: StockFlow[] = [];
+  for (const r of json as Record<string, unknown>[]) {
+    const d = typeof r?.bizdate === "string" && /^\d{8}$/.test(r.bizdate) ? r.bizdate : null;
+    const f = { foreign: n(r?.foreignerPureBuyQuant), institution: n(r?.organPureBuyQuant), individual: n(r?.individualPureBuyQuant) };
+    if (d && Number.isFinite(f.foreign) && Number.isFinite(f.institution)) out.push({ date: `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`, ...f, individual: Number.isFinite(f.individual) ? f.individual : 0 });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** 네이버 국내 종목 일별 외국인·기관·개인 순매수(주) — 최근 pageSize 거래일 */
+export async function naverStockFlow(code: string, pageSize = 10, f: typeof fetch = fetch): Promise<Result<StockFlow[]>> {
+  try {
+    const res = await f(`https://m.stock.naver.com/api/stock/${encodeURIComponent(code)}/trend?pageSize=${pageSize}`, { headers: { "User-Agent": "Mozilla/5.0 (compatible; JARVIS-research)" }, signal: AbortSignal.timeout(15_000) });
+    if (res.status !== 200) return fail(`naver flow ${code}: HTTP ${res.status}`, res.status);
+    const rows = parseNaverStockTrend(await res.json());
+    return rows.length ? ok(rows, 200) : fail(`naver flow ${code}: 데이터 없음`);
+  } catch (e) {
+    return fail(`naver flow ${code}: ${safeReason(e)}`);
+  }
+}

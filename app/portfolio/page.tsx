@@ -37,11 +37,11 @@ export default async function Portfolio() {
   const th = "py-1 pr-2 font-normal";
 
   return (
-    <main className="mx-auto max-w-6xl p-4 space-y-5">
+    <main className="mx-auto max-w-6xl px-4 py-4 space-y-8">
       <Nav />
       <Section title="내 보유 종목 × 신호" count={positions.length}>
         <Guide>SnowBall 장부를 읽어서 보여 줍니다(편집·매매 입력은 SnowBall). 비중이 허용 비중을 넘으면 빨간색입니다.</Guide>
-        <details className="text-xs text-neutral-500">
+        <details className="text-xs text-sub">
           <summary className="cursor-pointer">열 설명</summary>
           <ul className="list-disc pl-5 space-y-0.5 mt-1">
             <li><b>산업(고성장 ✓)</b>: 노션 산업 분류. ✓ 는 실제 실적·증권사 전망·시장 전망 중 하나 이상에서 15% 이상 성장이 확인된 산업</li>
@@ -53,9 +53,9 @@ export default async function Portfolio() {
           </ul>
         </details>
         {positions.length === 0 ? <Empty text="보유 동기화 결과가 없습니다." /> : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto glass rounded-xl px-3">
             <table className="w-full text-sm">
-              <thead className="text-xs text-neutral-500 text-left">
+              <thead className="text-xs text-sub text-left">
                 <tr><th className={th}>종목</th><th className={th}>산업 (고성장 ✓)</th><th className={th}>비중 / 허용 비중</th><th className={th}>과열 점수</th>
                   <th className={th}>산업·종목 이야기</th><th className={th}>실적 촉매</th><th className={th}>실적 숫자</th><th className={th}>주가 반영도</th><th className={th}>Heimdallr 등급</th><th className={th}>투자 논지</th><th className={th}>경고</th></tr>
               </thead>
@@ -66,13 +66,13 @@ export default async function Portfolio() {
                   const over = p.weight !== null && p.allowed_weight !== null && p.weight > p.allowed_weight;
                   const pv = a?.p_value ?? null;
                   return (
-                    <tr key={p.asset_id} className="border-t border-neutral-100 dark:border-neutral-900 align-top">
+                    <tr key={p.asset_id} className="border-t border-line/50 align-top">
                       <td className="py-1 pr-2">
-                        {p.entity_id ? <a href={`/stock/${encodeURIComponent(p.entity_id)}`} className="underline decoration-dotted">{p.name}</a> : p.name}
-                        <span className="block text-xs text-neutral-500">{p.ticker}{p.asset_class !== "stock" ? ` · ${CLASS[p.asset_class] ?? p.asset_class}` : ""}</span>
+                        {p.entity_id ? <a href={`/stock/${encodeURIComponent(p.entity_id)}`} className="link">{p.name}</a> : p.name}
+                        <span className="block text-xs text-sub">{p.ticker}{p.asset_class !== "stock" ? ` · ${CLASS[p.asset_class] ?? p.asset_class}` : ""}</span>
                       </td>
                       <td className="pr-2">{e ? e.l1_codes.map((c) => `${name(c)}${m3.get(c) ? " ✓" : ""}`).join(" + ") : p.sector ?? "-"}</td>
-                      <td className={`pr-2 ${over ? "text-red-600 font-medium" : ""}`}>{fmtWeight(p.weight)} / {fmtWeight(p.allowed_weight)}</td>
+                      <td className={`pr-2 ${over ? "text-hot font-medium" : ""}`}>{fmtWeight(p.weight)} / {fmtWeight(p.allowed_weight)}</td>
                       <td className="pr-2">{p.heat_score ?? "-"}</td>
                       <td className="pr-2">{a ? yesNo(a.n_on) : "-"}</td>
                       <td className="pr-2">{a ? yesNo(a.c_on) : "-"}</td>
@@ -89,7 +89,7 @@ export default async function Portfolio() {
           </div>
         )}
       </Section>
-      <p className="text-xs text-neutral-500">진입 필수 조건 5가지 현황은 다음 단계(Heimdallr·HermesCall 연계 후)에서 추가됩니다.</p>
+      <p className="text-xs text-sub">진입 필수 조건 5가지 현황은 다음 단계(Heimdallr·HermesCall 연계 후)에서 추가됩니다.</p>
       <Footer asOf={hc.data?.snapshot_at ? kstString(new Date(hc.data.snapshot_at)) : undefined} />
     </main>
   );

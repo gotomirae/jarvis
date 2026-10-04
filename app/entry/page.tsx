@@ -43,21 +43,21 @@ export default async function Entry() {
     const lines = condLines(c, { m1: r.evidence.m1.detail, m2: r.evidence.m2.detail, m5: r.evidence.m5.detail, m3_lines: r.evidence.m3.lines, m4_events: r.evidence.m4.events });
     return (
       <Card key={`${r.date}|${r.entity_id}`} tone={r.level === "green" ? "good" : undefined}>
-        <div className="font-medium">{r.level === "green" ? "🟢" : "🟡"} {MARKET[r.market]} · {name(r.entity_id)} <span className="text-neutral-500">({e?.symbol ?? r.entity_id})</span>{r.tag ? ` · ${TAG_NAME[r.tag]}` : ""}{r.evidence.held ? " · 보유 중" : ""}</div>
+        <div className="font-medium">{r.level === "green" ? "🟢" : "🟡"} {MARKET[r.market]} · {name(r.entity_id)} <span className="text-sub">({e?.symbol ?? r.entity_id})</span>{r.tag ? ` · ${TAG_NAME[r.tag]}` : ""}{r.evidence.held ? " · 보유 중" : ""}</div>
         <ul className="text-xs space-y-0.5">{lines.map((l) => <li key={l}>{l}</li>)}</ul>
         <div className="text-xs">
           무효화: 종가 &lt; {priceText(r.invalidation_price, r.market)}{r.tag ? ` (${INVALIDATION_BASIS[r.tag]})` : ""} · 1차 비중 {r.first_weight_pct === null ? "SnowBall 허용 비중의 1/3" : `${r.first_weight_pct.toFixed(1)}%`} · 주가 반영도 {r.evidence.p == null ? "-" : Math.round(r.evidence.p)}
         </div>
-        {r.level === "green" && <div className="text-xs text-neutral-500">{r.gate_result.sent ? "텔레그램 발송함" : r.gate_result.note ?? "발송 대기"}</div>}
-        {r.level === "yellow" && r.gate_result.reasons?.length ? <div className="text-xs text-neutral-500">게이트: {r.gate_result.reasons.join(" · ")}</div> : null}
-        <div className="text-xs text-neutral-500">원천 계산일 {r.evidence.source_date ?? "-"} · 판정 {kstString(new Date(r.created_at))}</div>
+        {r.level === "green" && <div className="text-xs text-sub">{r.gate_result.sent ? "텔레그램 발송함" : r.gate_result.note ?? "발송 대기"}</div>}
+        {r.level === "yellow" && r.gate_result.reasons?.length ? <div className="text-xs text-sub">게이트: {r.gate_result.reasons.join(" · ")}</div> : null}
+        <div className="text-xs text-sub">원천 계산일 {r.evidence.source_date ?? "-"} · 판정 {kstString(new Date(r.created_at))}</div>
         {e && <LinkRow links={stockLinks(e, ctx)} />}
       </Card>
     );
   };
 
   return (
-    <main className="mx-auto max-w-6xl p-4 space-y-6">
+    <main className="mx-auto max-w-6xl px-4 py-4 space-y-8">
       <Nav />
       <Guide>필수 조건 5개(① 실적 증가·가속·주가 미반영 ② MACD 상향 교차 직전 ③ 산업 고성장 ④ 6개월 내 상승 이벤트 ⑤ 매수 수급 2일 연속)를 모두 충족하고 게이트(주가 반영도·시장 국면·허용 비중)를 통과해야 🟢입니다. 매수 확정 신호가 아닙니다 — 최종 판단·입력은 SnowBall에서.</Guide>
       <Section title="🟢 진입 신호" count={greens.length}>

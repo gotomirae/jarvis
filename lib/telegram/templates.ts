@@ -49,52 +49,72 @@ export type BriefData = {
   alertsPaused?: boolean;                             // 보유 경고 알림 일시 정지(/alerts off)
   earnings: { title: string; lines: string[] };
   focus: "KR" | "US";                                 // 추천 대상 시장 (아침 미국 · 저녁 국내)
-  ideas: IdeaCard[];                                  // 🎯 매수 검토 추천 — 최대 5개, 추천 시장 먼저 채우고 모자라면 다른 시장 (rankBuy)
-  buyTotal: number;                                   // 🎯 전체 수 (추천 밖 종목은 대시보드)
+  ideas: IdeaCard[];                                  // 🎯 지금 사기 좋은 종목 TOP — 추천 시장 먼저 채우고 모자라면 다른 시장 (rankBuy, D53)
+  buyTotal: number;                                   // 🎯 후보 전체 수 (추천 밖 종목은 대시보드)
+  waiting?: { name: string; why: string }[];          // ⏸️ 좋은 기업이지만 지금은 대기(TOP 자격 미달) — D53·D54
+  policy?: string | null;                             // 📐 사후 검증 요약 한 줄
   others: QueueSummary[];                             // 🔭 ⏳ 💰
   holding: string[];                                  // 보유 영향·경고 요약
   schedule: { title: string; lines: string[] };
   asOf: string;                                       // 기준 시각 KST
 };
 
+const arrow = (x: number | null) => (x === null || !Number.isFinite(x) ? "➖" : x > 0 ? "📈" : x < 0 ? "📉" : "➖");
+
 export function marketLine(m: MarketLine): string {
   return m.level ? `${esc(m.label)} ${num(m.last)} (${pct(m.change_pct)})` : `${esc(m.label)} ${pct(m.change_pct)}`;
 }
 
 const NUM = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"];
+const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 /** 긴 브리핑을 나눌 때 끊을 자리: 종목 카드·구분선·섹션 제목 앞 (lib/telegram/send.ts splitBefore) */
-export const BRIEF_SPLIT = /^(?:\d️⃣|\d+\. |━|👀|📣|💼|📅)/u;
+export const BRIEF_SPLIT = /^(?:\d️⃣|\d+\. |━|👀|📣|💼|📅|🚦|⏸️ <b>)/u;
 const RULE = "━━━━━━━━━━━━━━";
 
-/** 추천 종목 카드: 아이디어 → 매수 근거 → 이벤트·리스크·기술 참고 → 링크(맨 끝 줄) */
+/** 추천 종목 카드: 이름 → 추천 이력 → 지금 매수 매력 → 아이디어 → 🏢 좋은 기업인가 → ⏱️ 지금 사기 좋은가 → 이벤트·리스크 → 링크(맨 끝 줄) */
 export function ideaBlock(c: IdeaCard): string[] {
   const out = ["", `${NUM[c.rank - 1] ?? `${c.rank}.`} ${c.flag} <b>${esc(c.name)}</b> (${esc(c.code)})${c.industry ? ` · ${esc(c.industry)}` : ""}`];
+  if (c.history) out.push(esc(c.history));
+  if (c.verdict) out.push(`<b>${esc(c.verdict)}</b>`);
   if (c.thesis) out.push("", "💡 <b>투자 아이디어</b>", esc(c.thesis));
-  if (c.reasons.length) out.push("", "📈 <b>매수 근거</b>", ...c.reasons.map(esc));
-  if (c.perf) out.push(`🧾 과거 성과: ${esc(c.perf)}`);
-  if (c.events.length || c.risk || c.tech) out.push("");
+  if (c.reasons.length) out.push("", "🏢 <b>좋은 기업인가</b>", ...c.reasons.map(esc));
+  if (c.timing?.length) out.push("", "⏱️ <b>지금 사기 좋은가</b>", ...c.timing.map(esc));
+  if (c.events.length || c.risk || c.tech || c.perf) out.push("");
   if (c.events.length) out.push(`⏰ 다음 확인: ${c.events.map(esc).join(" / ")}`);
   if (c.risk) out.push(`⚠️ 리스크: ${esc(c.risk)}`);
   if (c.tech) out.push(`📊 기술적 참고(판정 미사용): ${esc(c.tech)}`);
+  if (c.perf) out.push(`🧾 과거 성과: ${esc(c.perf)}`);
   if (c.links) out.push(c.links);
   return out;
 }
 
 export function briefText(d: BriefData): string {
-  const head = d.kind === "morning" ? `☀️ <b>${esc(d.date)} 아침 브리핑</b>` : `🌙 <b>${esc(d.date)} 저녁 브리핑</b>`;
-  const out = [head, "", `📈 ${d.market.map(marketLine).join(" · ") || "시세 수집 실패"}`];
+  const dow = DOW[new Date(`${d.date}T00:00:00Z`).getUTCDay()] ?? "";
+  const head = d.kind === "morning" ? "☀️ <b>JARVIS 아침 브리핑</b>" : "🌙 <b>JARVIS 저녁 브리핑</b>";
+  const out = [head, `📆 ${esc(d.date)}${dow ? ` (${dow})` : ""}`, "", RULE, `🌎 <b>${d.kind === "morning" ? "밤사이 미국 시장" : "오늘 국내 시장"}</b>`, RULE];
+  if (d.market.length) out.push(...d.market.map((m) => `${arrow(m.change_pct)} ${marketLine(m)}`));
+  else out.push("시세 수집 실패");
   if (d.sectors?.length) {
     const s = [...d.sectors].filter((x) => x.change_pct !== null).sort((a, b) => (b.change_pct as number) - (a.change_pct as number));
-    if (s.length) out.push(`🏭 섹터 ▲ ${s.slice(0, 2).map((x) => `${esc(x.label)} ${pct(x.change_pct)}`).join(", ")} / ▼ ${s.slice(-2).reverse().map((x) => `${esc(x.label)} ${pct(x.change_pct)}`).join(", ")}`);
+    if (s.length) out.push("", `💪 강한 섹터: ${s.slice(0, 2).map((x) => `${esc(x.label)} ${pct(x.change_pct)}`).join(" · ")}`, `🥶 약한 섹터: ${s.slice(-2).reverse().map((x) => `${esc(x.label)} ${pct(x.change_pct)}`).join(" · ")}`);
   }
-  out.push(d.regime.risk_off ? `🔴 시장 국면: 위험 회피 — ${esc(d.regime.reasons.join(", "))} (진입 1차 비중 절반)` : "🟢 시장 국면: 정상");
-  out.push(`🚦 진입 신호 ${d.counts.green} · 관찰 ${d.counts.yellow} · 실적 돌파 ${d.counts.blue} · 보유 경고 ${d.counts.alert}${d.alertsPaused ? " (⏸ 알림 정지 중)" : ""}`);
+  out.push("", d.regime.risk_off ? `🔴 <b>시장 국면: 위험 회피</b>\n   ↳ ${esc(d.regime.reasons.join(", "))} (진입 1차 비중 절반)` : "🟢 <b>시장 국면: 정상</b>");
+  out.push("", "🚦 <b>오늘의 신호</b>", `🟢 진입 ${d.counts.green} · 🟡 관찰 ${d.counts.yellow} · 🔵 실적 돌파 ${d.counts.blue} · ⚠️ 보유 경고 ${d.counts.alert}${d.alertsPaused ? " (⏸ 알림 정지 중)" : ""}`);
   if (d.entries?.length) out.push(...d.entries);
 
   const where = d.focus === "US" ? "🇺🇸 미국 우선" : "🇰🇷 국내 우선";
-  out.push("", RULE, `🎯 <b>매수 검토 추천</b> (${where}) ${d.ideas.length ? `TOP ${d.ideas.length}${d.buyTotal > d.ideas.length ? ` / 전체 ${d.buyTotal}` : ""}` : "— 오늘 없음"}`, RULE);
+  out.push("", RULE, `🎯 <b>매수 검토 추천</b> · ${where}`,
+    d.ideas.length ? `✨ 지금 사기 좋은 종목 <b>TOP ${d.ideas.length}</b> (후보 ${d.buyTotal}개 중)` : `✨ 오늘은 지금 사기 좋은 종목이 없습니다${d.buyTotal ? ` (후보 ${d.buyTotal}개 모두 타이밍 대기)` : ""}`);
+  if (d.policy) out.push(`📐 ${esc(d.policy)}`);
+  out.push(RULE);
   for (const c of d.ideas) out.push(...ideaBlock(c));
 
+  const wait = d.waiting ?? [];
+  if (wait.length) {
+    out.push("", `⏸️ <b>좋은 기업이지만 지금은 대기</b> (${wait.length})`);
+    for (const w of wait.slice(0, 6)) out.push(`· ${esc(w.name)}${w.why ? ` — ${esc(w.why)}` : ""}`);
+    if (wait.length > 6) out.push(`· 외 ${wait.length - 6}개 (대시보드)`);
+  }
   const others = d.others.filter((o) => o.names.length);
   if (others.length) {
     out.push("", "👀 <b>그 밖의 관찰 종목</b> (자세한 근거는 대시보드)");
@@ -103,7 +123,7 @@ export function briefText(d: BriefData): string {
   if (d.earnings.lines.length) out.push("", `📣 <b>${esc(d.earnings.title)}</b>`, ...d.earnings.lines.map((l) => `· ${esc(l)}`));
   if (d.holding.length) out.push("", "💼 <b>보유</b>", ...d.holding.map(esc));
   if (d.schedule.lines.length) out.push("", `📅 <b>${esc(d.schedule.title)}</b>`, ...d.schedule.lines.map((l) => `· ${esc(l)}`));
-  out.push("", `<i>기준 ${esc(d.asOf)} KST</i>`, FOOT);
+  out.push("", `🕒 <i>기준 ${esc(d.asOf)} KST</i>`, FOOT);
   return out.join("\n");
 }
 

@@ -1,4 +1,58 @@
 @import "tailwindcss";
 
-:root { color-scheme: light dark; }
-body { @apply bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100; }
+/*
+ * JARVIS 대시보드 테마 (사용자 지정 2026-10-04): 기본 글자색 흰색 · 회색 글자 금지 · 중요 키워드는 색으로 강조.
+ * 보조 글자는 회색 대신 옅은 하늘색(sub), 강조는 금색(gold)·빨강(hot, 상승·위험)·파랑(cool, 하락)·초록(good)·주황(warn).
+ */
+@theme {
+  --color-ink: #050914;
+  --color-panel: #0d1630;
+  --color-panel2: #121f42;
+  --color-line: #24407a;
+  --color-sub: #bcd4ff;
+  --color-gold: #fcd34d;
+  --color-hot: #ff6b6b;
+  --color-cool: #60a5fa;
+  --color-good: #34d399;
+  --color-warn: #fb923c;
+  --color-arc: #67e8f9;
+  --font-script: var(--font-great-vibes), "Brush Script MT", cursive;
+}
+
+:root { color-scheme: dark; }
+
+body {
+  color: #ffffff;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(220, 38, 38, 0.18), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(103, 232, 249, 0.12), transparent 60%),
+    linear-gradient(180deg, #050914 0%, #08112a 100%);
+  background-attachment: fixed;
+  min-height: 100dvh;
+}
+
+a { color: inherit; }
+a.link { color: var(--color-arc); text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+a.link:hover { color: #ffffff; }
+
+table thead { color: var(--color-sub); }
+table th { font-weight: 600; white-space: nowrap; }
+table tbody tr:hover { background: rgba(103, 232, 249, 0.05); }
+
+/* JARVIS 로고: 아이언맨 금색 → 붉은색 그라디언트 + 아크 리액터 빛 */
+.jarvis-logo {
+  font-family: var(--font-script);
+  background: linear-gradient(100deg, #fde68a 0%, #fbbf24 35%, #f97316 65%, #dc2626 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 18px rgba(251, 191, 36, 0.35)) drop-shadow(0 0 2px rgba(255, 255, 255, 0.4));
+  line-height: 1.1;
+  padding: 0 0.15em;
+}
+
+.glass {
+  background: linear-gradient(180deg, rgba(18, 31, 66, 0.85), rgba(13, 22, 48, 0.85));
+  border: 1px solid rgba(36, 64, 122, 0.9);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}

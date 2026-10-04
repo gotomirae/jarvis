@@ -1,3 +1,4 @@
+import { Nav } from "@/app/_components/ui";
 import { supabaseServer } from "@/lib/supabase/server";
 import { METHOD_NAME, SPECIAL_L1 } from "@/lib/labels";
 import { kstString } from "@/lib/time";
@@ -30,37 +31,34 @@ export default async function TaxonomyPage() {
   const anyError = l1.error ?? pending.error ?? labels.error;
 
   return (
-    <main className="mx-auto max-w-3xl p-4 space-y-6">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-xl font-bold">산업 분류</h1>
-        <a href="/" className="text-sm text-neutral-500">← 오늘 화면</a>
-      </header>
-      {anyError && <p className="rounded bg-red-50 dark:bg-red-950 p-3 text-sm">DB 읽기 실패: {anyError.message}</p>}
+    <main className="mx-auto max-w-4xl px-4 py-4 space-y-8">
+      <Nav />
+      {anyError && <p className="rounded bg-hot/15 p-3 text-sm">DB 읽기 실패: {anyError.message}</p>}
 
       <section className="space-y-2">
-        <h2 className="font-semibold">확인 대기 {pend.length}건</h2>
-        <p className="text-xs text-neutral-500">각 프로젝트의 산업 이름 중 자동으로 확정하지 못한 것입니다. 맞는 산업을 고르고 “확정”을 누르세요. 7일 넘게 두면 빨간 테두리로 표시됩니다.</p>
-        {pend.length === 0 && <p className="text-sm text-neutral-500">모든 라벨이 매핑되어 있습니다.</p>}
+        <h2 className="text-xl font-bold">확인 대기 {pend.length}건</h2>
+        <p className="text-xs text-sub">각 프로젝트의 산업 이름 중 자동으로 확정하지 못한 것입니다. 맞는 산업을 고르고 “확정”을 누르세요. 7일 넘게 두면 빨간 테두리로 표시됩니다.</p>
+        {pend.length === 0 && <p className="text-sm text-sub">모든 라벨이 매핑되어 있습니다.</p>}
         {pend.map((p) => {
           const age = Math.floor((now - new Date(p.first_seen).getTime()) / 86400_000);
           return (
-            <form key={p.id} action={resolvePending} className={`rounded border p-3 space-y-2 ${age >= 7 ? "border-red-400" : "border-neutral-300 dark:border-neutral-700"}`}>
+            <form key={p.id} action={resolvePending} className={`rounded border p-3 space-y-2 ${age >= 7 ? "border-hot" : "border-line"}`}>
               <input type="hidden" name="id" value={p.id} />
               <div className="flex flex-wrap items-baseline gap-2">
                 <span className="font-medium">{p.label}</span>
-                <span className="text-xs text-neutral-500">{p.project} · {METHOD_NAME[p.method] ?? p.method} · {age}일째{age >= 7 ? " ⚠️ 7일 넘게 대기" : ""}</span>
+                <span className="text-xs text-sub">{p.project} · {METHOD_NAME[p.method] ?? p.method} · {age}일째{age >= 7 ? " ⚠️ 7일 넘게 대기" : ""}</span>
               </div>
               <div className="flex flex-wrap gap-2 text-sm">
                 {[...l1Rows.map((r) => r.code), ...SPECIAL].map((c) => (
-                  <label key={c} className="flex items-center gap-1 rounded border border-neutral-200 dark:border-neutral-800 px-2 py-1">
+                  <label key={c} className="flex items-center gap-1 rounded border border-line px-2 py-1">
                     <input type="checkbox" name="l1" value={c} defaultChecked={p.suggested_l1.includes(c) && c !== "ETC"} />
                     {SPECIAL.includes(c) ? SPECIAL_L1[c] ?? c : name(c)}
                   </label>
                 ))}
               </div>
               <div className="flex gap-2">
-                <button name="action" value="confirm" className="rounded bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 px-3 py-1 text-sm">확정</button>
-                <button name="action" value="etc" className="rounded border border-neutral-400 px-3 py-1 text-sm">기타로</button>
+                <button name="action" value="confirm" className="rounded bg-gold text-ink font-semibold px-3 py-1 text-sm">확정</button>
+                <button name="action" value="etc" className="rounded border border-line px-3 py-1 text-sm">기타로</button>
               </div>
             </form>
           );
@@ -68,43 +66,43 @@ export default async function TaxonomyPage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="font-semibold">노션 산업 목록 변경 감지</h2>
-        {!d ? <p className="text-sm text-neutral-500">아직 taxonomy_sync 결과가 없습니다.</p>
-          : d.error ? <p className="text-sm text-red-600">노션 읽기 실패: {d.error}</p>
+        <h2 className="text-xl font-bold">노션 산업 목록 변경 감지</h2>
+        {!d ? <p className="text-sm text-sub">아직 taxonomy_sync 결과가 없습니다.</p>
+          : d.error ? <p className="text-sm text-hot">노션 읽기 실패: {d.error}</p>
           : (
-            <div className="rounded border border-neutral-300 dark:border-neutral-700 p-3 text-sm space-y-1">
-              <p>{d.changed ? "⚠️ 카테고리 추가·삭제가 있습니다 — taxonomy.yaml 갱신 필요" : "✅ 변경 없음"} <span className="text-neutral-500">· {d.checked_at ? kstString(new Date(d.checked_at)) : ""}</span></p>
+            <div className="rounded border border-line p-3 text-sm space-y-1">
+              <p>{d.changed ? "⚠️ 카테고리 추가·삭제가 있습니다 — taxonomy.yaml 갱신 필요" : "✅ 변경 없음"} <span className="text-sub">· {d.checked_at ? kstString(new Date(d.checked_at)) : ""}</span></p>
               {d.added?.map((a) => <p key={a.title}>➕ {a.title}</p>)}
               {d.removed?.map((r) => <p key={r.code}>➖ {r.code} {r.name}</p>)}
-              {!!d.title_notes?.length && <p className="text-xs text-neutral-500">참고: 노션 내부 이름이 화면 제목과 다른 산업 {d.title_notes.length}개 — 같은 페이지라 변경으로 보지 않음</p>}
+              {!!d.title_notes?.length && <p className="text-xs text-sub">참고: 노션 내부 이름이 화면 제목과 다른 산업 {d.title_notes.length}개 — 같은 페이지라 변경으로 보지 않음</p>}
             </div>
           )}
       </section>
 
       <section className="space-y-2">
-        <h2 className="font-semibold">산업 분류 기준 (노션 “2_1. 산업 &amp; 종목” {l1Rows.length}개)</h2>
+        <h2 className="text-xl font-bold">산업 분류 기준 (노션 “2_1. 산업 &amp; 종목” {l1Rows.length}개)</h2>
         <ul className="grid grid-cols-2 sm:grid-cols-3 gap-1 text-sm">
           {l1Rows.map((r) => (
             <li key={r.code}>
-              <a href={r.notion_url ?? "#"} target="_blank" rel="noreferrer" className="underline decoration-dotted">{r.name}</a>
-              {r.l2.length > 0 && <span className="text-xs text-neutral-500"> · {r.l2.join(", ")}</span>}
+              <a href={r.notion_url ?? "#"} target="_blank" rel="noreferrer" className="link">{r.name}</a>
+              {r.l2.length > 0 && <span className="text-xs text-sub"> · {r.l2.join(", ")}</span>}
             </li>
           ))}
         </ul>
       </section>
 
       <section className="space-y-3">
-        <h2 className="font-semibold">프로젝트별 산업 이름 → 기준 산업</h2>
+        <h2 className="text-xl font-bold">프로젝트별 산업 이름 → 기준 산업</h2>
         {Object.entries(byProject).map(([project, rows]) => (
-          <details key={project} className="rounded border border-neutral-200 dark:border-neutral-800 p-2">
+          <details key={project} className="rounded border border-line p-2">
             <summary className="cursor-pointer text-sm">{project} · {rows.length}개</summary>
             <table className="mt-2 w-full text-sm">
               <tbody>
                 {rows.map((x) => (
-                  <tr key={x.label} className="border-t border-neutral-100 dark:border-neutral-900">
+                  <tr key={x.label} className="border-t border-line/50">
                     <td className="py-1">{x.label}</td>
                     <td className="py-1">{x.l1_codes.map((c) => (SPECIAL.includes(c) ? SPECIAL_L1[c] ?? c : name(c))).join(" + ")}</td>
-                    <td className="py-1 text-xs text-neutral-500">{METHOD_NAME[x.method] ?? x.method}</td>
+                    <td className="py-1 text-xs text-sub">{METHOD_NAME[x.method] ?? x.method}</td>
                   </tr>
                 ))}
               </tbody>

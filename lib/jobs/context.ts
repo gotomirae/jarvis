@@ -7,6 +7,8 @@ import { dbSelectAll } from "@/lib/db";
 import { krCode, marketOf, usSymbol } from "@/lib/entities";
 import type { AxesRules } from "@/lib/engine/axes";
 import type { FeedbackRules } from "@/lib/engine/feedback";
+import type { PolicyRules } from "@/lib/engine/pick-policy";
+import type { TimingRules } from "@/lib/engine/timing";
 import type { HoldingRules } from "@/lib/engine/holding-alerts";
 import type { PriUsWeights } from "@/lib/engine/pri-us-lite";
 import type { RealizedRules } from "@/lib/engine/industry-growth";
@@ -39,6 +41,8 @@ export type Rules = {
   market: { morning: MarketSym[]; us_sectors: MarketSym[]; evening: MarketSym[]; regime: { vix: string; kospi: string } };
   telegram: { realtime_max_per_day_excl_urgent: number };
   feedback: FeedbackRules;
+  buy_timing: TimingRules;
+  pick_policy: PolicyRules & { top_max: number };
   weekly: {
     market: { returns: { sym: string; label: string; source?: "naver" | "yahoo" }[]; levels: { sym: string; label: string }[] };
     basket_min_market_cap_krw: number; basket_min_members: number; cash_band: { normal: string; risk_off: string };

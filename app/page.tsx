@@ -1,10 +1,15 @@
-import { Card, Empty, Footer, Guide, LinkRow, Nav, Section } from "@/app/_components/ui";
+import { Bad, Card, Empty, Footer, Good, Guide, Hi, LinkRow, MarkLine, Nav, Page, Section, Stat } from "@/app/_components/ui";
 import { linksConfig, taxonomyConfig } from "@/lib/config/load";
 import { explain, type AxesEvidence } from "@/lib/engine/explain";
+import type { PerfStat } from "@/lib/engine/feedback";
 import { buyReasons, consensusOf, EMPTY_IDEA, ideaCard, rankBuy } from "@/lib/engine/idea";
+import { assess, type Assessed, type Policy } from "@/lib/engine/pick-policy";
 import type { Queue } from "@/lib/engine/queues";
+import { issues, VERDICT_SHORT } from "@/lib/engine/timing";
 import { env } from "@/lib/env";
+import { rules } from "@/lib/jobs/context";
 import { stockLinks, type LinkEntity } from "@/lib/links";
+import { recHistory, recLine, type BriefNote, type RecHist } from "@/lib/outcomes/rec-history";
 import { supabaseServer } from "@/lib/supabase/server";
 import { kstDate, kstString } from "@/lib/time";
 
@@ -12,27 +17,36 @@ export const dynamic = "force-dynamic";
 
 type QItem = { date: string; entity_id: string; queue: Queue; reason: Record<string, unknown>; first_seen: string };
 type Ent = LinkEntity & { l1_codes: string[] };
+type Ctx = Parameters<typeof stockLinks>[1];
 
 const SECTIONS: { queue: Queue; title: string; about: string }[] = [
-  { queue: "take_profit", title: "💰 익절 검토", about: "보유 종목 중 과열 점수와 주가 반영도가 모두 높은 종목" },
-  { queue: "buy", title: "🎯 매수 검토", about: "실적 숫자가 좋고 주가는 아직 덜 반영됐으며, 서로 다른 프로젝트 2곳 이상이 같은 방향 신호를 낸 종목. 신호 합의 수 → 낮은 주가 반영도 → 산업 성장률 → 가까운 이벤트 순으로 정렬하며, 시장별 상위 5개가 브리핑 추천입니다." },
-  { queue: "radar", title: "🔭 선행 관찰", about: "산업 이야기와 실적 촉매는 켜졌지만 실적 숫자는 아직 확인 전이고, 실적 발표가 45일 안에 있는 종목" },
-  { queue: "pullback_wait", title: "⏳ 눌림 대기", about: "실적은 좋지만 주가가 이미 많이 반영된 종목 — 반영도가 50 아래로 내려오면 다시 봄" },
+  { queue: "take_profit", title: "💰 익절 검토", about: "보유 종목 중 과열 점수와 주가 반영도가 모두 높은 종목 — 일부 이익 실현을 검토할 때입니다." },
+  { queue: "radar", title: "🔭 선행 관찰", about: "산업 이야기와 실적 촉매는 켜졌지만 실적 숫자는 아직 확인 전이고, 실적 발표가 45일 안에 있는 종목 — 발표 뒤 🎯 로 올라올 수 있습니다." },
+  { queue: "pullback_wait", title: "⏳ 눌림 대기", about: "실적은 좋지만 주가가 이미 많이 반영된 종목 — 반영도가 50 아래로 내려오면 다시 봅니다." },
 ];
 
-/** 오늘 (PRD §8): 시장 국면 → 보유 경고 → 익절 → 진입 신호 → 매수 검토 → 관찰 → 선행 관찰 → 눌림 대기 → 실적 돌파 */
+/** 오늘 (PRD §8): 요약 타일 → 시장 국면 → 보유 경고 → 🎯 지금 사기 좋은 종목 → 대기 → 익절 → 선행 관찰 → 눌림 대기 */
 export default async function Today() {
   const sb = await supabaseServer();
+  const R = rules();
   const since7 = new Date(Date.now() - 7 * 86400_000).toISOString();
-  const [lastDate, reg, alerts] = await Promise.all([
+  const [lastDate, reg, alerts, pol, lastStats, notes, lastKR, lastUS] = await Promise.all([
     sb.from("queue_items").select("date").order("date", { ascending: false }).limit(1).maybeSingle(),
     sb.from("bot_state").select("value").eq("key", "regime").maybeSingle(),
     sb.from("notifications").select("entity_id,payload,sent_at,created_at").eq("kind", "holding_alert").gte("created_at", since7).order("created_at", { ascending: false }).range(0, 99),
+    sb.from("bot_state").select("value").eq("key", "pick_policy").maybeSingle(),
+    sb.from("perf_stats").select("as_of").order("as_of", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("notifications").select("sent_at,payload").in("kind", ["brief_morning", "brief_evening"]).not("sent_at", "is", null).order("sent_at", { ascending: true }).range(0, 1999),
+    sb.from("entry_eval").select("date").eq("market", "KR").order("date", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("entry_eval").select("date").eq("market", "US").order("date", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const date = (lastDate.data?.date as string | undefined) ?? kstDate();
-  const [items, axes] = await Promise.all([
+  const evalDates = [lastKR.data?.date, lastUS.data?.date].filter((d): d is string => !!d);
+  const [items, axes, st, ee] = await Promise.all([
     sb.from("queue_items").select("date,entity_id,queue,reason,first_seen").eq("date", date).range(0, 499),
     sb.from("axes_daily").select("entity_id,evidence").eq("date", date).range(0, 1999),
+    lastStats.data ? sb.from("perf_stats").select("scope,dimension,bucket,horizon_days,n,median_excess,hit_rate").eq("as_of", lastStats.data.as_of).eq("horizon_days", R.feedback.primary_horizon).in("scope", ["buy", R.pick_policy.scope]).range(0, 4999) : Promise.resolve({ data: [] }),
+    evalDates.length ? sb.from("entry_eval").select("date,market,level").in("date", evalDates).in("level", ["green", "yellow"]).range(0, 999) : Promise.resolve({ data: [] }),
   ]);
   const q = (items.data ?? []) as QItem[];
   const evBy = new Map(((axes.data ?? []) as { entity_id: string; evidence: AxesEvidence }[]).map((a) => [a.entity_id, a.evidence]));
@@ -41,6 +55,22 @@ export default async function Today() {
   const byId = new Map(((ents.data ?? []) as Ent[]).map((e) => [e.id, e]));
   const ctx = { links: linksConfig(), taxonomy: taxonomyConfig(), jarvisUrl: env().JARVIS_URL };
   const r = reg.data?.value as { risk_off?: boolean; reasons?: string[]; vix?: number | null; snowball?: number | null; at?: string } | undefined;
+  const policy = ((pol.data?.value as { policy?: Policy } | undefined)?.policy) ?? null;
+  const entryRows = ((ee.data ?? []) as { date: string; market: string; level: string }[]).filter((x) => (x.market === "KR" ? x.date === lastKR.data?.date : x.date === lastUS.data?.date));
+  const hist = recHistory((notes.data ?? []) as BriefNote[], (c) => (byId.has(`KR:${c}`) ? `KR:${c}` : byId.has(`US:${c}`) ? `US:${c}` : null));
+
+  // 🎯 후보 평가 — 브리핑과 같은 함수(assess · rankBuy)
+  const today = kstDate();
+  const cands = q.filter((x) => x.queue === "buy" && byId.has(x.entity_id)).map((x) => {
+    const e = byId.get(x.entity_id)!;
+    const ev = evBy.get(x.entity_id) ?? {};
+    const p = (x.reason as { p?: number | null }).p ?? null;
+    const a = assess({ ev, p, market: e.market, l1: e.primary_l1 ?? null, riskOff: r?.risk_off === true, today }, R, policy, (st.data ?? []) as PerfStat[]);
+    return { ...x, e, ev, a, p, families: ev.families?.length ?? 0, industryGrowth: ev.idea?.industry?.realized_median ?? null, nextEvent: ev.next_event ?? null, perf: a.prior.score, timing: a.timing.score };
+  });
+  const good = cands.filter((c) => c.a.admit.ok);
+  const top = [...rankBuy(good.filter((c) => c.e.market === "KR"), good.length), ...rankBuy(good.filter((c) => c.e.market === "US"), good.length)];
+  const waiting = cands.filter((c) => !c.a.admit.ok).sort((x, y) => y.a.timing.score - x.a.timing.score);
 
   // 보유 경고: 종목별로 묶어서
   const alertBy = new Map<string, { name: string; lines: { summary: string; source: string; when: string }[] }>();
@@ -50,58 +80,127 @@ export default async function Today() {
     const cur = alertBy.get(k) ?? alertBy.set(k, { name: p.name ?? k, lines: [] }).get(k)!;
     cur.lines.push({ summary: p.summary ?? "", source: p.source ?? "", when: a.sent_at ? `알림 ${kstString(new Date(a.sent_at))}` : p.bootstrap ? "처음 실행 때 기록(알림 안 보냄)" : "미발송" });
   }
+  const o = policy?.overall;
 
   return (
-    <main className="mx-auto max-w-3xl p-4 space-y-6">
+    <Page>
       <Nav />
-      <div className={`rounded px-3 py-2 text-sm ${r?.risk_off ? "bg-red-100 dark:bg-red-950" : "bg-emerald-50 dark:bg-emerald-950"}`}>
-        <p className="font-medium">{r ? (r.risk_off ? "🔴 시장 국면: 위험 회피" : "🟢 시장 국면: 정상") : "시장 국면: 아직 계산 전"}</p>
-        {r && <p className="text-xs text-neutral-600 dark:text-neutral-400">
-          {r.risk_off ? `이유: ${(r.reasons ?? []).join(", ")} → 진입 신호의 1차 비중을 절반으로 줄임. ` : ""}변동성지수(VIX) {r.vix?.toFixed(1) ?? "-"} · SnowBall 국면 값 {r.snowball ?? "-"} (−1이면 위험 회피)
+
+      <div className="flex flex-wrap gap-3">
+        <Stat icon={r?.risk_off ? "🔴" : "🟢"} label="시장 국면" value={r ? (r.risk_off ? "위험 회피" : "정상") : "계산 전"} tone={r?.risk_off ? "hot" : "good"} sub={`VIX ${r?.vix?.toFixed(1) ?? "-"}`} />
+        <Stat icon="⚠️" label="보유 경고 (7일)" value={alertBy.size} tone={alertBy.size ? "hot" : "good"} />
+        <Stat icon="🎯" label="지금 사기 좋은 종목" value={`${good.length} / ${cands.length}`} sub="TOP 자격 / 매수 검토 후보" />
+        <Stat icon="🚦" label="진입 · 관찰" value={`${entryRows.filter((x) => x.level === "green").length} · ${entryRows.filter((x) => x.level === "yellow").length}`} tone="arc" sub={<a className="link" href="/entry">진입 보드 →</a>} />
+        <Stat icon="✅" label={`추천 승률 (${policy?.horizon ?? R.feedback.primary_horizon}거래일)`} value={o?.hit_rate == null ? "측정 중" : `${Math.round(o.hit_rate * 100)}%`} tone="good" sub={<a className="link" href="/verify">사후 검증 {o?.n ?? 0}건 →</a>} />
+      </div>
+
+      <div className={`glass rounded-xl px-4 py-3 border-l-4 ${r?.risk_off ? "border-l-hot" : "border-l-good"}`}>
+        <p className="text-lg font-bold">{r ? (r.risk_off ? <>🔴 시장 국면: <Bad>위험 회피</Bad></> : <>🟢 시장 국면: <Good>정상</Good></>) : "시장 국면: 아직 계산 전"}</p>
+        {r && <p className="text-sm text-sub mt-1">
+          {r.risk_off ? <>이유: <Hi>{(r.reasons ?? []).join(", ")}</Hi> → 진입 신호의 1차 비중을 <Hi>절반</Hi>으로 줄입니다.<br /></> : null}
+          📉 변동성지수(VIX) <b className="text-white">{r.vix?.toFixed(1) ?? "-"}</b> · SnowBall 국면 값 <b className="text-white">{r.snowball ?? "-"}</b> (−1이면 위험 회피)
         </p>}
       </div>
 
       <Section title="⚠️ 보유 경고 (최근 7일)" count={alertBy.size}>
-        <Guide>보유 종목에 생긴 위험 신호입니다. 고점 대비 −20% 이하 하락, 허용 비중 초과, 투자 논지를 깨는 이벤트, 등급 하락 등을 종목별로 묶어 보여 줍니다.</Guide>
-        {alertBy.size === 0 ? <Empty text="없음" /> : [...alertBy.entries()].map(([k, v]) => (
+        <Guide>보유 종목에 생긴 위험 신호입니다. 고점 대비 <b className="text-hot">−20% 이하 하락</b>, <b className="text-hot">허용 비중 초과</b>, 투자 논지를 깨는 이벤트, 등급 하락 등을 종목별로 묶었습니다.</Guide>
+        {alertBy.size === 0 ? <Empty text="없음 — 보유 종목에 새 위험 신호가 없습니다." /> : [...alertBy.entries()].map(([k, v]) => (
           <Card key={k} tone="warn">
-            <p className="font-medium">{byId.has(k) ? <a href={`/stock/${encodeURIComponent(k)}`} className="underline decoration-dotted">{v.name}</a> : v.name}</p>
-            <ul className="text-sm list-disc pl-5">{v.lines.map((l, i) => <li key={i}>{l.summary} <span className="text-xs text-neutral-500">— {l.source} · {l.when}</span></li>)}</ul>
-            <p className="text-xs">할 일: 투자 논지 다시 보기 → SnowBall에 결정 기록</p>
+            <p className="text-base font-bold">{byId.has(k) ? <a href={`/stock/${encodeURIComponent(k)}`} className="link">{v.name}</a> : v.name}</p>
+            <ul className="space-y-1">{v.lines.map((l, i) => <li key={i}>🔸 <Bad>{l.summary}</Bad> <span className="text-xs text-sub">— {l.source} · {l.when}</span></li>)}</ul>
+            <p className="text-sm">👉 할 일: <Hi>투자 논지 다시 보기 → SnowBall에 결정 기록</Hi></p>
           </Card>
         ))}
       </Section>
 
-      <QueueSection {...SECTIONS[0]} q={q} byId={byId} evBy={evBy} ctx={ctx} />
-      <Section title="🟢 진입 신호" count={0}>
-        <Guide>필수 조건 5가지(실적 가속·주가 미반영 / MACD 교차 직전 / 산업 고성장 / 6개월 내 상승 이벤트 / 외국인·기관 2일 연속 순매수)를 모두 충족한 종목만 표시합니다.</Guide>
-        <Empty text="Heimdallr·HermesCall 연계 작업(진입 조건 계산) 후 다음 단계에서 시작합니다." />
+      <Section title="🎯 지금 사기 좋은 종목" count={top.length}>
+        <Guide>
+          <b className="text-white">좋은 기업</b>(실적·산업·신호 합의 = 🎯 매수 검토 후보)과 <b className="text-gold">지금 투자하기 좋은 주식</b>(가격·추세·수급·과열 = ⏱️)을 나눠 판정합니다.
+          ⏱️ 이 <b className="text-white">⏸️ 대기</b>이거나 사후 검증에서 승률이 낮았던 기준에 걸리면 추천하지 않습니다. 시장별 상위 {R.pick_policy.top_max}개가 텔레그램 추천입니다.
+        </Guide>
+        {policy?.exclude.length ? <p className="text-sm">📐 사후 검증으로 빠진 기준: {policy.exclude.map((x) => <span key={x.title} className="mr-2 rounded-full border border-hot/50 bg-hot/10 px-2 py-0.5 text-hot">{x.title}</span>)}</p> : null}
+        {top.length === 0 ? <Empty text={cands.length ? `오늘은 지금 사기 좋은 종목이 없습니다 — 후보 ${cands.length}개 모두 타이밍 대기.` : "매수 검토 후보가 없습니다."} /> : top.map((c) => {
+          const rank = (c.e.market === "KR" ? top.filter((x) => x.e.market === "KR") : top.filter((x) => x.e.market === "US")).indexOf(c) + 1;
+          return <IdeaView key={c.entity_id} c={c} rank={rank} hist={hist.get(c.entity_id)} ctx={ctx} telegram={rank <= R.pick_policy.top_max} />;
+        })}
       </Section>
-      <QueueSection {...SECTIONS[1]} q={q} byId={byId} evBy={evBy} ctx={ctx} />
-      <Section title="🟡 관찰" count={0}><Empty text="진입 신호와 함께 다음 단계에서 시작합니다." /></Section>
-      <QueueSection {...SECTIONS[2]} q={q} byId={byId} evBy={evBy} ctx={ctx} />
-      <QueueSection {...SECTIONS[3]} q={q} byId={byId} evBy={evBy} ctx={ctx} />
-      <Section title="🔵 실적 돌파" count={0}><Empty text="다음 단계에서 시작합니다(진입 신호 아님, 60거래일 관찰)." /></Section>
+
+      <Section title="⏸️ 좋은 기업이지만 지금은 대기" count={waiting.length}>
+        <Guide>실적·산업은 좋지만 지금 가격·추세·수급이 매수하기 좋지 않은 종목입니다. 점수가 오르면 위 목록으로 올라옵니다.</Guide>
+        {waiting.length === 0 ? <Empty text="없음" /> : (
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {waiting.map((c) => (
+              <li key={c.entity_id} className="glass rounded-lg px-3 py-2 text-sm">
+                <a href={`/stock/${encodeURIComponent(c.entity_id)}`} className="font-semibold link">{c.e.market === "US" ? "🇺🇸" : "🇰🇷"} {c.e.name}</a>
+                <span className="ml-2 text-warn font-semibold">{VERDICT_SHORT[c.a.timing.verdict]} {c.a.timing.score > 0 ? "+" : ""}{c.a.timing.score}</span>
+                <div className="text-xs text-sub">{[c.a.admit.why.join(" · "), issues(c.a.timing)].filter(Boolean).join(" — ")}</div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      {SECTIONS.map((s) => <QueueSection key={s.queue} {...s} q={q} byId={byId} evBy={evBy} ctx={ctx} />)}
+
+      <Section title="🚦 진입 신호 · 관찰 · 실적 돌파">
+        <Guide>필수 조건 5가지(실적 가속·주가 미반영 / MACD 교차 직전 / 산업 고성장 / 6개월 내 상승 이벤트 / 외국인·기관 2일 연속 순매수)를 모두 충족한 🟢 진입 신호와 🟡 관찰·🔵 실적 돌파는 <a className="link" href="/entry">진입 보드</a>에서 봅니다.</Guide>
+      </Section>
       <Footer asOf={`${date} 판정 · 시장 국면 ${r?.at ? kstString(new Date(r.at)) : "-"}`} />
-    </main>
+    </Page>
+  );
+}
+
+type Cand = { entity_id: string; e: Ent; ev: AxesEvidence; a: Assessed; p: number | null };
+
+/** 🎯 카드 — 이름 → 추천 이력 → 지금 매수 매력 → 아이디어 → 🏢 | ⏱️ → 이벤트·리스크 → 링크 */
+function IdeaView({ c, rank, hist, ctx, telegram }: { c: Cand; rank: number; hist: RecHist | undefined; ctx: Ctx; telegram: boolean }) {
+  const idea = c.ev.idea ?? EMPTY_IDEA;
+  const card = ideaCard(rank, { name: c.e.name, symbol: c.e.symbol, market: c.e.market, industry: idea.industry?.name ?? "" }, idea,
+    buyReasons({ idea, consensus: consensusOf(c.ev), grade: c.ev.F?.grade ?? null, score: c.ev.F?.score ?? null }), c.ev.tech, "", null,
+    { timing: c.a.timing, history: hist ? recLine({ nth: hist.count, first_at: hist.first_at, first_price: hist.first_price, cur_price: hist.last_price, cur_date: hist.last_price_date, currency: c.e.market === "KR" ? "KRW" : "USD" }) : null });
+  const t = c.a.timing;
+  const vc = t.verdict === "high" ? "border-hot/60 bg-hot/15 text-hot" : "border-gold/60 bg-gold/10 text-gold";
+  return (
+    <Card tone={t.verdict === "high" ? "warn" : "gold"}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-lg font-bold">
+            <span className="mr-2 rounded-md bg-gold px-2 py-0.5 text-ink text-sm align-middle">#{rank}</span>
+            <a href={`/stock/${encodeURIComponent(c.entity_id)}`} className="hover:text-arc">{card.flag} {card.name}</a>
+            <span className="ml-2 text-sm font-normal text-sub">{card.code}{card.industry ? ` · ${card.industry}` : ""}</span>
+          </p>
+          {card.history && <p className="text-sm text-arc mt-0.5">{card.history}{hist ? " (최근 추천가 기준)" : ""}</p>}
+          {telegram && <p className="text-xs text-good mt-0.5">📨 텔레그램 추천 대상 (시장별 상위)</p>}
+        </div>
+        <span className={`rounded-full border px-3 py-1 text-sm font-bold ${vc}`}>{card.verdict}</span>
+      </div>
+      {card.thesis && <p className="rounded-lg bg-panel2/70 px-3 py-2">💡 <b className="text-gold">투자 아이디어</b><br />{card.thesis}</p>}
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <p className="font-bold mb-1">🏢 좋은 기업인가</p>
+          <ul className="space-y-1">{card.reasons.length ? card.reasons.map((x, i) => <li key={i}>{x}</li>) : <li className="text-sub">근거 자료 없음</li>}</ul>
+        </div>
+        <div>
+          <p className="font-bold mb-1">⏱️ 지금 사기 좋은가</p>
+          <ul className="space-y-1">{(card.timing ?? []).map((x, i) => <MarkLine key={i} text={x} />)}</ul>
+        </div>
+      </div>
+      {(card.events.length > 0 || card.risk || card.tech || c.a.prior.overall) && (
+        <div className="space-y-1 border-t border-line/60 pt-2">
+          {card.events.length > 0 && <p>⏰ <b>다음 확인</b> {card.events.join(" / ")}</p>}
+          {card.risk && <p>⚠️ <b className="text-warn">리스크</b> {card.risk}</p>}
+          {card.tech && <p className="text-sub">📊 기술적 참고(판정 미사용): {card.tech}</p>}
+        </div>
+      )}
+      <LinkRow links={stockLinks(c.e, ctx)} />
+    </Card>
   );
 }
 
 function QueueSection({ queue, title, about, q, byId, evBy, ctx }: {
-  queue: Queue; title: string; about: string; q: QItem[]; byId: Map<string, Ent>; evBy: Map<string, AxesEvidence>;
-  ctx: Parameters<typeof stockLinks>[1];
+  queue: Queue; title: string; about: string; q: QItem[]; byId: Map<string, Ent>; evBy: Map<string, AxesEvidence>; ctx: Ctx;
 }) {
-  let xs = q.filter((x) => x.queue === queue);
-  const top = new Set<string>();
-  if (queue === "buy") {
-    const rk = (m: "KR" | "US") => rankBuy(xs.filter((x) => (byId.get(x.entity_id)?.market ?? "KR") === m).map((x) => {
-      const ev = evBy.get(x.entity_id) ?? {};
-      return { ...x, families: ev.families?.length ?? 0, p: (x.reason as { p?: number | null }).p ?? null, industryGrowth: ev.idea?.industry?.realized_median ?? null, nextEvent: ev.next_event ?? null };
-    }), xs.length);
-    const kr = rk("KR"), us = rk("US");
-    for (const x of [...kr.slice(0, 5), ...us.slice(0, 5)]) top.add(x.entity_id);
-    xs = [...kr, ...us];
-  }
+  const xs = q.filter((x) => x.queue === queue);
   return (
     <Section title={title} count={xs.length}>
       <Guide>{about}</Guide>
@@ -111,37 +210,17 @@ function QueueSection({ queue, title, about, q, byId, evBy, ctx }: {
         const ex = explain({ queue, market: e?.market ?? "KR", evidence: evBy.get(x.entity_id) ?? {}, p: rs.p ?? null, daysToEarnings: rs.days_to_earnings ?? null, heat: rs.heat ?? null });
         const days = Math.max(1, Math.ceil((Date.now() - new Date(x.first_seen).getTime()) / 86400_000));
         return (
-          <Card key={x.entity_id}>
-            <p className="font-medium">
-              <a href={`/stock/${encodeURIComponent(x.entity_id)}`} className="underline decoration-dotted">{e?.market === "US" ? "🇺🇸" : "🇰🇷"} {e?.name ?? x.entity_id}</a>
-              <span className="ml-1 text-xs text-neutral-500">{e?.symbol} · 이 목록에 {days}일째</span>
+          <Card key={x.entity_id} tone={queue === "take_profit" ? "gold" : "muted"}>
+            <p className="text-base font-bold">
+              <a href={`/stock/${encodeURIComponent(x.entity_id)}`} className="hover:text-arc">{e?.market === "US" ? "🇺🇸" : "🇰🇷"} {e?.name ?? x.entity_id}</a>
+              <span className="ml-2 text-sm font-normal text-sub">{e?.symbol} · 이 목록에 <b className="text-white">{days}일째</b></span>
             </p>
-            {queue === "buy" && e ? <IdeaView ev={evBy.get(x.entity_id) ?? {}} e={e} p={rs.p ?? null} top={top.has(x.entity_id)} /> : <>
-              <p><b>결론</b> {ex.conclusion}</p>
-              <ul className="list-disc pl-5 text-neutral-700 dark:text-neutral-300">{ex.reasons.map((t, i) => <li key={i}>{t}</li>)}</ul>
-            </>}
+            <p>👉 <Hi>결론</Hi> {ex.conclusion}</p>
+            <ul className="space-y-0.5">{ex.reasons.map((t, i) => <li key={i}>▪️ {t}</li>)}</ul>
             {e && <LinkRow links={stockLinks(e, ctx)} />}
           </Card>
         );
       })}
     </Section>
-  );
-}
-
-/** 🎯 투자 아이디어·매수 근거 (브리핑과 같은 함수) */
-function IdeaView({ ev, e, p, top }: { ev: AxesEvidence; e: Ent; p: number | null; top: boolean }) {
-  const idea = ev.idea ?? EMPTY_IDEA;
-  const c = ideaCard(1, { name: e.name, symbol: e.symbol, market: e.market, industry: idea.industry?.name ?? "" }, idea,
-    buyReasons({ idea, p, consensus: consensusOf(ev), grade: ev.F?.grade ?? null, score: ev.F?.score ?? null }), ev.tech, "");
-  return (
-    <div className="space-y-1 text-sm">
-      {top && <p className="text-xs text-emerald-700 dark:text-emerald-400">⭐ 오늘 브리핑 추천 (시장별 상위 5)</p>}
-      {c.thesis && <p><b>💡 투자 아이디어</b> {c.thesis}</p>}
-      <p className="font-medium">📈 매수 근거</p>
-      <ul className="pl-2 text-neutral-700 dark:text-neutral-300">{c.reasons.map((t, i) => <li key={i}>{t}</li>)}</ul>
-      {c.events.length > 0 && <p>⏰ 다음 확인: {c.events.join(" / ")}</p>}
-      {c.risk && <p>⚠️ 리스크: {c.risk}</p>}
-      {c.tech && <p className="text-xs text-neutral-500">📊 기술적 참고(판정 미사용): {c.tech}</p>}
-    </div>
   );
 }

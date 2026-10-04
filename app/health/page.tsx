@@ -39,40 +39,40 @@ export default async function Health() {
   const cap = env().MONTHLY_LLM_CAP_USD;
   const th = "py-1 pr-3 font-normal";
   return (
-    <main className="mx-auto max-w-6xl p-4 space-y-6">
+    <main className="mx-auto max-w-6xl px-4 py-4 space-y-8">
       <Nav />
       <Section title="LLM 비용 (이번 달)">
         <Guide>LLM은 주간 투자위원회 서술에만 씁니다(판정에는 쓰지 않음). 월 상한을 넘으면 호출하지 않고 표·목록만 발행합니다.</Guide>
-        <p className={`text-sm ${spent >= cap * 0.8 ? "text-red-600" : ""}`}>${spent.toFixed(3)} / 상한 ${cap} ({((spent / cap) * 100).toFixed(0)}%) · {(cost.data ?? []).length}회 호출</p>
+        <p className={`text-sm ${spent >= cap * 0.8 ? "text-hot" : ""}`}>${spent.toFixed(3)} / 상한 ${cap} ({((spent / cap) * 100).toFixed(0)}%) · {(cost.data ?? []).length}회 호출</p>
       </Section>
       <Section title="배치 잡 (최근 3일)" count={last.size}>
         {last.size ? (
-          <div className="overflow-x-auto"><table className="w-full text-sm">
-            <thead className="text-xs text-neutral-500 text-left"><tr><th className={th}>잡</th><th className={th}>예정</th><th className={th}>마지막 실행</th><th className={th}>결과</th><th className={th}>3일 실행·실패</th><th className={th}>오류</th></tr></thead>
+          <div className="overflow-x-auto glass rounded-xl px-3"><table className="w-full text-sm">
+            <thead className="text-xs text-sub text-left"><tr><th className={th}>잡</th><th className={th}>예정</th><th className={th}>마지막 실행</th><th className={th}>결과</th><th className={th}>3일 실행·실패</th><th className={th}>오류</th></tr></thead>
             <tbody>{[...last.values()].sort((a, b) => a.job.localeCompare(b.job)).map((r) => (
-              <tr key={r.job} className="border-t border-neutral-100 dark:border-neutral-900">
+              <tr key={r.job} className="border-t border-line/50">
                 <td className="py-1 pr-3">{r.job}</td><td className="py-1 pr-3 text-xs">{EXPECT[r.job] ?? "-"}</td><td className="py-1 pr-3 text-xs">{KST(r.started_at)}</td>
                 <td className="py-1 pr-3">{r.ok === true ? "✅" : r.ok === false ? "❌" : "⏳"}</td><td className="py-1 pr-3 text-xs">{r.runs} · {r.fails}</td>
-                <td className="py-1 pr-3 text-xs text-red-600">{r.ok === false ? (r.detail?.error ?? "").slice(0, 120) : ""}</td>
+                <td className="py-1 pr-3 text-xs text-hot">{r.ok === false ? (r.detail?.error ?? "").slice(0, 120) : ""}</td>
               </tr>))}</tbody>
           </table></div>
         ) : <Empty text="최근 실행 기록이 없습니다." />}
       </Section>
       <Section title="원천 소스" count={(srcs.data ?? []).length}>
-        <div className="overflow-x-auto"><table className="w-full text-sm">
-          <thead className="text-xs text-neutral-500 text-left"><tr><th className={th}>소스</th><th className={th}>마지막 성공</th><th className={th}>연속 실패</th><th className={th}>마지막 오류</th></tr></thead>
+        <div className="overflow-x-auto glass rounded-xl px-3"><table className="w-full text-sm">
+          <thead className="text-xs text-sub text-left"><tr><th className={th}>소스</th><th className={th}>마지막 성공</th><th className={th}>연속 실패</th><th className={th}>마지막 오류</th></tr></thead>
           <tbody>{((srcs.data ?? []) as Src[]).map((s) => (
-            <tr key={s.source} className="border-t border-neutral-100 dark:border-neutral-900">
+            <tr key={s.source} className="border-t border-line/50">
               <td className="py-1 pr-3">{s.source}</td><td className="py-1 pr-3 text-xs">{KST(s.last_ok_at)}</td>
-              <td className={`py-1 pr-3 ${s.consecutive_failures >= 2 ? "text-red-600" : ""}`}>{s.consecutive_failures}</td><td className="py-1 pr-3 text-xs">{s.consecutive_failures ? (s.last_error ?? "").slice(0, 120) : ""}</td>
+              <td className={`py-1 pr-3 ${s.consecutive_failures >= 2 ? "text-hot" : ""}`}>{s.consecutive_failures}</td><td className="py-1 pr-3 text-xs">{s.consecutive_failures ? (s.last_error ?? "").slice(0, 120) : ""}</td>
             </tr>))}</tbody>
         </table></div>
       </Section>
       <Section title="링크 점검 (규칙별 마지막 결과)" count={linkLast.size}>
-        <div className="overflow-x-auto"><table className="w-full text-sm">
-          <thead className="text-xs text-neutral-500 text-left"><tr><th className={th}>규칙</th><th className={th}>상태</th><th className={th}>결과</th><th className={th}>점검</th></tr></thead>
+        <div className="overflow-x-auto glass rounded-xl px-3"><table className="w-full text-sm">
+          <thead className="text-xs text-sub text-left"><tr><th className={th}>규칙</th><th className={th}>상태</th><th className={th}>결과</th><th className={th}>점검</th></tr></thead>
           <tbody>{[...linkLast.values()].sort((a, b) => Number(a.ok) - Number(b.ok) || a.rule.localeCompare(b.rule)).map((l) => (
-            <tr key={l.rule} className="border-t border-neutral-100 dark:border-neutral-900">
+            <tr key={l.rule} className="border-t border-line/50">
               <td className="py-1 pr-3 text-xs">{l.rule}</td><td className="py-1 pr-3 text-xs">{l.status ?? "-"}</td><td className="py-1 pr-3">{l.ok ? "✅" : `❌ ${l.note ?? ""}`}</td><td className="py-1 pr-3 text-xs">{KST(l.checked_at)}</td>
             </tr>))}</tbody>
         </table></div>

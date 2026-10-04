@@ -4,14 +4,17 @@
  *  · 논지: Heimdallr analyses.one_line_thesis (국내) → HermesCall beneficiaries.investment_idea (국내·미국 수혜주)
  *  · 실적: Heimdallr quarterly_fundamentals (국내) · HermesCall quarterly_metrics (미국) — 최근 2개 분기 전년 대비
  *  · 산업: industry_heat (M3 ① 실적 중앙값 · ② 미국 증권사 · ③ 전망) · 이벤트: catalyst_events · 리스크: Heimdallr analyses.risks
+ *  · 수급: 국내 = 네이버 종목별 외국인·기관 일별 순매수(확정된 거래일만) · 미국 = HermesCall entry_checks_us 매집일 대용(D15)
  */
 import { taxonomyConfig } from "@/lib/config/load";
 import { dbSelectAll } from "@/lib/db";
 import { hasText, type IdeaEvidence } from "@/lib/engine/idea";
 import { chartRef, type ChartRef } from "@/lib/engine/technicals";
+import type { FlowRef } from "@/lib/engine/timing";
+import { lastCompleteDate } from "@/lib/outcomes/returns";
 import { read as heimdallr } from "@/lib/ingest/heimdallr";
 import { read as hermes } from "@/lib/ingest/hermescall";
-import { chart } from "@/lib/ingest/market";
+import { chart, naverStockFlow } from "@/lib/ingest/market";
 import { kstDate } from "@/lib/time";
 import { rules, type EntityIndex } from "./context";
 
@@ -39,7 +42,8 @@ export async function ideaEvidence(ids: string[], ents: EntityIndex, now = new D
   // 국내 거래소 구분(.KS/.KQ)은 Heimdallr krx_universe 에서 — 코스닥 종목을 .KS 로 조회하면 하루 늦은 시세가 온다(실측)
   const krx = kr.length ? await heimdallr<{ code: string; symbol: string | null }>("krx_universe", { select: "code,symbol", filters: { code: `in.(${kr.join(",")})` } }) : null;
   const yahoo = new Map((krx?.ok ? krx.data : []).filter((r) => r.symbol).map((r) => [r.code, r.symbol as string]));
-  const [charts, an, qf, qm, bf, heat, cal] = await Promise.all([
+  const [flows, charts, an, qf, qm, bf, heat, cal] = await Promise.all([
+    flowRefs(kr, us, now),
     chartRefs(list.map((e) => ({ id: e.id, market: e.market, symbols: e.market === "US" ? [e.symbol] : yahoo.has(e.symbol) ? [yahoo.get(e.symbol)!] : [`${e.symbol}.KQ`, `${e.symbol}.KS`] }))),
     kr.length ? heimdallr<HdAnalysis>("analyses", { select: "code,fiscal_year,fiscal_quarter,payload,created_at", filters: { code: `in.(${kr.join(",")})` }, order: "created_at.desc" }) : null,
     kr.length ? heimdallr<Qf>("quarterly_fundamentals", { select: "code,fiscal_year,fiscal_quarter,revenue_yoy,op_yoy,is_estimate", filters: { code: `in.(${kr.join(",")})`, fiscal_year: `gte.${fySince}` } }) : null,
@@ -107,7 +111,7 @@ export async function ideaEvidence(ids: string[], ents: EntityIndex, now = new D
     const risk = risks[0] ? { text: risks[0].risk as string, watch: risks[0].watch_metric ?? null, source: "Heimdallr 분석" } : null;
 
     out.set(e.id, {
-      idea: { thesis, growth, industry, events: ev.map(({ when, title, source }) => ({ when, title, source })), risk, chart: charts.get(e.id) ?? null },
+      idea: { thesis, growth, industry, events: ev.map(({ when, title, source }) => ({ when, title, source })), risk, chart: charts.get(e.id) ?? null, flow: flows.get(e.market === "US" ? e.symbol.toUpperCase() : e.symbol) ?? null },
       industryGrowth: industry?.realized_median ?? null,
       nextEvent: ev[0]?.sort ?? null,
     });
@@ -128,5 +132,25 @@ async function chartRefs(xs: { id: string; market: "KR" | "US"; symbols: string[
       return;
     }
   }));
+  return out;
+}
+
+/** 수급: 국내 네이버 종목 투자자 동향(장 마감 전 당일 값 제외, 최근 5거래일) · 미국 HermesCall 매집일 대용. 실패 종목은 비운다(불변 규칙 6) */
+async function flowRefs(kr: string[], us: string[], now: Date): Promise<Map<string, FlowRef>> {
+  const out = new Map<string, FlowRef>();
+  const upTo = lastCompleteDate(now, "KR");
+  await Promise.all(kr.map(async (code) => {
+    const r = await naverStockFlow(code, 10);
+    const rows = r.ok ? r.data.filter((x) => x.date <= upTo).slice(-5) : [];
+    if (rows.length) out.set(code, { kind: "investor", as_of: rows[rows.length - 1].date, dates: rows.map((x) => x.date), foreign: rows.map((x) => x.foreign), institution: rows.map((x) => x.institution) });
+  }));
+  if (us.length) {
+    const since = kstDate(new Date(now.getTime() - 10 * 86400_000));
+    const r = await hermes<{ symbol: string; check_date: string; m5_pass: boolean | null; m5_detail: { streak_days?: number } | null }>("entry_checks_us", { select: "symbol,check_date,m5_pass,m5_detail", filters: { symbol: `in.(${us.join(",")})`, check_date: `gte.${since}` }, order: "check_date.desc" });
+    for (const x of r.ok ? r.data : []) {
+      const k = x.symbol.toUpperCase();
+      if (!out.has(k) && x.m5_pass !== null) out.set(k, { kind: "proxy", as_of: x.check_date, pass: x.m5_pass, streak: x.m5_detail?.streak_days ?? (x.m5_pass ? 2 : 0) });
+    }
+  }
   return out;
 }

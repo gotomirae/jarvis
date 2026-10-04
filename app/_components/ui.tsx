@@ -1,44 +1,85 @@
 import type { ReactNode } from "react";
+import { NavBar } from "./nav";
 
+/** 상단 로고·탭·탭 활용법 (모든 화면 공용) */
 export function Nav() {
-  const items: [string, string][] = [["/", "오늘"], ["/entry", "진입 보드"], ["/portfolio", "내 보유 종목"], ["/radar", "산업 레이더"], ["/growth", "산업 성장 근거"], ["/weekly", "주간 투자위원회"], ["/scorecard", "신호 성적표"], ["/health", "시스템 상태"], ["/taxonomy", "산업 분류"]];
-  return (
-    <nav className="flex flex-wrap gap-3 text-sm border-b border-neutral-200 dark:border-neutral-800 pb-2">
-      <span className="font-bold">JARVIS</span>
-      {items.map(([href, label]) => <a key={href} href={href} className="text-neutral-600 dark:text-neutral-400 hover:underline">{label}</a>)}
-    </nav>
-  );
+  return <NavBar />;
 }
 
 export function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
   return (
-    <section className="space-y-2">
-      <h2 className="font-semibold">{title}{count !== undefined && <span className="ml-1 text-neutral-500 font-normal">{count}</span>}</h2>
+    <section className="space-y-3">
+      <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight">
+        <span>{title}</span>
+        {count !== undefined && <span className="rounded-full bg-gold/15 border border-gold/50 px-2 py-0.5 text-sm font-semibold text-gold">{count}</span>}
+      </h2>
+      <div className="h-px bg-gradient-to-r from-gold/60 via-line to-transparent" />
       {children}
     </section>
   );
 }
 
-export function Card({ children, tone }: { children: ReactNode; tone?: "warn" | "good" | "muted" }) {
-  const border = tone === "warn" ? "border-red-400" : tone === "good" ? "border-emerald-400" : "border-neutral-200 dark:border-neutral-800";
-  return <div className={`rounded border ${border} p-3 text-sm space-y-1`}>{children}</div>;
+const TONE = { warn: "border-l-hot", good: "border-l-good", muted: "border-l-line", gold: "border-l-gold" } as const;
+
+export function Card({ children, tone }: { children: ReactNode; tone?: keyof typeof TONE }) {
+  return <div className={`glass rounded-xl border-l-4 ${TONE[tone ?? "muted"]} p-4 text-sm space-y-2`}>{children}</div>;
 }
 
 export function LinkRow({ links }: { links: { key: string; button: { text: string; url: string } }[] }) {
   return (
-    <div className="flex flex-wrap gap-2 text-xs">
-      {links.map((l) => <a key={l.key} href={l.button.url} target="_blank" rel="noreferrer" className="rounded border border-neutral-300 dark:border-neutral-700 px-2 py-0.5">{l.button.text}</a>)}
+    <div className="flex flex-wrap gap-2 text-xs pt-1">
+      {links.map((l) => <a key={l.key} href={l.button.url} target="_blank" rel="noreferrer" className="rounded-full border border-arc/50 bg-arc/10 px-2.5 py-1 text-arc hover:bg-arc/20">{l.button.text}</a>)}
     </div>
   );
 }
 
-export const Empty = ({ text }: { text: string }) => <p className="text-sm text-neutral-500">{text}</p>;
+export const Empty = ({ text }: { text: string }) => <p className="text-sm text-sub">💤 {text}</p>;
 
-/** 섹션 설명 한 줄 — 이 목록이 무엇인지 */
-export const Guide = ({ children }: { children: ReactNode }) => <p className="text-xs text-neutral-500">{children}</p>;
+/** 섹션 설명 — 이 목록이 무엇인지 */
+export const Guide = ({ children }: { children: ReactNode }) => (
+  <div className="rounded-lg border border-line/70 bg-panel2/60 px-3 py-2 text-sm text-sub">ℹ️ {children}</div>
+);
+
 export const Footer = ({ asOf }: { asOf?: string }) => (
-  <footer className="pt-4 text-xs text-neutral-500 space-y-1">
-    {asOf && <p>기준 {asOf} KST</p>}
-    <p>⚠️ 매수 확정 신호가 아닙니다. 최종 판단·입력은 SnowBall에서.</p>
+  <footer className="pt-6 pb-10 text-sm text-sub space-y-1 border-t border-line/60">
+    {asOf && <p>🕒 기준 {asOf} KST</p>}
+    <p>⚠️ <b className="text-gold">매수 확정 신호가 아닙니다.</b> 최종 판단·입력은 SnowBall에서.</p>
   </footer>
 );
+
+/** 화면 바탕 (가로 폭 · 간격) */
+export const Page = ({ children, wide }: { children: ReactNode; wide?: boolean }) => (
+  <main className={`mx-auto ${wide ? "max-w-6xl" : "max-w-4xl"} px-4 py-4 space-y-8`}>{children}</main>
+);
+
+// ── 강조 ─────────────────────────────────────────────
+/** 중요한 키워드(금색 굵게) */
+export const Hi = ({ children }: { children: ReactNode }) => <b className="text-gold font-semibold">{children}</b>;
+export const Good = ({ children }: { children: ReactNode }) => <b className="text-good font-semibold">{children}</b>;
+export const Bad = ({ children }: { children: ReactNode }) => <b className="text-hot font-semibold">{children}</b>;
+
+/** 등락률 — 국내 관례대로 상승 빨강 ▲ · 하락 파랑 ▼ */
+export function Pct({ v, digits = 1, arrow = true }: { v: number | null | undefined; digits?: number; arrow?: boolean }) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return <span className="text-sub">-</span>;
+  const c = v > 0 ? "text-hot" : v < 0 ? "text-cool" : "text-white";
+  return <b className={`${c} font-semibold tabular-nums`}>{arrow ? (v > 0 ? "▲ " : v < 0 ? "▼ " : "") : ""}{v > 0 ? "+" : ""}{v.toFixed(digits)}%</b>;
+}
+
+/** 요약 숫자 타일 */
+export function Stat({ icon, label, value, sub, tone }: { icon: string; label: string; value: ReactNode; sub?: ReactNode; tone?: "gold" | "good" | "hot" | "arc" }) {
+  const c = tone === "good" ? "text-good" : tone === "hot" ? "text-hot" : tone === "arc" ? "text-arc" : "text-gold";
+  return (
+    <div className="glass rounded-xl px-4 py-3 min-w-[9rem] flex-1">
+      <div className="text-sm text-sub">{icon} {label}</div>
+      <div className={`text-2xl font-extrabold tabular-nums ${c}`}>{value}</div>
+      {sub && <div className="text-xs text-sub mt-0.5">{sub}</div>}
+    </div>
+  );
+}
+
+/** ✅/⚠️/❌/➖ 줄을 색으로 */
+export function MarkLine({ text }: { text: string }) {
+  const c = text.startsWith("✅") ? "text-good" : text.startsWith("❌") ? "text-hot" : text.startsWith("⚠️") ? "text-warn" : "text-sub";
+  const [icon, ...rest] = text.split(" ");
+  return <li><span className="mr-1">{icon}</span><span className={c === "text-sub" ? "text-sub" : `${c}`}>{rest.join(" ")}</span></li>;
+}

@@ -36,18 +36,18 @@ export default async function Growth() {
   const th = "py-1 pr-3 font-normal";
 
   return (
-    <main className="mx-auto max-w-6xl p-4 space-y-6">
+    <main className="mx-auto max-w-6xl px-4 py-4 space-y-8">
       <Nav />
       <Section title="산업별 고성장 판정 (18개 산업)">
         <Guide>진입 신호의 필수 조건 중 하나인 "산업 고성장"입니다. 아래 세 근거 중 하나라도 15% 이상이면 통과(✅)입니다.</Guide>
-        <ul className="text-xs text-neutral-500 list-disc pl-5">
+        <ul className="text-xs text-sub list-disc pl-5">
           <li><b>① 실제 실적</b>: 그 산업 기업들의 매출이 전년 같은 분기보다 몇 % 늘었는지 중앙값. 최근·직전 두 분기 모두 15% 이상 + 영업이익 증가</li>
           <li><b>② 미국 대형 증권사 전망</b>: 골드만삭스·모건스탠리·JP모건·BofA·씨티·웰스파고의 최근 3개월 공개 전망(자동 수집·자동 인정), 증권사별 최신값의 중앙값</li>
           <li><b>③ 시장조사·기업 전망</b>: 설정 파일에 입력한 출처 있는 3년 연평균 성장률(12개월 이내)</li>
         </ul>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto glass rounded-xl px-3">
           <table className="w-full text-sm">
-            <thead className="text-xs text-neutral-500 text-left">
+            <thead className="text-xs text-sub text-left">
               <tr><th className={th}>산업</th><th className={th}>고성장</th><th className={th}>① 실제 실적: 매출 전년 대비 (최근 · 직전 분기, 기업 수)</th><th className={th}>② 미국 대형 증권사 전망</th><th className={th}>③ 시장조사·기업 전망</th><th className={th}>산업 이야기 강도</th><th className={th}>실적 촉매 강도</th></tr>
             </thead>
             <tbody>
@@ -57,7 +57,7 @@ export default async function Growth() {
                 const br = h?.m3_basis?.us_major_broker;
                 const sample = h?.m3_basis?.realized?.sample;
                 return (
-                  <tr key={r.code} className="border-t border-neutral-100 dark:border-neutral-900 align-top">
+                  <tr key={r.code} className="border-t border-line/50 align-top">
                     <td className="py-1 pr-3 font-medium">{r.name}</td>
                     <td className="pr-3">{h?.m3_pass ? "✅ 통과" : "—"}</td>
                     <td className="pr-3">{ok(b.realized)} {fmtPct(h?.m3_median_rev_yoy_q0)} · {fmtPct(h?.m3_median_rev_yoy_q1)} · {h?.m3_members ?? 0}개{sample === "insufficient" ? " (기업 수 부족 — 판단 불가)" : sample === "KR+US" ? " (국내+미국 합산)" : ""}</td>
@@ -87,11 +87,11 @@ export default async function Growth() {
             {xs.length === 0 ? <Empty text="없음" /> : (
               <ul className="space-y-2 text-sm">
                 {xs.slice(0, st === "expired" ? 20 : 100).map((o) => (
-                  <li key={o.id} className="rounded border border-neutral-200 dark:border-neutral-800 p-2 space-y-1">
+                  <li key={o.id} className="rounded border border-line p-2 space-y-1">
                     <p><b>{o.broker}</b> · {nameOf(o.l1)} · {METRIC_NAME[o.metric] ?? o.metric} <b>{o.value_pct}%</b> ({o.horizon ?? "기간 미상"}) · 발표 {o.published_date}</p>
-                    <p className="text-neutral-600 dark:text-neutral-400">“{o.quote}”</p>
-                    <p className="text-xs text-neutral-500">
-                      출처 <a href={o.url} target="_blank" rel="noreferrer" className="underline">{o.domain}</a> ({TIER_NAME[o.tier] ?? o.tier})
+                    <p className="text-sub">“{o.quote}”</p>
+                    <p className="text-xs text-sub">
+                      출처 <a href={o.url} target="_blank" rel="noreferrer" className="link">{o.domain}</a> ({TIER_NAME[o.tier] ?? o.tier})
                       {o.adoption_rule && <> · 인정 근거: {RULE_NAME[o.adoption_rule] ?? o.adoption_rule}</>}
                       {o.conflict && <> · ⚠️ 같은 증권사의 다른 수치와 5%p 이상 차이 — 최신값 사용</>}
                     </p>

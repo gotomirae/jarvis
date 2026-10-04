@@ -39,6 +39,30 @@ table thead { color: var(--color-sub); }
 table th { font-weight: 600; white-space: nowrap; }
 table tbody tr:hover { background: rgba(103, 232, 249, 0.05); }
 
+/* 표: 아래로 스크롤해도 첫 줄(머리글) 고정 (10/5) — 표 상자 안에서 세로 스크롤 */
+.table-wrap {
+  max-height: 72vh;
+  overflow: auto;
+  border-radius: 0.75rem;
+  background: linear-gradient(180deg, rgba(18, 31, 66, 0.85), rgba(13, 22, 48, 0.85));
+  border: 1px solid rgba(36, 64, 122, 0.9);
+}
+.table-wrap table { border-collapse: separate; border-spacing: 0; width: 100%; }
+.table-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #16264f;
+  color: var(--color-gold);
+  border-bottom: 1px solid var(--color-line);
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+}
+.table-wrap td { padding: 0.5rem 0.75rem; }
+
+/* 한 맥락은 한 줄로 (10/5) */
+.one-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* JARVIS 로고: 아이언맨 금색 → 붉은색 그라디언트 + 아크 리액터 빛 */
 .jarvis-logo {
   font-family: var(--font-script);
@@ -47,8 +71,13 @@ table tbody tr:hover { background: rgba(103, 232, 249, 0.05); }
   background-clip: text;
   color: transparent;
   filter: drop-shadow(0 0 18px rgba(251, 191, 36, 0.35)) drop-shadow(0 0 2px rgba(255, 255, 255, 0.4));
-  line-height: 1.1;
-  padding: 0 0.15em;
+  /* 필기체 J 의 꼬리·S 의 끝이 글자 상자 밖으로 나가 잘리던 문제(10/5) → 배경 클립 영역(패딩)을 넉넉히 */
+  display: inline-block;
+  line-height: 1.35;
+  padding: 0.12em 0.45em 0.22em 0.55em;
+  margin-left: -0.35em;
+  overflow: visible;
+  white-space: nowrap;
 }
 
 .glass {

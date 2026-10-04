@@ -7,6 +7,7 @@
 import { describeSignal, rsiBand, type AxesEvidence, type TechRef } from "./explain";
 import type { ChartRef } from "./technicals";
 import { checkLines, VERDICT_NAME, type FlowRef, type Timing } from "./timing";
+import { brokerKo } from "@/lib/labels";
 
 export type IdeaEvidence = {
   thesis: { text: string; source: string; as_of: string | null } | null;
@@ -73,7 +74,7 @@ export function buyReasons(x: { idea: IdeaEvidence; consensus: string[]; grade?:
   if (ind) {
     const bits = [
       ind.realized_median !== null && `실적 중앙값 ${sign(ind.realized_median)}`,
-      ...ind.brokers.slice(0, 2).map((b) => `${b.broker} 연평균 ${b.value}%`),
+      ...ind.brokers.slice(0, 2).map((b) => `${brokerKo(b.broker)} 연평균 ${b.value}%`),
       ...ind.outlook.slice(0, 1).map((o) => `${o.source} 연평균 ${o.cagr}%`),
     ].filter(Boolean);
     out.push(`② 산업 ${ind.pass ? "고성장 ✅" : "성장 근거 부족"}: ${ind.name}${bits.length ? ` (${bits.join(" · ")})` : ""}`);

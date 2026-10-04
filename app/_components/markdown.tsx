@@ -17,7 +17,7 @@ export function Markdown({ md }: { md: string }) {
       i--;
       const [head, ...body] = rows;
       out.push(
-        <div key={k} className="overflow-x-auto glass rounded-xl px-3">
+        <div key={k} className="table-wrap">
           <table className="w-full text-sm my-1">
             <thead className="text-xs text-sub text-left"><tr>{head.map((h, j) => <th key={j} className="py-1 pr-3 font-normal">{h}</th>)}</tr></thead>
             <tbody>{body.map((r, j) => <tr key={j} className="border-t border-line/50">{r.map((c, m) => <td key={m} className="py-1 pr-3 align-top">{c}</td>)}</tr>)}</tbody>

@@ -1,4 +1,6 @@
-import { Bad, Card, Empty, Footer, Good, Guide, Hi, LinkRow, MarkLine, Nav, Page, Section, Stat } from "@/app/_components/ui";
+import { FearGreedChart, IndexChart, VixChart } from "@/app/_components/charts";
+import { Bad, Card, Empty, Footer, Good, Guide, Hi, LinkRow, MarkLine, Nav, Page, Pct, Section, Stat } from "@/app/_components/ui";
+import { dashboardConfig, marketCharts } from "@/lib/dashboard/data";
 import { linksConfig, taxonomyConfig } from "@/lib/config/load";
 import { explain, type AxesEvidence } from "@/lib/engine/explain";
 import type { PerfStat } from "@/lib/engine/feedback";
@@ -19,10 +21,10 @@ type QItem = { date: string; entity_id: string; queue: Queue; reason: Record<str
 type Ent = LinkEntity & { l1_codes: string[] };
 type Ctx = Parameters<typeof stockLinks>[1];
 
-const SECTIONS: { queue: Queue; title: string; about: string }[] = [
-  { queue: "take_profit", title: "💰 익절 검토", about: "보유 종목 중 과열 점수와 주가 반영도가 모두 높은 종목 — 일부 이익 실현을 검토할 때입니다." },
-  { queue: "radar", title: "🔭 선행 관찰", about: "산업 이야기와 실적 촉매는 켜졌지만 실적 숫자는 아직 확인 전이고, 실적 발표가 45일 안에 있는 종목 — 발표 뒤 🎯 로 올라올 수 있습니다." },
-  { queue: "pullback_wait", title: "⏳ 눌림 대기", about: "실적은 좋지만 주가가 이미 많이 반영된 종목 — 반영도가 50 아래로 내려오면 다시 봅니다." },
+const SECTIONS: { queue: Queue; title: string; about: string[] }[] = [
+  { queue: "take_profit", title: "💰 익절 검토", about: ["보유 종목 중 과열 점수 · 주가 반영도가 모두 높음", "👉 일부 이익 실현 검토"] },
+  { queue: "radar", title: "🔭 선행 관찰", about: ["산업 이야기 · 실적 촉매는 켜짐, 실적 숫자는 확인 전", "실적 발표 45일 이내 → 발표 뒤 🎯 로 올라올 수 있음"] },
+  { queue: "pullback_wait", title: "⏳ 눌림 대기", about: ["실적은 좋지만 주가가 이미 많이 반영됨", "👉 반영도가 50 아래로 내려오면 다시 보기"] },
 ];
 
 /** 오늘 (PRD §8): 요약 타일 → 시장 국면 → 보유 경고 → 🎯 지금 사기 좋은 종목 → 대기 → 익절 → 선행 관찰 → 눌림 대기 */
@@ -41,6 +43,9 @@ export default async function Today() {
     sb.from("entry_eval").select("date").eq("market", "US").order("date", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const date = (lastDate.data?.date as string | undefined) ?? kstDate();
+  const mc = await marketCharts();
+  const DC = dashboardConfig();
+  const fgNow = mc.fg[mc.fg.length - 1], vixNow = mc.vix[mc.vix.length - 1];
   const evalDates = [lastKR.data?.date, lastUS.data?.date].filter((d): d is string => !!d);
   const [items, axes, st, ee] = await Promise.all([
     sb.from("queue_items").select("date,entity_id,queue,reason,first_seen").eq("date", date).range(0, 499),
@@ -87,9 +92,9 @@ export default async function Today() {
       <Nav />
 
       <div className="flex flex-wrap gap-3">
-        <Stat icon={r?.risk_off ? "🔴" : "🟢"} label="시장 국면" value={r ? (r.risk_off ? "위험 회피" : "정상") : "계산 전"} tone={r?.risk_off ? "hot" : "good"} sub={`VIX ${r?.vix?.toFixed(1) ?? "-"}`} />
+        <Stat icon={r?.risk_off ? "🔴" : "🟢"} label="시장 국면" value={r ? (r.risk_off ? "위험 회피" : "정상") : "계산 전"} tone={r?.risk_off ? "hot" : "good"} sub={`변동성지수 ${r?.vix?.toFixed(1) ?? "-"}`} />
         <Stat icon="⚠️" label="보유 경고 (7일)" value={alertBy.size} tone={alertBy.size ? "hot" : "good"} />
-        <Stat icon="🎯" label="지금 사기 좋은 종목" value={`${good.length} / ${cands.length}`} sub="TOP 자격 / 매수 검토 후보" />
+        <Stat icon="🎯" label="지금 사기 좋은 종목" value={`${good.length} / ${cands.length}`} sub="추천 자격 / 매수 검토 후보" />
         <Stat icon="🚦" label="진입 · 관찰" value={`${entryRows.filter((x) => x.level === "green").length} · ${entryRows.filter((x) => x.level === "yellow").length}`} tone="arc" sub={<a className="link" href="/entry">진입 보드 →</a>} />
         <Stat icon="✅" label={`추천 승률 (${policy?.horizon ?? R.feedback.primary_horizon}거래일)`} value={o?.hit_rate == null ? "측정 중" : `${Math.round(o.hit_rate * 100)}%`} tone="good" sub={<a className="link" href="/verify">사후 검증 {o?.n ?? 0}건 →</a>} />
       </div>
@@ -102,8 +107,28 @@ export default async function Today() {
         </p>}
       </div>
 
+      <Section title={`📊 주요 지표 (최근 ${DC.lookback_months}개월)`}>
+        <div className="glass rounded-xl p-4 space-y-2">
+          <p className="font-bold whitespace-nowrap">🌏 지수 흐름 <span className="text-sm font-normal text-sub">기간 첫날 = 100</span></p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">{mc.lines.map((l) => <span key={l.key} className="whitespace-nowrap"><span style={{ color: l.color }}>●</span> {l.label} <Pct v={l.ret} /></span>)}</div>
+          {mc.indices.length ? <IndexChart data={mc.indices} lines={mc.lines} /> : <Empty text="시세 자료를 불러오지 못했습니다." />}
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="glass rounded-xl p-4 space-y-1">
+            <p className="font-bold whitespace-nowrap">😱 공포·탐욕 지수 {fgNow && <span className="ml-1 text-gold">{fgNow.value} · {fgNow.rating}</span>}</p>
+            <p className="text-xs text-sub whitespace-nowrap">0 극단적 공포 · 50 중립 · 100 극단적 탐욕 (CNN)</p>
+            {mc.fg.length ? <FearGreedChart data={mc.fg} bands={DC.fear_greed.bands} /> : <Empty text="공포·탐욕 지수를 불러오지 못했습니다." />}
+          </div>
+          <div className="glass rounded-xl p-4 space-y-1">
+            <p className="font-bold whitespace-nowrap">🌪️ {DC.vix.label} {vixNow && <span className={`ml-1 ${vixNow.value >= DC.vix.fear_above ? "text-hot" : vixNow.value < DC.vix.calm_below ? "text-good" : "text-gold"}`}>{vixNow.value.toFixed(1)}</span>}</p>
+            <p className="text-xs text-sub whitespace-nowrap">{DC.vix.calm_below} 아래 안정 · {DC.vix.fear_above} 위 공포</p>
+            {mc.vix.length ? <VixChart data={mc.vix} calm={DC.vix.calm_below} fear={DC.vix.fear_above} /> : <Empty text="변동성지수를 불러오지 못했습니다." />}
+          </div>
+        </div>
+      </Section>
+
       <Section title="⚠️ 보유 경고 (최근 7일)" count={alertBy.size}>
-        <Guide>보유 종목에 생긴 위험 신호입니다. 고점 대비 <b className="text-hot">−20% 이하 하락</b>, <b className="text-hot">허용 비중 초과</b>, 투자 논지를 깨는 이벤트, 등급 하락 등을 종목별로 묶었습니다.</Guide>
+        <Guide items={[<>📉 고점 대비 <b className="text-hot">−20% 이하 하락</b></>, <>⚖️ <b className="text-hot">허용 비중 초과</b></>, "💔 투자 논지를 깨는 이벤트 · 등급 하락"]}>보유 종목의 위험 신호를 종목별로 묶었습니다.</Guide>
         {alertBy.size === 0 ? <Empty text="없음 — 보유 종목에 새 위험 신호가 없습니다." /> : [...alertBy.entries()].map(([k, v]) => (
           <Card key={k} tone="warn">
             <p className="text-base font-bold">{byId.has(k) ? <a href={`/stock/${encodeURIComponent(k)}`} className="link">{v.name}</a> : v.name}</p>
@@ -114,10 +139,12 @@ export default async function Today() {
       </Section>
 
       <Section title="🎯 지금 사기 좋은 종목" count={top.length}>
-        <Guide>
-          <b className="text-white">좋은 기업</b>(실적·산업·신호 합의 = 🎯 매수 검토 후보)과 <b className="text-gold">지금 투자하기 좋은 주식</b>(가격·추세·수급·과열 = ⏱️)을 나눠 판정합니다.
-          ⏱️ 이 <b className="text-white">⏸️ 대기</b>이거나 사후 검증에서 승률이 낮았던 기준에 걸리면 추천하지 않습니다. 시장별 상위 {R.pick_policy.top_max}개가 텔레그램 추천입니다.
-        </Guide>
+        <Guide items={[
+          <>🏢 <b className="text-white">좋은 기업</b> = 실적 · 산업 · 신호 합의 (매수 검토 후보)</>,
+          <>⏱️ <b className="text-gold">지금 사기 좋은가</b> = 가격 · 추세 · 수급 · 과열</>,
+          <>⏸️ 대기이거나 사후 검증에서 승률 낮은 기준에 걸리면 제외</>,
+          <>📨 시장별 상위 {R.pick_policy.top_max}개가 텔레그램 추천</>,
+        ]} />
         {policy?.exclude.length ? <p className="text-sm">📐 사후 검증으로 빠진 기준: {policy.exclude.map((x) => <span key={x.title} className="mr-2 rounded-full border border-hot/50 bg-hot/10 px-2 py-0.5 text-hot">{x.title}</span>)}</p> : null}
         {top.length === 0 ? <Empty text={cands.length ? `오늘은 지금 사기 좋은 종목이 없습니다 — 후보 ${cands.length}개 모두 타이밍 대기.` : "매수 검토 후보가 없습니다."} /> : top.map((c) => {
           const rank = (c.e.market === "KR" ? top.filter((x) => x.e.market === "KR") : top.filter((x) => x.e.market === "US")).indexOf(c) + 1;
@@ -126,7 +153,7 @@ export default async function Today() {
       </Section>
 
       <Section title="⏸️ 좋은 기업이지만 지금은 대기" count={waiting.length}>
-        <Guide>실적·산업은 좋지만 지금 가격·추세·수급이 매수하기 좋지 않은 종목입니다. 점수가 오르면 위 목록으로 올라옵니다.</Guide>
+        <Guide items={["실적 · 산업은 좋지만 지금 가격 · 추세 · 수급이 별로", "점수가 오르면 위 목록으로 올라옴"]} />
         {waiting.length === 0 ? <Empty text="없음" /> : (
           <ul className="grid gap-2 sm:grid-cols-2">
             {waiting.map((c) => (
@@ -143,7 +170,7 @@ export default async function Today() {
       {SECTIONS.map((s) => <QueueSection key={s.queue} {...s} q={q} byId={byId} evBy={evBy} ctx={ctx} />)}
 
       <Section title="🚦 진입 신호 · 관찰 · 실적 돌파">
-        <Guide>필수 조건 5가지(실적 가속·주가 미반영 / MACD 교차 직전 / 산업 고성장 / 6개월 내 상승 이벤트 / 외국인·기관 2일 연속 순매수)를 모두 충족한 🟢 진입 신호와 🟡 관찰·🔵 실적 돌파는 <a className="link" href="/entry">진입 보드</a>에서 봅니다.</Guide>
+        <Guide items={["🟢 진입 신호 = 필수 조건 5개 모두 충족", "🟡 관찰 · 🔵 실적 돌파도 함께", <a key="e" className="link" href="/entry">🚦 진입 보드에서 보기 →</a>]} />
       </Section>
       <Footer asOf={`${date} 판정 · 시장 국면 ${r?.at ? kstString(new Date(r.at)) : "-"}`} />
     </Page>
@@ -198,12 +225,12 @@ function IdeaView({ c, rank, hist, ctx, telegram }: { c: Cand; rank: number; his
 }
 
 function QueueSection({ queue, title, about, q, byId, evBy, ctx }: {
-  queue: Queue; title: string; about: string; q: QItem[]; byId: Map<string, Ent>; evBy: Map<string, AxesEvidence>; ctx: Ctx;
+  queue: Queue; title: string; about: string[]; q: QItem[]; byId: Map<string, Ent>; evBy: Map<string, AxesEvidence>; ctx: Ctx;
 }) {
   const xs = q.filter((x) => x.queue === queue);
   return (
     <Section title={title} count={xs.length}>
-      <Guide>{about}</Guide>
+      <Guide items={about} />
       {xs.length === 0 ? <Empty text="없음" /> : xs.map((x) => {
         const e = byId.get(x.entity_id);
         const rs = x.reason as { p?: number | null; days_to_earnings?: number; heat?: number };

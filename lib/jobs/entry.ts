@@ -26,6 +26,7 @@ import { lastCompleteDate, type Market } from "@/lib/outcomes/returns";
 import { sendMessage } from "@/lib/telegram/send";
 import { greenText, holdingAlertText } from "@/lib/telegram/templates";
 import { kstDate } from "@/lib/time";
+import { brokerKo } from "@/lib/labels";
 import { latestHoldings, loadEntities, rules, type EntityRow } from "./context";
 import { currentRegime } from "./pipeline";
 import { getState } from "./poll";
@@ -60,7 +61,7 @@ function m3Cond(e: EntityRow, heat: Map<string, Heat>, l1Name: (c: string) => st
   for (const c of passed) {
     const h = heat.get(c)!, b = h.m3_basis?.bases ?? {};
     if (b.realized) { lines.push(`실제 실적 ${l1Name(c)} 매출 전년 대비 중앙값 ${sg(h.m3_median_rev_yoy_q0)}·${sg(h.m3_median_rev_yoy_q1)} (${h.m3_members ?? "-"}개 기업)`); growth = Math.max(growth ?? -Infinity, h.m3_median_rev_yoy_q0 ?? -Infinity); }
-    if (b.us_major_broker) for (const d of h.m3_basis?.us_major_broker?.detail ?? []) lines.push(`${d.broker} ${l1Name(c)} 성장 전망 ${d.value}% (${d.published})`);
+    if (b.us_major_broker) for (const d of h.m3_basis?.us_major_broker?.detail ?? []) lines.push(`${brokerKo(d.broker)} ${l1Name(c)} 성장 전망 ${d.value}% (${d.published})`);
     if (b.outlook) for (const o of h.m3_basis?.outlook ?? []) lines.push(`${o.source} ${o.segment ?? l1Name(c)} 연평균 ${o.cagr}%`);
   }
   return { cond: { pass: true, reason: null }, lines: lines.slice(0, 3), growth: Number.isFinite(growth as number) ? growth : null };

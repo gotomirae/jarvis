@@ -180,11 +180,11 @@ excluded_outlooks: []    # 선택: 잘못 채택된 자료의 URL 을 적으면 
 
 industries:
   "1a":   # AI
-    - {source_type: research, segment: "AI 소프트웨어·클라우드", cagr_3y_pct: 15.7, source: "Gartner direct AI services outlook", url: "https://www.gartner.com/en/documents/8318253", as_of: "2026-09", origin: "Heimdallr sector_growth.py"}
+    - {source_type: research, segment: "AI 소프트웨어·클라우드", cagr_3y_pct: 15.7, source: "가트너 AI 서비스 시장 전망", url: "https://www.gartner.com/en/documents/8318253", as_of: "2026-09", origin: "Heimdallr sector_growth.py"}
   "1b":   # 반도체
-    - {source_type: company, segment: "AI·HBM 반도체 밸류체인", cagr_3y_pct: 30.0, current_growth_pct: 58.0, source: "SK hynix 2026 HBM market outlook", url: "https://news.skhynix.com/en/2026-market-outlook-focus-on-the-hbm-led-memory-supercycle/", as_of: "2026-09", origin: "Heimdallr sector_growth.py"}
+    - {source_type: company, segment: "AI·HBM 반도체 밸류체인", cagr_3y_pct: 30.0, current_growth_pct: 58.0, source: "SK하이닉스 2026 HBM 시장 전망", url: "https://news.skhynix.com/en/2026-market-outlook-focus-on-the-hbm-led-memory-supercycle/", as_of: "2026-09", origin: "Heimdallr sector_growth.py"}
   "1c":   # 전력인프라
-    - {source_type: research, segment: "전력망·에너지저장", cagr_3y_pct: 27.0, source: "Grand View Research grid-scale battery storage outlook", url: "https://www.grandviewresearch.com/industry-analysis/grid-scale-battery-storage-market", as_of: "2026-09", origin: "Heimdallr sector_growth.py"}
+    - {source_type: research, segment: "전력망·에너지저장", cagr_3y_pct: 27.0, source: "그랜드뷰리서치 전력망용 배터리 저장 시장 전망", url: "https://www.grandviewresearch.com/industry-analysis/grid-scale-battery-storage-market", as_of: "2026-09", origin: "Heimdallr sector_growth.py"}
   # 아래는 미입력 — ①(실제 실적) 또는 ②(무료 검색 자동 채택)로 판단된다. 셋 다 없으면 대시보드 /growth 에 "근거 없음" 표시.
   "1d": []   # 바이오
   "1e": []   # 화장품_미용기기

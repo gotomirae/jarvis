@@ -5,7 +5,7 @@ import { explain, pLevel, type AxesEvidence } from "@/lib/engine/explain";
 import type { Queue } from "@/lib/engine/queues";
 import { env } from "@/lib/env";
 import { fmtPct } from "@/lib/format";
-import { BASIS_NAME, direction, SIGNAL_NAME, yesNo } from "@/lib/labels";
+import { BASIS_NAME, brokerKo, direction, SIGNAL_NAME, yesNo } from "@/lib/labels";
 import { stockLinks, type LinkEntity } from "@/lib/links";
 import { supabaseServer } from "@/lib/supabase/server";
 import { kstDate, kstString } from "@/lib/time";
@@ -68,7 +68,7 @@ export default async function StockPage({ params, searchParams }: { params: Prom
             <p><b>결론</b> {ex.conclusion}</p>
             <ul className="list-disc pl-5">{ex.reasons.map((t, i) => <li key={i}>{t}</li>)}</ul>
           </Card>
-        ) : <Guide>오늘은 어떤 행동 목록(매수 검토·선행 관찰 등)에도 들지 않았습니다.</Guide>}
+        ) : <Guide>오늘은 어떤 행동 목록(매수 검토 · 선행 관찰 등)에도 들지 않았습니다.</Guide>}
         {a ? (
           <table className="text-sm">
             <tbody>
@@ -84,21 +84,21 @@ export default async function StockPage({ params, searchParams }: { params: Prom
       </Section>
 
       <Section title="산업 고성장 여부">
-        <Guide>세 근거 중 하나라도 15% 이상이면 고성장입니다(자세한 원문은 “산업 성장 근거” 화면).</Guide>
+        <Guide items={["세 근거 중 하나라도 15% 이상이면 고성장", <a key="g" className="link" href="/radar#growth">📡 산업 레이더에서 근거 보기 →</a>]} />
         {((heat.data ?? []) as { l1: string; m3_pass: boolean | null; m3_median_rev_yoy_q0: number | null; m3_median_rev_yoy_q1: number | null; m3_members: number | null; m3_basis: { bases?: Record<string, boolean>; us_major_broker?: { detail: { broker: string; value: number; published: string }[] } | null; outlook?: { source: string; cagr: number }[] } }[]).map((h) => (
           <Card key={h.l1} tone={h.m3_pass ? "good" : "muted"}>
             <p className="font-medium">{h.m3_pass ? "✅ 고성장" : "— 근거 부족"} · {l1Name(h.l1)}</p>
             <p>① 실제 실적 {yesNo(h.m3_basis?.bases?.realized)} 매출 전년 대비 중앙값 최근 {fmtPct(h.m3_median_rev_yoy_q0)} · 직전 {fmtPct(h.m3_median_rev_yoy_q1)} (기업 {h.m3_members ?? 0}개)</p>
-            <p>② 미국 대형 증권사 전망 {yesNo(h.m3_basis?.bases?.us_major_broker)} {(h.m3_basis?.us_major_broker?.detail ?? []).map((d) => `${d.broker} 연평균 ${d.value}% (${d.published} 발표)`).join(", ") || "자료 없음"}</p>
+            <p>② 미국 대형 증권사 전망 {yesNo(h.m3_basis?.bases?.us_major_broker)} {(h.m3_basis?.us_major_broker?.detail ?? []).map((d) => `${brokerKo(d.broker)} 연평균 ${d.value}% (${d.published} 발표)`).join(", ") || "자료 없음"}</p>
             <p>③ 시장조사·기업 전망 {yesNo(h.m3_basis?.bases?.outlook)} {(h.m3_basis?.outlook ?? []).map((o) => `${o.source} 연평균 ${o.cagr}%`).join(", ") || "자료 없음"}</p>
           </Card>
         ))}
       </Section>
 
       <Section title="앞으로 6개월 안의 상승 이벤트" count={events.length}>
-        <Guide>SnowBall 트리거·HermesCall 분석·Heimdallr 분석·실적 일정(컨센서스 상향)·수동 일정에서 모은 이벤트입니다. “~날짜”는 그 날짜까지의 기간을 뜻합니다.</Guide>
+        <Guide items={["📚 SnowBall 트리거 · HermesCall · Heimdallr 분석 · 실적 일정 · 수동 일정에서 모음", "“~날짜” = 그 날짜까지의 기간"]} />
         {events.length === 0 ? <Empty text="없음" /> : (
-          <ul className="text-sm list-disc pl-5 space-y-0.5">{events.slice(0, 12).map((x, i) => <li key={i}>{x.date ?? `~${x.window_end}`} · {x.title} <span className="text-xs text-sub">({x.source})</span></li>)}</ul>
+          <ul className="text-sm space-y-1">{events.slice(0, 12).map((x, i) => <li key={i}>🗓️ <b className="text-gold">{x.date ?? `~${x.window_end}`}</b> {x.title} <span className="text-xs text-sub">({x.source})</span></li>)}</ul>
         )}
       </Section>
 
@@ -114,10 +114,10 @@ export default async function StockPage({ params, searchParams }: { params: Prom
       </Section>
 
       <Section title="SnowBall로 보내기">
-        <Guide>이 종목을 SnowBall 아이디어 초안으로 보냅니다(매수·논지 입력은 SnowBall에서).</Guide>
+        <Guide items={["❄️ SnowBall 아이디어 초안으로 보내기", "매수 · 논지 입력은 SnowBall에서"]} />
         <form action={submitToSnowball}>
           <input type="hidden" name="entity_id" value={e.id} />
-          <button className="rounded border border-line px-3 py-1 text-sm">SnowBall 아이디어 초안으로 보내기</button>
+          <button className="rounded-lg bg-gold text-ink font-semibold px-4 py-1.5 text-sm whitespace-nowrap">❄️ SnowBall로 보내기</button>
         </form>
         {sp.submitted && <p className="text-sm">{sp.submitted === "ok" ? "✅ SnowBall 아이디어 초안으로 보냈습니다." : `❌ ${sp.submitted}`}</p>}
       </Section>

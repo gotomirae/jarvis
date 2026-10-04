@@ -10,7 +10,7 @@ export function Section({ title, count, children }: { title: string; count?: num
   return (
     <section className="space-y-3">
       <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight">
-        <span>{title}</span>
+        <span className="one-line">{title}</span>
         {count !== undefined && <span className="rounded-full bg-gold/15 border border-gold/50 px-2 py-0.5 text-sm font-semibold text-gold">{count}</span>}
       </h2>
       <div className="h-px bg-gradient-to-r from-gold/60 via-line to-transparent" />
@@ -35,9 +35,12 @@ export function LinkRow({ links }: { links: { key: string; button: { text: strin
 
 export const Empty = ({ text }: { text: string }) => <p className="text-sm text-sub">💤 {text}</p>;
 
-/** 섹션 설명 — 이 목록이 무엇인지 */
-export const Guide = ({ children }: { children: ReactNode }) => (
-  <div className="rounded-lg border border-line/70 bg-panel2/60 px-3 py-2 text-sm text-sub">ℹ️ {children}</div>
+/** 섹션 설명 — 핵심만, 한 줄에 한 가지 (items 로 넘기면 줄마다 끊어 보여 준다) */
+export const Guide = ({ children, items }: { children?: ReactNode; items?: ReactNode[] }) => (
+  <div className="rounded-lg border border-line/70 bg-panel2/60 px-3 py-2 text-sm text-sub">
+    {children && <p>ℹ️ {children}</p>}
+    {items && <ul className={`space-y-0.5 ${children ? "mt-1" : ""}`}>{items.map((x, i) => <li key={i}>• {x}</li>)}</ul>}
+  </div>
 );
 
 export const Footer = ({ asOf }: { asOf?: string }) => (
@@ -69,10 +72,10 @@ export function Pct({ v, digits = 1, arrow = true }: { v: number | null | undefi
 export function Stat({ icon, label, value, sub, tone }: { icon: string; label: string; value: ReactNode; sub?: ReactNode; tone?: "gold" | "good" | "hot" | "arc" }) {
   const c = tone === "good" ? "text-good" : tone === "hot" ? "text-hot" : tone === "arc" ? "text-arc" : "text-gold";
   return (
-    <div className="glass rounded-xl px-4 py-3 min-w-[9rem] flex-1">
-      <div className="text-sm text-sub">{icon} {label}</div>
-      <div className={`text-2xl font-extrabold tabular-nums ${c}`}>{value}</div>
-      {sub && <div className="text-xs text-sub mt-0.5">{sub}</div>}
+    <div className="glass rounded-xl px-4 py-3 min-w-[11rem] flex-1">
+      <div className="one-line text-sm text-sub">{icon} {label}</div>
+      <div className={`one-line text-2xl font-extrabold tabular-nums ${c}`}>{value}</div>
+      {sub && <div className="one-line text-xs text-sub mt-0.5">{sub}</div>}
     </div>
   );
 }

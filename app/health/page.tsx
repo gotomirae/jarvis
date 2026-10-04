@@ -47,7 +47,7 @@ export default async function Health() {
       </Section>
       <Section title="배치 잡 (최근 3일)" count={last.size}>
         {last.size ? (
-          <div className="overflow-x-auto glass rounded-xl px-3"><table className="w-full text-sm">
+          <div className="table-wrap"><table className="w-full text-sm">
             <thead className="text-xs text-sub text-left"><tr><th className={th}>잡</th><th className={th}>예정</th><th className={th}>마지막 실행</th><th className={th}>결과</th><th className={th}>3일 실행·실패</th><th className={th}>오류</th></tr></thead>
             <tbody>{[...last.values()].sort((a, b) => a.job.localeCompare(b.job)).map((r) => (
               <tr key={r.job} className="border-t border-line/50">
@@ -59,7 +59,7 @@ export default async function Health() {
         ) : <Empty text="최근 실행 기록이 없습니다." />}
       </Section>
       <Section title="원천 소스" count={(srcs.data ?? []).length}>
-        <div className="overflow-x-auto glass rounded-xl px-3"><table className="w-full text-sm">
+        <div className="table-wrap"><table className="w-full text-sm">
           <thead className="text-xs text-sub text-left"><tr><th className={th}>소스</th><th className={th}>마지막 성공</th><th className={th}>연속 실패</th><th className={th}>마지막 오류</th></tr></thead>
           <tbody>{((srcs.data ?? []) as Src[]).map((s) => (
             <tr key={s.source} className="border-t border-line/50">
@@ -69,7 +69,7 @@ export default async function Health() {
         </table></div>
       </Section>
       <Section title="링크 점검 (규칙별 마지막 결과)" count={linkLast.size}>
-        <div className="overflow-x-auto glass rounded-xl px-3"><table className="w-full text-sm">
+        <div className="table-wrap"><table className="w-full text-sm">
           <thead className="text-xs text-sub text-left"><tr><th className={th}>규칙</th><th className={th}>상태</th><th className={th}>결과</th><th className={th}>점검</th></tr></thead>
           <tbody>{[...linkLast.values()].sort((a, b) => Number(a.ok) - Number(b.ok) || a.rule.localeCompare(b.rule)).map((l) => (
             <tr key={l.rule} className="border-t border-line/50">

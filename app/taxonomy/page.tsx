@@ -1,4 +1,4 @@
-import { Nav } from "@/app/_components/ui";
+import { Guide, Nav } from "@/app/_components/ui";
 import { supabaseServer } from "@/lib/supabase/server";
 import { METHOD_NAME, SPECIAL_L1 } from "@/lib/labels";
 import { kstString } from "@/lib/time";
@@ -37,7 +37,7 @@ export default async function TaxonomyPage() {
 
       <section className="space-y-2">
         <h2 className="text-xl font-bold">확인 대기 {pend.length}건</h2>
-        <p className="text-xs text-sub">각 프로젝트의 산업 이름 중 자동으로 확정하지 못한 것입니다. 맞는 산업을 고르고 “확정”을 누르세요. 7일 넘게 두면 빨간 테두리로 표시됩니다.</p>
+        <Guide items={["🤔 각 프로젝트의 산업 이름 중 자동 확정 못 한 것", "✅ 맞는 산업 고르고 “확정”", "🔴 7일 넘으면 빨간 테두리"]} />
         {pend.length === 0 && <p className="text-sm text-sub">모든 라벨이 매핑되어 있습니다.</p>}
         {pend.map((p) => {
           const age = Math.floor((now - new Date(p.first_seen).getTime()) / 86400_000);

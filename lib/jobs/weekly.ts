@@ -247,7 +247,7 @@ export async function collectMemo(now = new Date()): Promise<{ data: MemoData; f
   for (const q of (qItems?.ok ? qItems.data : []).filter((i) => i.queue === "take_profit")) hold.set(`tp:${q.entity_id}`, `💰 ${ents.byId.get(q.entity_id)?.name ?? q.entity_id} — 과열·주가 반영도 높음 → 1/3 익절 검토`);
   // 보유 대응은 비중 초과(동적 허용) → 깊은 하락 순으로 12건까지, 나머지는 건수만
   const holdAll = [...hold.values()].sort((x, y) => Number(y.includes("허용")) - Number(x.includes("허용")) || Number(y.startsWith("💰")) - Number(x.startsWith("💰")));
-  const holdList = holdAll.length > 12 ? [...holdAll.slice(0, 12), `외 ${F("보유 대응", "위 목록에 보이지 않은 나머지 보유 경고 수(전체가 아님)", holdAll.length - 12, "int")}건 — 대시보드 내 보유 종목 참고`] : holdAll;
+  const holdList = holdAll.length > 12 ? [...holdAll.slice(0, 12), `외 ${F("보유 대응", "위 목록에 보이지 않은 나머지 보유 경고 수(전체가 아님)", holdAll.length - 12, "int")}건 — 대시보드 아이언맨의 포트폴리오 참고`] : holdAll;
 
   // FlyWheel 주간 리포트 (노션)
   const fw = await findFlywheelReport(week, start);

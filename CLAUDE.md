@@ -15,6 +15,7 @@ Next.js 15 App Router · React 19 · TypeScript · Tailwind v4 · recharts · Su
 | `config/links.yaml` | 텔레그램·대시보드 공용 링크 규칙 |
 | `config/industry_growth.yaml` | M3 ② 미국 메이저 증권사 목록·무료 검색 소스·출처 등급·추출 패턴, ③ 전망 근거(출처·기준일 필수) |
 | `config/catalyst_calendar.yaml` | M4 수동 이벤트 |
+| `config/dashboard.yaml` | 대시보드 그래프(지수·공포탐욕·변동성·섹터 대표 ETF·주기·진입 보드 차트) — 표시 전용 |
 
 ## 불변 규칙
 1. **보유·거래·원가를 쓰지 않는다.** 원장은 SnowBall Heritage. SnowBall 쓰기는 `jarvis_submit_idea` RPC 하나.
@@ -35,17 +36,18 @@ Next.js 15 App Router · React 19 · TypeScript · Tailwind v4 · recharts · Su
 
 ## 디렉터리
 ```
-app/                    / · /portfolio · /stock/[id] · /entry · /verify(사후 검증) · /radar · /growth · /weekly · /scorecard · /taxonomy · /health
+app/                    / · /entry · /verify(사후 검증) · /portfolio(아이언맨의 포트폴리오) · /radar(산업 레이더 + 성장 근거) · /weekly · /scorecard · /taxonomy · /stock/[id] · /health(탭 없음) · /growth(→ /radar)
 app/api/telegram/       webhook
 app/api/public/         taxonomy · holdings-lite · industry-heat · catalyst-watch (토큰)
 lib/taxonomy/           match.ts (참조 구현과 동일 결과, 커버리지 100%)
 lib/links.ts            링크 빌더 (순수 함수 + naver_us 코드 해석 어댑터 분리)
 lib/ingest/             flywheel · sage · hermescall · heimdallr · snowball · market · notion
-lib/engine/             normalize · axes · regime · industry-growth(M3 ①) · outlook/(M3 ② search · fetch · extract · adopt — 무료·LLM 없음) · catalysts(M4) · entry(🟢/🟡/🔵) · queues · gate · pri-us-lite · timing(⏱️ 지금 매수 매력, D53) · pick-policy(사후 검증 학습 기준, D54)
+lib/engine/             normalize · axes · regime · industry-growth(M3 ①) · outlook/(M3 ② search · fetch · extract · adopt — 무료·LLM 없음) · catalysts(M4) · entry(🟢/🟡/🔵) · queues · gate · pri-us-lite · timing(⏱️ 지금 매수 매력, D53) · pick-policy(사후 검증 학습 기준, D54) · series · cycle(그래프·섹터 주기, D56)
 lib/outcomes/           ledger · returns · scorecard · attribution · review · rec-history(추천 이력, D55)
 lib/memo/               fact-table · prompt · grounding
 lib/telegram/           send · templates · commands · keyboards
 lib/llm/                router
+lib/dashboard/          data (그래프 시계열 — 서버 캐시, D56)
 scripts/                배치 진입점 (npm run job -- <name>)
 supabase/migrations/    jarvis 스키마 + pg_cron dispatch
 config/                 위 표

@@ -1,0 +1,45 @@
+# 대시보드 그래프 설정 — 단일 출처 (사용자 지정 2026-10-05, D56)
+# 표시 전용 — 판정(🎯·🟢)에 쓰지 않는다. 시세: 국내 = 네이버 일봉(거래소 공식 종가), 미국 = 야후 (무료·무키)
+
+lookback_months: 12          # 주요 지표·섹터 그래프 기간
+cache_minutes: 60            # 서버 캐시(외부 시세 호출 최소화)
+
+# 🏠 오늘 — 주요 지수 (한 그래프, 기간 첫날 = 100 으로 맞춰 비교)
+indices:
+  - {sym: "^GSPC", label: "S&P 500", source: yahoo, color: "#60a5fa"}
+  - {sym: "^IXIC", label: "나스닥 종합", source: yahoo, color: "#a78bfa"}
+  - {sym: "^NDX", label: "나스닥 100", source: yahoo, color: "#f472b6"}
+  - {sym: "KOSPI", label: "코스피", source: naver, color: "#fcd34d"}
+  - {sym: "KOSDAQ", label: "코스닥", source: naver, color: "#34d399"}
+
+vix: {sym: "^VIX", label: "변동성지수(VIX)", calm_below: 20, fear_above: 30}
+fear_greed:                  # CNN 공포·탐욕 지수 (0~100). 25 미만 극단적 공포 · 45 미만 공포 · 55 초과 탐욕 · 75 초과 극단적 탐욕
+  bands: {extreme_fear: 25, fear: 45, greed: 55, extreme_greed: 75}
+
+# 📡 산업 레이더 — 노션 산업(L1)별 대표 ETF (이름은 10/5 네이버·야후에서 확인)
+sector_proxies:
+  1a: {sym: "AIQ", source: yahoo, name: "글로벌X 인공지능·기술 ETF"}
+  1b: {sym: "091160", source: naver, name: "KODEX 반도체"}
+  1c: {sym: "GRID", source: yahoo, name: "퍼스트트러스트 스마트그리드 인프라 ETF"}
+  1d: {sym: "244580", source: naver, name: "KODEX 바이오"}
+  1e: {sym: "228790", source: naver, name: "TIGER 화장품"}
+  1f: {sym: "266360", source: naver, name: "KODEX K콘텐츠"}
+  1g: {sym: "449450", source: naver, name: "PLUS K방산"}
+  1h: {sym: "466920", source: naver, name: "SOL 조선TOP3플러스"}
+  1i: {sym: "305720", source: naver, name: "KODEX 2차전지산업"}
+  1l: {sym: "091180", source: naver, name: "KODEX 자동차"}
+  2a: {sym: "BOTZ", source: yahoo, name: "글로벌X 로봇·인공지능 ETF"}
+  2b: {sym: "266370", source: naver, name: "KODEX IT"}
+  2c: {sym: "143860", source: naver, name: "TIGER 헬스케어"}
+  2d: {sym: "266410", source: naver, name: "KODEX 필수소비재"}
+  2e: {sym: "228800", source: naver, name: "TIGER 여행레저"}
+  2f: {sym: "091170", source: naver, name: "KODEX 은행"}
+  2g: {sym: "117700", source: naver, name: "KODEX 건설"}
+  3c: {sym: "QTUM", source: yahoo, name: "디파이언스 양자컴퓨팅 ETF"}
+
+# 🔄 섹터 주기 — 추세 위치(종가 ÷ 이동평균 − 1)와 그 변화(모멘텀)를 1년 표준편차로 맞춰 각도로 바꾼다 (lib/engine/cycle.ts)
+#   0° 바닥 → 90° 회복 끝·상승 가속 → 180° 정점 → 270° 하락 가속 → 360° 바닥
+cycle: {ma_days: 120, momentum_days: 20, zscore_days: 250}
+
+# 🚦 진입 보드 — 종목 그래프 (주가 + 분기 영업이익 증가율 · MACD · RSI)
+entry_chart: {quarters: 10, rsi_overbought: 70, rsi_oversold: 30}

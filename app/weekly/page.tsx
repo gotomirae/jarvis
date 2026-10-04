@@ -20,7 +20,7 @@ export default async function Weekly({ searchParams }: { searchParams: Promise<{
     <main className="mx-auto max-w-5xl px-4 py-4 space-y-8">
       <Nav />
       <Section title="주간 투자위원회" count={memos.length}>
-        <Guide>매주 토요일 09:30(FlyWheel 주간 리포트를 기다려 늦어도 10:30) 발행. 표의 숫자는 JARVIS가 계산한 사실표 값이고, 서술은 숫자를 사실표 표식으로만 인용해 검증을 통과한 것만 싣습니다. 통과하지 못한 주는 표·목록만 발행합니다.</Guide>
+        <Guide items={["🗓️ 매주 토요일 09:30 발행 (FlyWheel 리포트 대기 시 늦어도 10:30)", "🔢 표의 숫자 = JARVIS가 계산한 사실표 값", "✍️ 서술은 숫자 검증을 통과한 것만 · 실패한 주는 표 · 목록만"]} />
         {memos.length ? (
           <div className="flex flex-wrap gap-2 text-xs">
             {memos.map((x) => <a key={x.week} href={`/weekly?week=${x.week}`} className={`rounded border px-2 py-0.5 ${x.week === pick ? "border-gold text-gold" : "border-line"}`}>{x.week}{x.grounding_ok ? "" : " · 표만"}</a>)}

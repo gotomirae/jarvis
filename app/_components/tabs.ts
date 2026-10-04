@@ -1,27 +1,39 @@
-/** 대시보드 탭 — 이름·아이콘·최적 활용법(사용자 지정 2026-10-04: 각 탭을 언제·어떻게 쓰는지 명쾌하고 간단하게) */
+/**
+ * 대시보드 탭 — 묶음·이름·아이콘·활용법 (사용자 지정 2026-10-04·05).
+ * 10/5: 시스템 상태 탭 삭제(주소 /health 로만 접근), 산업 레이더 + 산업 성장 근거 통합, "내 보유 종목" → "아이언맨의 포트폴리오"
+ */
 export type Tab = { href: string; icon: string; label: string; when: string; how: string[] };
+export type TabGroup = { name: string; tabs: Tab[] };
 
-export const TABS: Tab[] = [
-  { href: "/", icon: "🏠", label: "오늘", when: "아침·저녁 브리핑을 받은 직후, 하루 두 번",
-    how: ["🚦 맨 위 시장 국면과 ⚠️ 보유 경고부터 확인", "🎯 '지금 사기 좋은 종목' 카드에서 🏢 좋은 기업인가 · ⏱️ 지금 사기 좋은가를 나눠 읽기", "마음에 드는 종목은 이름을 눌러 종목 화면 → SnowBall로 보내기"] },
-  { href: "/entry", icon: "🚦", label: "진입 보드", when: "🟢 진입 신호 알림이 왔을 때",
-    how: ["필수 조건 5개가 모두 ✅ 인지 확인", "무효화 가격(이 아래로 마감하면 철회)과 1차 비중을 SnowBall에 기록", "🟡 관찰은 관심 목록, 🔵 실적 돌파는 60거래일 지켜보기"] },
-  { href: "/verify", icon: "✅", label: "사후 검증", when: "주 1회 — 추천이 실제로 맞았는지 확인",
-    how: ["추천 승률·시장 대비 초과수익을 가장 먼저 보기", "승률이 낮은 기준은 다음 브리핑부터 자동으로 빠짐 — '적용 중인 기준'에서 확인", "기준별 표에서 어떤 근거(수급·눌림·과열 등)가 실제로 통했는지 보기"] },
-  { href: "/portfolio", icon: "💼", label: "내 보유 종목", when: "주 1회 보유 점검",
-    how: ["빨간 비중(허용 비중 초과)과 ⚠️ 경고 종목부터", "주가 반영도가 높은데 과열 점수도 높으면 익절 검토", "투자 논지·대기 트리거는 SnowBall에서 갱신"] },
-  { href: "/radar", icon: "📡", label: "산업 레이더", when: "새 아이디어를 찾을 때",
-    how: ["고성장 ✅ + 흐름 강도 높은 산업이 돈이 몰리는 곳", "🎯·🔭 종목 수가 많은 산업부터 종목 화면으로 들어가 보기", "바스켓 1주·1개월 수익률로 이미 오른 산업인지 확인"] },
-  { href: "/growth", icon: "📊", label: "산업 성장 근거", when: "'산업 고성장'이 왜 ✅ / ❌ 인지 궁금할 때",
-    how: ["① 실제 실적 ② 미국 증권사 전망 ③ 시장 전망 중 무엇으로 통과했는지 보기", "증권사 전망은 원문 문장·출처 그대로 확인", "근거 없는 산업의 종목은 🟢 진입 신호가 나올 수 없음"] },
-  { href: "/weekly", icon: "🏛️", label: "주간 투자위원회", when: "토요일 아침",
-    how: ["한 주 시장·산업 흐름을 표로 정리", "시나리오 확률과 권장 현금 비중 확인", "'이번 주말 결정할 것'을 SnowBall 결정 기록으로 옮기기"] },
-  { href: "/scorecard", icon: "📈", label: "신호 성적표", when: "분기마다(보정 제안이 올 때)",
-    how: ["큐별 5·20·40·60거래일 성과 확인", "표본 30건 이상 구간만 믿기", "보정 제안은 승인한 것만 설정에 반영"] },
-  { href: "/health", icon: "🔧", label: "시스템 상태", when: "알림이 안 오거나 숫자가 이상할 때만",
-    how: ["❌ 실패한 배치 잡과 오류 문구 확인", "연속 실패 2회 이상인 원천 소스 확인", "LLM 비용이 상한에 가까운지 확인"] },
-  { href: "/taxonomy", icon: "🗂️", label: "산업 분류", when: "확인 대기 라벨이 있을 때",
-    how: ["자동으로 못 정한 산업 이름에 맞는 산업을 골라 확정", "7일 넘은 대기는 빨간 테두리", "노션 산업 목록이 바뀌면 여기서 알려줌"] },
+export const TAB_GROUPS: TabGroup[] = [
+  { name: "매일", tabs: [
+    { href: "/", icon: "🏠", label: "오늘", when: "브리핑 직후 하루 2번",
+      how: ["🚦 시장 국면 · ⚠️ 보유 경고 먼저", "🎯 지금 사기 좋은 종목: 🏢 기업 → ⏱️ 타이밍 순서로", "📊 주요 지표 그래프로 시장 온도 확인"] },
+    { href: "/entry", icon: "🚦", label: "진입 보드", when: "🟢 알림이 왔을 때",
+      how: ["필수 조건 5개 모두 ✅ 인지 확인", "주가 · MACD · RSI 그래프로 타이밍 확인", "무효화 가격 · 1차 비중을 SnowBall에 기록"] },
+  ] },
+  { name: "점검", tabs: [
+    { href: "/verify", icon: "✅", label: "사후 검증", when: "주 1회",
+      how: ["추천 승률 · 시장 대비 수익 확인", "🚫 자동 제외된 기준 확인", "⭐ 잘 맞은 기준 확인"] },
+    { href: "/portfolio", icon: "🦾", label: "아이언맨의 포트폴리오", when: "주 1회",
+      how: ["🔴 허용 비중 초과 · ⚠️ 경고 종목부터", "반영도 높음 + 과열 높음 → 익절 검토", "투자 논지는 SnowBall에서 갱신"] },
+  ] },
+  { name: "탐색", tabs: [
+    { href: "/radar", icon: "📡", label: "산업 레이더", when: "새 아이디어를 찾을 때",
+      how: ["섹터 그래프: 이번 주 등락 · 12개월 흐름", "🔄 주기: 회복 · 확장 구간 섹터 주목", "고성장 ✅ 근거는 아래 표에서 확인"] },
+    { href: "/weekly", icon: "🏛️", label: "주간 투자위원회", when: "토요일 아침",
+      how: ["한 주 시장 · 산업 흐름 정리", "시나리오 · 권장 현금 비중 확인", "결정할 것 → SnowBall 결정 기록"] },
+  ] },
+  { name: "관리", tabs: [
+    { href: "/scorecard", icon: "📈", label: "신호 성적표", when: "분기마다",
+      how: ["큐별 5 · 20 · 40 · 60거래일 성과", "표본 30건 이상만 신뢰", "보정 제안은 승인한 것만 반영"] },
+    { href: "/taxonomy", icon: "🗂️", label: "산업 분류", when: "확인 대기가 있을 때",
+      how: ["맞는 산업 골라 확정", "7일 넘은 대기는 빨간 테두리", "노션 산업 목록 변경 알림"] },
+  ] },
 ];
 
-export const tabOf = (path: string): Tab | undefined => (path === "/" ? TABS[0] : TABS.find((t) => t.href !== "/" && path.startsWith(t.href)));
+export const TABS: Tab[] = TAB_GROUPS.flatMap((g) => g.tabs);
+
+/** 현재 경로의 탭 (/growth 는 산업 레이더로 통합) */
+export const tabOf = (path: string): Tab | undefined =>
+  path === "/" ? TABS[0] : path.startsWith("/growth") ? TABS.find((t) => t.href === "/radar") : TABS.find((t) => t.href !== "/" && path.startsWith(t.href));

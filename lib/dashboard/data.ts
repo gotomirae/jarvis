@@ -1,0 +1,108 @@
+/**
+ * 대시보드 그래프 데이터 (서버 전용, 표시 전용 — D56). 외부 시세는 어댑터(lib/ingest)를 거치고 cache_minutes 동안 캐시한다.
+ * 실패한 시계열은 빈 배열로 견딘다(불변 규칙 6) — 화면은 "자료 없음"으로 표시.
+ */
+import { unstable_cache } from "next/cache";
+import { loadYaml, taxonomyConfig } from "@/lib/config/load";
+import { cycleOf, type Cycle, type CycleRules } from "@/lib/engine/cycle";
+import { attachQuarterly, indicatorSeries, monthsAgo, periodReturn, quartersAgoStart, rebaseMerge, weekWindow, type Bar, type IndicatorPoint, type Point } from "@/lib/engine/series";
+import { fearGreed, type FgPoint } from "@/lib/ingest/feargreed";
+import { read as heimdallr } from "@/lib/ingest/heimdallr";
+import { read as hermes } from "@/lib/ingest/hermescall";
+import { chart, naverDaily } from "@/lib/ingest/market";
+import { rules } from "@/lib/jobs/context";
+import { kstDate } from "@/lib/time";
+
+type Src = "naver" | "yahoo";
+export type DashboardConfig = {
+  lookback_months: number; cache_minutes: number;
+  indices: { sym: string; label: string; source: Src; color: string }[];
+  vix: { sym: string; label: string; calm_below: number; fear_above: number };
+  fear_greed: { bands: { extreme_fear: number; fear: number; greed: number; extreme_greed: number } };
+  sector_proxies: Record<string, { sym: string; source: Src; name: string }>;
+  cycle: CycleRules;
+  entry_chart: { quarters: number; rsi_overbought: number; rsi_oversold: number };
+};
+export const dashboardConfig = () => loadYaml<DashboardConfig>("dashboard.yaml");
+const TTL = () => dashboardConfig().cache_minutes * 60;
+
+/** 일봉 — 네이버(국내 공식 종가, 개수) · 야후(범위) */
+async function rawBars(sym: string, source: Src, days: number): Promise<Bar[]> {
+  if (source === "naver") { const r = await naverDaily(sym, days); return r.ok ? r.data : []; }
+  const r = await chart(sym, days > 500 ? "5y" : "2y");
+  return r.ok ? r.data.closes : [];
+}
+const bars = (sym: string, source: Src, days: number) => unstable_cache(rawBars, ["jarvis-bars-v1"], { revalidate: TTL() })(sym, source, days);
+
+export type MarketCharts = {
+  from: string;
+  indices: Point[]; lines: { key: string; label: string; color: string; ret: number | null }[];
+  vix: { date: string; value: number }[]; fg: FgPoint[];
+};
+
+export async function marketCharts(): Promise<MarketCharts> {
+  const C = dashboardConfig();
+  const from = monthsAgo(kstDate(), C.lookback_months);
+  const series = await Promise.all(C.indices.map((i) => bars(i.sym, i.source, 300)));
+  const [vix, fg] = await Promise.all([bars(C.vix.sym, "yahoo", 300), unstable_cache(async (d: string) => { const r = await fearGreed(d); return r.ok ? r.data : []; }, ["jarvis-fg-v1"], { revalidate: TTL() })(from)]);
+  const keyed = Object.fromEntries(C.indices.map((i, k) => [`s${k}`, series[k]]));
+  return {
+    from,
+    indices: rebaseMerge(keyed, from),
+    lines: C.indices.map((i, k) => ({ key: `s${k}`, label: i.label, color: i.color, ret: periodReturn(series[k], from) })),
+    vix: vix.filter((b) => b.date >= from).map((b) => ({ date: b.date, value: Math.round(b.close * 100) / 100 })),
+    fg: fg.filter((x) => x.date >= from),
+  };
+}
+
+export type SectorChart = {
+  code: string; name: string; proxy: string; market: "KR" | "US";
+  points: { date: string; close: number }[]; week: ReturnType<typeof weekWindow>; ret12m: number | null; cycle: Cycle | null;
+};
+
+export async function sectorCharts(): Promise<SectorChart[]> {
+  const C = dashboardConfig();
+  const from = monthsAgo(kstDate(), C.lookback_months);
+  return Promise.all(taxonomyConfig().l1.map(async (l) => {
+    const p = C.sector_proxies[l.code];
+    const xs = p ? await bars(p.sym, p.source, 520) : [];
+    const pts = xs.filter((b) => b.date >= from);
+    return {
+      code: l.code, name: l.name, proxy: p?.name ?? "대표 ETF 없음", market: p?.source === "naver" ? "KR" : "US",
+      points: pts.map((b) => ({ date: b.date, close: b.close })), week: weekWindow(pts), ret12m: periodReturn(xs, from),
+      cycle: cycleOf(xs.map((b) => b.close), C.cycle),
+    } as SectorChart;
+  }));
+}
+
+/** 🚦 진입 보드 종목 그래프 — 최근 N분기 주가·MACD·RSI + 분기 영업이익(미국은 없으면 주당순이익) 전년 대비 증가율 */
+export async function stockCharts(ids: string[]): Promise<Map<string, { points: IndicatorPoint[]; op_label: string }>> {
+  const C = dashboardConfig();
+  const R = rules();
+  const from = quartersAgoStart(kstDate(), C.entry_chart.quarters);
+  const kr = ids.filter((i) => i.startsWith("KR:")).map((i) => i.slice(3));
+  const us = ids.filter((i) => i.startsWith("US:")).map((i) => i.slice(3));
+  const fy = String(Number(from.slice(0, 4)) - 1);
+  type Qf = { code?: string; symbol?: string; fiscal_year: number; fiscal_quarter: number; op_yoy: number | null; eps_yoy?: number | null; is_estimate?: boolean | null };
+  const [qk, qu] = await Promise.all([
+    kr.length ? heimdallr<Qf>("quarterly_fundamentals", { select: "code,fiscal_year,fiscal_quarter,op_yoy,is_estimate", filters: { code: `in.(${kr.join(",")})`, fiscal_year: `gte.${fy}` } }) : null,
+    us.length ? hermes<Qf>("quarterly_metrics", { select: "symbol,fiscal_year,fiscal_quarter,op_yoy,eps_yoy", filters: { symbol: `in.(${us.join(",")})`, fiscal_year: `gte.${fy}` } }) : null,
+  ]);
+  const qs = new Map<string, Qf[]>();
+  for (const q of [...(qk?.ok ? qk.data : []), ...(qu?.ok ? qu.data : [])]) {
+    if (q.is_estimate) continue;
+    const k = q.code ? `KR:${q.code}` : `US:${q.symbol}`;
+    qs.set(k, [...(qs.get(k) ?? []), q]);
+  }
+  const out = new Map<string, { points: IndicatorPoint[]; op_label: string }>();
+  await Promise.all(ids.map(async (id) => {
+    const [m, sym] = id.split(":");
+    const xs = await bars(m === "US" ? sym.replace(/\./g, "-") : sym, m === "US" ? "yahoo" : "naver", 820);
+    if (!xs.length) return;
+    const quarters = qs.get(id) ?? [];
+    const useEps = m === "US" && quarters.length > 0 && quarters.every((q) => q.op_yoy === null);
+    const pts = indicatorSeries(xs, from, R.entry_core.M2_macd_pre_cross.params, R.tech_display.rsi_period);
+    out.set(id, { points: attachQuarterly(pts, quarters.map((q) => ({ fy: q.fiscal_year, fq: q.fiscal_quarter, op_yoy: useEps ? q.eps_yoy ?? null : q.op_yoy }))), op_label: useEps ? "주당순이익 증가율" : "영업이익 증가율" });
+  }));
+  return out;
+}

@@ -23,3 +23,7 @@ export const SPECIAL_L1: Record<string, string> = { MACRO: "거시경제", ETF: 
 
 export const yesNo = (b: boolean | null | undefined) => (b ? "✓" : "—");
 export const direction = (d: number) => (d > 0 ? "긍정" : d < 0 ? "부정" : "중립");
+
+/** 미국 메이저 증권사 한글 이름 (대시보드·텔레그램 표시, 10/5 — 영어 설명은 한글로) */
+export const BROKER_KO: Record<string, string> = { "Goldman Sachs": "골드만삭스", "Morgan Stanley": "모건스탠리", "J.P. Morgan": "JP모건", "BofA Securities": "뱅크오브아메리카", Citi: "씨티", "Wells Fargo": "웰스파고" };
+export const brokerKo = (name: string) => BROKER_KO[name] ?? name;

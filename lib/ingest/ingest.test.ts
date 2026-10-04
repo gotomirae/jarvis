@@ -142,6 +142,26 @@ describe("market.naverStockFlow (종목 투자자 동향, 주)", () => {
   });
 });
 
+describe("feargreed (CNN 공포·탐욕 지수)", async () => {
+  const { fearGreed, parseFearGreed, ratingKo } = await import("./feargreed");
+  const body = { fear_and_greed_historical: { data: [{ x: Date.UTC(2026, 9, 2, 12), y: 31.17, rating: "fear" }, { x: Date.UTC(2026, 9, 1), y: 40, rating: "Extreme Greed" }, { x: Date.UTC(2026, 9, 1, 20), y: 41.04, rating: "neutral" }, { x: "a" }, null] } };
+  it("파싱: 날짜별 마지막 값 · 한글 등급", () => {
+    expect(parseFearGreed(body)).toEqual([{ date: "2026-10-01", value: 41, rating: "중립" }, { date: "2026-10-02", value: 31.2, rating: "공포" }]);
+    expect(parseFearGreed({})).toEqual([]);
+    expect(parseFearGreed(null)).toEqual([]);
+    expect(ratingKo("EXTREME FEAR")).toBe("극단적 공포");
+    expect(ratingKo("x")).toBe("x");
+    expect(parseFearGreed({ fear_and_greed_historical: { data: [{ x: 0, y: 1 }] } })[0].rating).toBe("");
+  });
+  it("Result", async () => {
+    const f = (status: number, b: unknown) => (async () => new Response(JSON.stringify(b), { status })) as unknown as typeof fetch;
+    expect((await fearGreed("2025-10-01", f(200, body))).ok).toBe(true);
+    expect(await fearGreed("2025-10-01", f(418, {}))).toMatchObject({ ok: false, status: 418 });
+    expect(await fearGreed("2025-10-01", f(200, {}))).toMatchObject({ ok: false });
+    expect(await fearGreed("2025-10-01", (async () => { throw new Error("x"); }) as unknown as typeof fetch)).toMatchObject({ ok: false });
+  });
+});
+
 describe("notion.notionId", () => {
   it("주소·하이픈 ID·없음", () => {
     expect(notionId("https://www.notion.so/5-JARVIS-3a99c770aa6180e98874f0a264ef61b1?pvs=4")).toBe("3a99c770aa6180e98874f0a264ef61b1");

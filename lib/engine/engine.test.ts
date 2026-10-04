@@ -305,7 +305,7 @@ describe("M3 ① 실적 · 종합", () => {
     const broker = { median: 30, pass: true, brokers: 1, detail: [{ broker: "Morgan Stanley", value: 30, published: "2026-09-12", rule: "A1" }] };
     const m = m3ForL1("1b", realized, broker, [], RR);
     expect(m).toMatchObject({ pass: true, bases: { realized: true, us_major_broker: true, outlook: false } });
-    expect(m3Line(m, "반도체")).toBe("①실적 반도체 매출 YoY 중앙값 +24%·+21% (표본 5) · ②Morgan Stanley 30% (09/12)");
+    expect(m3Line(m, "반도체")).toBe("①실적 반도체 매출 전년 대비 중앙값 +24%·+21% (표본 5) · ②모건스탠리 30% (09/12)");
     expect(m3Line(m3ForL1("1a", null, null, o, RR), "AI")).toBe("③Gartner 15.7%");
     expect(m3Line(m3ForL1("2e", null, null, [], RR), "여행")).toBe("성장 근거 없음");
     expect(m3ForL1("1b", realized, null, [], { ...RR, required_bases: ["us_major_broker"] }).pass).toBe(false);

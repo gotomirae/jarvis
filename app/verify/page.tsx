@@ -79,7 +79,7 @@ export default async function Verify() {
     );
   };
   const table = (xs: Led[]) => (
-    <div className="overflow-x-auto glass rounded-xl px-3">
+    <div className="table-wrap">
       <table className="w-full text-sm">
         <thead><tr><th className={th}>추천일</th><th className={th}>종목</th><th className={th}>⏱️ 매수 매력</th><th className={th}>진입가</th>{H.map((h) => <th key={h} className={th}>{h}거래일 뒤 (시장 대비)</th>)}<th className={th}>{P}일 판정</th></tr></thead>
         <tbody>{xs.map(row)}</tbody>
@@ -98,10 +98,13 @@ export default async function Verify() {
       </div>
 
       <Section title="📏 채점 방법">
-        <Guide>
-          텔레그램 아침·저녁 브리핑의 🎯 <b className="text-white">매수 검토 후보 전체</b>를 매일 20:00에 채점합니다. 진입가 = 추천 <Hi>다음 거래일 종가</Hi>, 기준 = 국내 KOSPI·KOSDAQ / 미국 S&amp;P 500.
-          {P}거래일 뒤 <Hi>시장보다 더 올랐으면 승</Hi>입니다. 추천하지 않은 후보도 똑같이 채점해 &quot;추천 기준이 실제로 승률을 높였는지&quot;를 비교합니다.
-        </Guide>
+        <Guide items={[
+          <>🕗 매일 20:00 · 브리핑 🎯 <b className="text-white">후보 전체</b> 채점</>,
+          <>💵 진입가 = 추천 <Hi>다음 거래일 종가</Hi></>,
+          "📏 기준 = 국내 코스피 · 코스닥 / 미국 S&P 500",
+          <>🏆 {P}거래일 뒤 <Hi>시장보다 더 올랐으면 승</Hi></>,
+          "🧪 추천 안 한 후보와 비교 → 추천 기준이 효과 있었는지 확인",
+        ]} />
       </Section>
 
       <Section title="📐 지금 적용 중인 추천 기준" count={(policy?.exclude.length ?? 0) + 1}>
@@ -130,9 +133,9 @@ export default async function Verify() {
       </Section>
 
       <Section title={`🔬 기준별 승률 — ${P}거래일 뒤 (후보 전체)`} count={crit.length}>
-        <Guide>어떤 근거가 실제로 통했는지 보여 줍니다. 표본 <Hi>{R.pick_policy.min_samples}건 이상</Hi> 구간만 기준 수립에 씁니다(우연 방지). 목표 승률 <Hi>{Math.round(R.pick_policy.target_hit_rate * 100)}%</Hi>.</Guide>
+        <Guide items={["🔬 어떤 근거가 실제로 통했는지", <>🔎 표본 <Hi>{R.pick_policy.min_samples}건 이상</Hi> 구간만 기준에 사용 (우연 방지)</>, <>🎯 목표 승률 <Hi>{Math.round(R.pick_policy.target_hit_rate * 100)}%</Hi></>]} />
         {crit.length === 0 ? <Empty text="아직 측정이 끝난 후보가 없습니다 — 첫 결과는 추천 후 약 1주(5거래일) 뒤부터 나옵니다." /> : (
-          <div className="overflow-x-auto glass rounded-xl px-3">
+          <div className="table-wrap">
             <table className="w-full text-sm">
               <thead><tr><th className={th}>기준</th><th className={th}>구간</th><th className={th}>승률</th><th className={th}>시장 대비 중앙값</th><th className={th}>건수</th><th className={th}>상태</th></tr></thead>
               <tbody>{crit.map((s) => {
@@ -154,7 +157,7 @@ export default async function Verify() {
       </Section>
 
       <Section title="📨 텔레그램 추천 종목 채점표" count={top.length}>
-        <Guide>숫자는 <Hi>시장 대비 초과수익</Hi>(주가 수익률 − 지수 수익률), 아래 작은 글씨는 주가 자체 수익률입니다. 상승 빨강 · 하락 파랑.</Guide>
+        <Guide items={[<>📊 큰 숫자 = <Hi>시장 대비 초과수익</Hi> (주가 − 지수)</>, "작은 글씨 = 주가 자체 수익률", "🔺 상승 빨강 · 🔻 하락 파랑"]} />
         {top.length === 0 ? <Empty text="아직 기록된 추천이 없습니다 — 다음 브리핑부터 기록됩니다." /> : table(top)}
       </Section>
 

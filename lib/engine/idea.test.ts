@@ -39,7 +39,7 @@ describe("매수 검토 추천 — 순위·근거·카드", () => {
     const r = buyReasons({ idea, consensus: ["FlyWheel 반도체 흐름 5/5", "Sage 멘토 5명 강세(산업 전체)"], grade: "★", score: 82.3 });
     expect(r).toEqual([
       "① 실적 가속: 매출 +159% · 영업이익 +347% (2026Q2, 전년 대비) ← 직전 2026Q1 +67% · +147% · Heimdallr ★ 82점",
-      "② 산업 고성장 ✅: 반도체 (실적 중앙값 +31% · BofA Securities 연평균 18% · SK hynix 연평균 30%)",
+      "② 산업 고성장 ✅: 반도체 (실적 중앙값 +31% · 뱅크오브아메리카 연평균 18% · SK hynix 연평균 30%)",
       "③ 신호 합의: FlyWheel 반도체 흐름 5/5 · Sage 멘토 5명 강세(산업 전체)",
     ]);
   });

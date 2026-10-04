@@ -44,9 +44,9 @@ export default async function Scorecard() {
     <main className="mx-auto max-w-6xl px-4 py-4 space-y-8">
       <Nav />
       <Section title="큐별 성과 — 시장 대비 초과수익" count={led.count ?? 0}>
-        <Guide>각 칸 = 초과수익 중앙값 · 이긴 비율 · 측정 건수. 진입가는 신호 다음 거래일 종가, 기준은 KOSPI·KOSDAQ·S&amp;P 500. 매도 쪽(⚠️·💰)은 경고 뒤 시장보다 약했으면 이긴 것입니다. 표본 {F.min_samples}건 미만은 참고만 합니다.</Guide>
+        <Guide items={["📏 각 칸 = 시장 대비 초과수익 중앙값 · 이긴 비율 · 건수", "💵 진입가 = 신호 다음 거래일 종가 · 기준 = 코스피 · 코스닥 · S&P 500", "🔻 매도 쪽(⚠️ · 💰)은 경고 뒤 시장보다 약했으면 승", `🔎 표본 ${F.min_samples}건 미만은 참고만`]} />
         {stats.length ? (
-          <div className="overflow-x-auto glass rounded-xl px-3">
+          <div className="table-wrap">
             <table className="w-full text-sm">
               <thead className="text-xs text-sub text-left"><tr><th className={th}>큐</th>{H.map((h) => <th key={h} className={th}>{h}거래일 뒤</th>)}</tr></thead>
               <tbody>
@@ -60,12 +60,9 @@ export default async function Scorecard() {
       </Section>
 
       <Section title={`🎯 매수 검토 — 어떤 신호가 잘 맞았나 (${F.primary_horizon}거래일 뒤)`}>
-        <Guide>
-          신호 특징별 성과입니다. 표본 {F.min_samples}건 이상인 구간(✓)은 브리핑의 🎯 추천 순위에 자동으로 반영됩니다(기대 초과수익 = 표본 수로 줄인 구간 중앙값의 평균).
-          {buyAll ? ` 현재 🎯 전체 ${buyAll.n}건 — ${buyAll.n >= F.min_samples ? "순위 반영 중" : "표본 부족, 기존 규칙 순위 사용 중"}.` : ""}
-        </Guide>
+        <Guide items={["🧩 신호 특징별 성과", `✓ 표본 ${F.min_samples}건 이상 구간은 🎯 추천 순위에 자동 반영`, buyAll ? `📌 현재 🎯 전체 ${buyAll.n}건 — ${buyAll.n >= F.min_samples ? "순위 반영 중" : "표본 부족, 기존 규칙 순위"}` : "📌 아직 측정 전"]} />
         {buyDims.length ? (
-          <div className="overflow-x-auto glass rounded-xl px-3">
+          <div className="table-wrap">
             <table className="w-full text-sm">
               <thead className="text-xs text-sub text-left"><tr><th className={th}>기준</th><th className={th}>구간</th><th className={th}>초과수익 중앙값</th><th className={th}>이긴 비율</th><th className={th}>건수</th><th className={th}>순위 반영</th></tr></thead>
               <tbody>
@@ -83,7 +80,7 @@ export default async function Scorecard() {
       </Section>
 
       <Section title="분기 보정 제안">
-        <Guide>분기 첫 토요일 10:30에 성적표와 함께 만듭니다. 설정은 자동으로 바뀌지 않습니다 — 승인한 제안만 설정 변경과 결정 기록(DECISIONS)으로 반영합니다. 필수 조건 M1~M5 자체는 대상이 아닙니다.</Guide>
+        <Guide items={["🗓️ 분기 첫 토요일 10:30 생성", "✋ 자동 변경 없음 — 승인한 제안만 설정 · 결정 기록에 반영", "🔒 진입 필수 조건 5개는 대상 아님"]} />
         {reviews.length ? reviews.map((r) => (
           <div key={r.id} className="text-sm space-y-1 border-t border-line/50 pt-2">
             <div className="font-medium">{r.period} ({r.review_date}) · {STATUS[r.status] ?? r.status}{r.note ? ` — ${r.note}` : ""}</div>

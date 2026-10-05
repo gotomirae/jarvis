@@ -3,7 +3,7 @@
  * 1초 간격 · 429 retry_after 존중 · 4,096자 분할 · 실패해도 throw 하지 않는다.
  */
 import { env } from "@/lib/env";
-import type { Button } from "@/lib/links";
+import type { KbButton } from "./analysis";
 import { fail, ok, safeReason, type Result } from "@/lib/ingest/types";
 import { splitMessage } from "./format";
 
@@ -29,14 +29,19 @@ export async function tgApi<T = unknown>(method: string, body: Record<string, un
   return fail(`${method}: 재시도 초과`);
 }
 
-export async function sendMessage(chatId: string | number, html: string, buttons?: Button[][], splitBefore?: RegExp): Promise<Result<number[]>> {
+/** 링크 버튼(url)·콜백 버튼(callback_data) 혼합 인라인 키보드 */
+export function inlineKeyboard(buttons: KbButton[][]) {
+  return { inline_keyboard: buttons.map((row) => row.map((b) => ("callback_data" in b ? { text: b.text, callback_data: b.callback_data } : { text: b.text, url: b.url }))) };
+}
+
+export async function sendMessage(chatId: string | number, html: string, buttons?: KbButton[][], splitBefore?: RegExp): Promise<Result<number[]>> {
   const parts = splitMessage(html, 4096, splitBefore);
   const ids: number[] = [];
   for (let i = 0; i < parts.length; i++) {
     const last = i === parts.length - 1;
     const r = await tgApi<{ message_id: number }>("sendMessage", {
       chat_id: chatId, text: parts[i], parse_mode: "HTML", disable_web_page_preview: true,
-      ...(last && buttons?.length ? { reply_markup: { inline_keyboard: buttons.map((row) => row.map((b) => ({ text: b.text, url: b.url }))) } } : {}),
+      ...(last && buttons?.length ? { reply_markup: inlineKeyboard(buttons) } : {}),
     });
     if (!r.ok) return r;
     ids.push(r.data.message_id);

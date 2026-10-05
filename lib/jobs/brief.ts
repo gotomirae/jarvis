@@ -23,6 +23,7 @@ import { read as hermes } from "@/lib/ingest/hermescall";
 import { chart, charts, naverDaily } from "@/lib/ingest/market";
 import { dashboardButtons, inlineLinks, linkLine, rows, type LinkEntity } from "@/lib/links";
 import { sendMessage } from "@/lib/telegram/send";
+import { sendAnalysisPrompt } from "./analysis";
 import { BRIEF_SPLIT, briefText, type BriefData } from "@/lib/telegram/templates";
 import { briefDate, kstDate, kstString } from "@/lib/time";
 import { loadEntities, rules } from "./context";
@@ -208,5 +209,7 @@ export async function sendBrief(kind: "morning" | "evening", now = new Date(), o
   await dbInsert("notifications", [{ kind: `brief_${kind}`, dedupe_key: key, payload: { ideas: data.ideas.map((c) => c.code), ...data.pickLog, buy_total: data.buyTotal, alerts: data.counts.alert, error: r.ok ? undefined : r.reason, scheduled_kst: kind === "morning" ? "07:30" : "19:20" },
     sent_at: r.ok ? new Date().toISOString() : null, telegram_msg_id: r.ok ? r.data[0] : null }], { upsertOn: "dedupe_key" });
   if (!r.ok) throw new Error(`브리핑 발송 실패: ${r.reason}`);
+  // 🔎 추천 종목 심층 분석 버튼 (D59) — 실패해도 브리핑은 성공으로 둔다
+  if (chat) await sendAnalysisPrompt(chat, data.ideas.map((c) => ({ entityId: `${c.flag === "🇺🇸" ? "US" : "KR"}:${c.code}`, name: c.name, industry: c.industry || null })));
   return { sent: key, ideas: data.ideas.map((c) => c.code), alerts: data.counts.alert, sent_at_kst: kstString(new Date()) };
 }

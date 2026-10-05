@@ -2,6 +2,7 @@
  * @Tonny_JARVIS_bot webhook (PRD §9.1, D9).
  * - X-Telegram-Bot-Api-Secret-Token 을 TELEGRAM_WEBHOOK_SECRET 과 비교(불일치 401).
  * - 허용 chat_id 1개 외 메시지는 무시(200 으로 응답해 재전송 루프 방지).
+ * - callback_query: 🔎 산업·기업 분석 / 🎤 발표자료 버튼 (D59) → lib/jobs/analysis.ts
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { linksConfig } from "@/lib/config/load";
@@ -11,12 +12,16 @@ import { kstString } from "@/lib/time";
 import { collectStatus } from "@/lib/status";
 import { handleCommand } from "@/lib/telegram/commands";
 import { safeEqual } from "@/lib/telegram/format";
+import { answerCallback, handleAnalysisCallback } from "@/lib/jobs/analysis";
 import { pinLinks } from "@/lib/telegram/pin";
 import { sendMessage } from "@/lib/telegram/send";
 
 export const dynamic = "force-dynamic";
 
-type Update = { message?: { chat?: { id?: number }; text?: string } };
+type Update = {
+  message?: { chat?: { id?: number }; text?: string };
+  callback_query?: { id: string; data?: string; message?: { chat?: { id?: number } } };   // 🔎 분석·🎤 발표자료 버튼 (D59)
+};
 
 export async function POST(req: NextRequest) {
   const e = env();
@@ -25,6 +30,16 @@ export async function POST(req: NextRequest) {
   }
   let update: Update;
   try { update = (await req.json()) as Update; } catch { return NextResponse.json({ ok: true }); }
+
+  const cq = update.callback_query;
+  if (cq) {
+    const cqChat = cq.message?.chat?.id;
+    if (!cqChat || !e.TELEGRAM_CHAT_ID || String(cqChat) !== e.TELEGRAM_CHAT_ID) return NextResponse.json({ ok: true });
+    await answerCallback(cq.id, "요청 중…");
+    const note = await handleAnalysisCallback(cqChat, cq.data);
+    console.log("callback:", note);
+    return NextResponse.json({ ok: true });
+  }
 
   const chatId = update.message?.chat?.id;
   const text = update.message?.text;

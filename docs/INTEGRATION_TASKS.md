@@ -168,3 +168,81 @@
 - **문제**: Heimdallr `daily_digest`(17:37·18:17·19:07, entry_checks 포함)와 HermesCall `entry_checks_us`(06:40)가 GitHub schedule 에 의존 → 10/1 17:37 실행이 00:37 에 시작(7시간 지연), entry_checks_us 첫 예약 실행 누락. JARVIS 는 원천 지연이면 🟢 를 만들지 않으므로(D50) 신호가 하루 늦어진다.
 - **권장**: JARVIS D7 과 같은 방식 — 각 프로젝트 Supabase pg_cron → GitHub `workflow_dispatch` 정시 호출(Vault 토큰), 기존 schedule 은 예비로 유지, 잡은 멱등(이미 성공한 날이면 즉시 종료).
 - **D10**: JARVIS 🟢 병행 2주(~2026-10-16) 후 Heimdallr `TECHNICAL_TELEGRAM_ENABLED=False`, HermesCall `KR_TECH_IDEAS_TELEGRAM=false` 로 원 프로젝트 기술적 알림 텔레그램만 중단(DB 기록 유지) — 사용자 결정.
+
+---
+
+## G. Heimdallr Call (Codex) — 🔎 JARVIS 분석 버튼 · 미국 종목 · 드라이브 자동 생성 · 🎤 발표자료 (D59, 2026-10-05 사용자 결정)
+
+**목적**: JARVIS 텔레그램(@Tonny_JARVIS_bot) 🎯 추천 종목의 `🏭 산업`·`🏢 기업` 버튼 한 번으로 Heimdallr Kairos 심층 분석을 노션에 만들고, 기업 분석이 끝나면 `🎤 발표자료` 버튼으로 Claude Code `kairos-deck` 스킬이 양식 PPT를 만들어 노션·드라이브에 저장한다. 사람 확인 단계 없이 끝까지 돈다.
+**사용자 결정**: ① 미국 종목도 Heimdallr 분석 대상 ② 재사용 — 기업은 30일 이내이면서 그 사이 실적 발표가 없을 때, 산업은 30일 이내면 다시 돌리지 않고 기존 노션 링크 ③ PPT는 기업 분석 완료 후 별도 🎤 버튼.
+**JARVIS 쪽(완료)**: 버튼·콜백·장부(`jarvis.analysis_requests`)·30분 상태 확인·알림. 호출 계약은 JARVIS `lib/ingest/heimdallr.ts` 의 `requestAnalysis`·`analysisStatus`·`requestDeck` 와 1:1. JARVIS 는 분석을 만들지 않고 요청·상태·노션 링크만 다룬다.
+
+### G-1. 스키마 (`docs/migrations/kairos_jarvis.sql`, 재실행 안전)
+- `kairos_requests` 추가 컬럼: `source text not null default 'telegram' check (source in ('telegram','jarvis'))`, `market text not null default 'KR' check (market in ('KR','US'))`, `ticker text`, `stage text`, `stage_updated_at timestamptz`, `reuse_after timestamptz`.
+- JARVIS 요청의 `update_id` 는 텔레그램 ID 와 겹치지 않게 음수 시퀀스(`create sequence kairos_jarvis_seq increment -1 start -1`), `chat_id`·`user_id` 는 0.
+- `kairos_requests_target_shape_check` 교체: 기업 = `company_name is not null and ((market='KR' and code is not null) or (market='US' and ticker is not null))`, 산업 = 기존과 같음. 미국 종목은 `code`(krx_universe FK)를 비운다.
+- 새 테이블 `kairos_deck_requests`: `id bigserial pk`, `request_id bigint not null references kairos_requests(update_id)`, `status text check (status in ('pending','working','sent','failed'))`, `notion_url`, `drive_dir`, `files jsonb`, `error`, `attempts int default 0`, `created_at`, `claimed_at`, `completed_at`. `request_id` 당 열린(pending·working·sent) 행은 1개(부분 unique index). RLS 켜고 anon 권한 없음.
+- 토큰: Vault `heimdallr_jarvis_token`(값은 JARVIS Vercel env `HEIMDALLR_JARVIS_TOKEN` 과 동일). `_jarvis_ok(p_token)` = Vault 값과 상수 시간 비교.
+
+### G-2. RPC 3개 (security definer, `grant execute … to anon`, 토큰 불일치면 `raise exception 'unauthorized'`)
+1. `jarvis_request_analysis(p_token text, p_payload jsonb) returns jsonb`
+   - 입력: `{kind:'company'|'industry', target_name, market:'KR'|'US'|null, code, industry, reuse_after}` (기업 `code` = 국내 6자리 또는 미국 티커, `industry` = JARVIS 산업명).
+   - 순서: ① 같은 대상(기업 = market+code/ticker, 산업 = G-4 매핑 후 폴더명)에 `pending·working·awaiting_input·sending` 이 있으면 `{status:'in_progress', request_id}` ② `status='sent' and completed_at >= reuse_after` 인 최신 행이 있으면 `{status:'reused', request_id, notion_url, completed_at}` ③ 대상 확인 실패(국내 코드 미등록·미국 티커 미확인·산업 매핑 불가가 아닌 빈 이름)면 `{status:'rejected', reason}` ④ 열린 JARVIS 요청이 6건 이상이면 `{status:'rejected', reason:'대기 6건 초과 — Codex 사용량 보호'}` ⑤ 아니면 `source='jarvis'` 행 insert → `{status:'queued', request_id}`.
+2. `jarvis_analysis_status(p_token text, p_request_ids bigint[]) returns jsonb` — 배열 `[{request_id, status, stage, notion_url, error, completed_at, deck:{status, notion_url, error} | null}]`. `deck` 은 그 요청의 최신 `kairos_deck_requests` 행.
+3. `jarvis_request_deck(p_token text, p_request_id bigint) returns jsonb` — 기업 요청이고 `status='sent'` 일 때만. 열린 deck 이 있으면 `{status:'in_progress'}`, 완료본이 있으면 `{status:'sent', notion_url}`, `failed` 뿐이면 새 행. 그 외 `{status:'rejected', reason}`. 새로 만들면 `{status:'queued'}`.
+
+### G-3. Kairos 처리 변경 (`source='jarvis'`)
+- 수집기가 `pending` 을 로컬 큐로 가져오는 기존 경로를 그대로 쓴다(`codex queue`). 텔레그램 접수·진행·완료 메시지는 **Heimdallr 봇으로 보내지 않는다** — JARVIS 가 30분마다 상태를 읽어 알린다. `progress` 는 `stage`·`stage_updated_at` 을 DB 에 쓰고, `deliver` 는 노션 재조회 검증 후 `status='sent'`·`notion_url`·`completed_at` 만 기록, `fail` 은 `status='failed'`·`error` 코드.
+- **`awaiting_input` 금지**: JARVIS 요청은 산업 폴더 확인 질문을 하지 않는다. G-4 매핑으로 정하고, 없으면 새로 만든다.
+
+### G-4. 산업명 → 드라이브 산업 폴더 (`config/industry_folders.yaml`, 텔레그램 요청에도 우선 적용)
+드라이브 루트 `G:\내 드라이브\1. 주식 자본\2. 아이언맨의 투자 분석\1. 산업분석\` (2026-10-05 실측 18개 폴더). JARVIS 산업명(= JARVIS `config/taxonomy.yaml` L1 이름 또는 산업 성장 그룹명)을 아래처럼 짝 짓는다. 사용자가 고칠 수 있게 yaml 로 둔다.
+| JARVIS 산업명 | 드라이브 폴더 |
+|---|---|
+| AI · 반도체 | `1. AI 반도체` |
+| 바이오 | `2. 바이오` |
+| 엔터 | `3. K-엔터` |
+| 화장품_미용기기 | `15. 화장품` (미용기기 종목이면 `4. 미용_의료기기`) |
+| 헬스케어(의료기기) | `4. 미용_의료기기` |
+| 전력인프라 | `5. 전력인프라` |
+| IT | `6. IT` (디스플레이 종목이면 `8. OLED`, 네트워크 종목이면 `17. 네트워크`) |
+| 우주항공방산 | `7. 우주항공` |
+| 소비재(음식료) | `9. 음식료` (의류 종목이면 `13. 의류`) |
+| Robot | `10. 로봇` |
+| 건설 | `11. 건설` |
+| 조선 | `12. 조선` |
+| 자율주행차 | `14. 자율주행차` |
+| 2차 전지 | `16. 2차 전지` |
+| ETF | `18. ETF` |
+| 양자컴퓨터 · 여행 · 금융 · 그 외 | 없음 → 새 폴더 `<가장 큰 번호+1>. <산업명>` 생성 |
+- 숫자 접두어·공백·밑줄·하이픈 정규화 일치도 허용(ADR 21). 새로 만든 폴더는 yaml 에 자동 추가하고 실행 장부에 남긴다.
+
+### G-5. 드라이브 자동 생성·자료 저장 (`src/collectors/drive_bootstrap.py`, LLM 없음, `claim` 직후·Kairos 전에 실행)
+- **기업 폴더**: 국내 `…\2. 기업분석\국내\<정식 기업명>\`, 미국 `…\2. 기업분석\해외\<TICKER>\`(예전 방식 `해외\YYMMDD_<TICKER>.pdf` 파일도 자료로 인정).
+  - 폴더가 있고 분석일 기준 3개월 이내 자료가 있으면 → 내려받지 않고 그 최신 자료를 쓴다(기존 ADR 21).
+  - 폴더가 없거나 3개월 이내 자료가 없으면 → 폴더를 만들고 아래를 저장: 파일명 `YYMMDD_<기업명>_<보고서명>.<확장자>`(YYMMDD = 공시 접수일), 이미 있으면 건너뜀.
+    - 국내: OpenDART(`DART_API_KEY`) `list.json` 정기공시(`pblntf_ty=A`) **최근 4건(사업·반기·분기보고서)** PDF + "기업설명회(IR)개최" 공시의 **최근 4개 분기 IR 자료** 첨부 PDF. DART 웹 PDF 는 1초 1건 이하로 받는다.
+    - 미국: SEC EDGAR(`SEC_USER_AGENT` 필수) submissions JSON → **최근 4건 10-K·10-Q** 본문 + 최근 4개 분기 8-K(Item 2.02)의 EX-99.1(실적 발표)·EX-99.2 등 IR 프레젠테이션.
+    - IR 자료를 공시에 올리지 않는 회사는 "IR 자료 없음"으로 기록하고 계속한다. 다운로드 실패는 분석을 막지 않는다.
+- **산업 폴더**: G-4 로 못 찾으면 새 폴더 + 날짜 하위 폴더(`YYMMDD`)를 만든다. 산업 공통 자료는 자동으로 받지 않는다(표준 소스 없음) — Kairos 가 실제로 읽은 산업 원문 PDF 가 있으면 그 하위 폴더에 저장한다.
+- 드라이브는 이 PC 의 Google Drive for Desktop(`G:\`)에 파일로 쓴다(동기화는 앱이 한다). 실행 결과(만든 폴더·받은 파일·실패)를 체크포인트 장부에 남긴다.
+
+### G-6. 미국 종목 (텔레그램 직접 입력 포함)
+- 대상 해석: 티커·영문/한글 회사명 → SEC `company_tickers.json`(하루 캐시) + JARVIS 가 넘긴 `market='US'`·티커. 모호하면 기존처럼 거절.
+- 노션 기업 페이지 제목 `기업명 (TICKER·NASDAQ|NYSE)`, Kairos 자료 = SEC 공시·IR·실적 발표·증권사·네이버증권 해외 링크(확인된 경우만, ADR 22).
+
+### G-7. 🎤 발표자료 실행기 (`telegram_bridge/deck_runner.py`, 수집기와 같은 1분 예약 작업)
+- `kairos_deck_requests` 의 `pending` 1건만 집어 `working` 으로 바꾸고(동시에 1건), 이 PC 의 Claude Code 를 화면 없이 실행:
+  ```
+  claude -p "/kairos-deck <company_name> --code <code|ticker> --market <KR|US> --analysis <notion_url> --request-id D<id>" ^
+    --allowedTools "Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch" --permission-mode acceptEdits --output-format json
+  ```
+  작업 폴더 `C:\Users\user\.claude\skills\kairos-deck`, 제한 120분. 스킬 위치 `~/.claude/skills/kairos-deck/SKILL.md`(이미 설치됨: 양식 20장 채우기·PDF 변환·노션 첨부 스크립트 포함).
+- 결과: 마지막 줄 JSON(또는 `work/*/result.json`) `{"status":"ok","notion_url",…}` → `sent`·`notion_url`·`drive_dir`·`files`, `{"status":"failed","reason"}` → `failed`·`error`. 사용량 한도 메시지면 `pending` 으로 되돌리고 30분 뒤 재시도(`attempts` 3회 초과 시 `failed: USAGE`).
+- 조건: Claude Code CLI 로그인(구독) 상태 — API 키 불필요. PC 켜짐·로그인·절전 아님(기존 Kairos 와 같음). PowerPoint 설치(PDF 변환).
+
+### G-8. 검증
+1. SQL Editor: 잘못된 토큰 → `unauthorized`. 올바른 토큰으로 `jarvis_request_analysis` 를 같은 대상 2회 → `queued` → `in_progress`. `status='sent'`·`completed_at` 이 `reuse_after` 이후인 행 → `reused`.
+2. 사용자가 JARVIS 브리핑의 `🏢` 버튼 1회 → Heimdallr 로컬 큐 → 노션 작성 → 30분 안에 JARVIS 에 "✅ 기업 분석 완료" + `🎤`. `🎤` → `kairos_deck_requests` → 노션 기업 페이지에 PDF·PPTX, 드라이브 기업 폴더에 3개 파일.
+3. 드라이브 기업 폴더가 없던 종목 1건: 폴더 생성 + 정기보고서 4건(국내) 또는 10-K/10-Q 4건(미국) 저장 확인.
+4. 시험용 노션 페이지를 만들지 않는다(기존 규칙) — 2·3은 실제 요청으로 확인한다.

@@ -31,6 +31,7 @@ const schema = z.object({
   NOTION_WEEKLY_PARENT_PAGE_ID: opt,
   HEIMDALLR_SUPABASE_URL: optUrl,
   HEIMDALLR_ANON_KEY: opt,
+  HEIMDALLR_JARVIS_TOKEN: opt,          // Heimdallr jarvis_* 분석 요청 RPC 토큰 (D59, INTEGRATION_TASKS G)
   HERMES_SUPABASE_URL: optUrl,
   HERMES_ANON_KEY: opt,
   SAGE_SUPABASE_URL: optUrl,

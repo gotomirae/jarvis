@@ -2,6 +2,7 @@
  * poll (PRD §14 30분마다): 보유 경고(⚠️) — SC4 소스 알림 → 발송 ≤ 35분. pg_cron 이 Vercel 라우트를 직접 부른다(Actions 분 절약).
  * 첫 실행은 부트스트랩: 지금까지의 경고는 "본 것"으로만 기록하고 보내지 않는다(과거 250건 폭탄 방지).
  * 긴급(보유 경고)은 /mute·하루 상한과 무관하게 보낸다(PRD §9.2).
+ * 같은 30분 주기에 🔎 Heimdallr 분석·🎤 발표자료 완료도 확인해 알린다(D59, lib/jobs/analysis.ts).
  */
 import { linksConfig, taxonomyConfig } from "@/lib/config/load";
 import { dbInsert, dbSelect } from "@/lib/db";
@@ -14,6 +15,7 @@ import { recordSource } from "@/lib/jobs";
 import { stockKeyboard, type LinkEntity } from "@/lib/links";
 import { sendMessage } from "@/lib/telegram/send";
 import { holdingAlertText } from "@/lib/telegram/templates";
+import { pollAnalysis } from "./analysis";
 import { latestHoldings, rules, type EntityRow } from "./context";
 
 export async function getState<T>(key: string): Promise<T | null> {
@@ -128,5 +130,7 @@ export async function poll(now = new Date(), opts: { dryRun?: boolean } = {}): P
   }
   await setState("known_thesis_triggers", triggers.filter((t) => t.thesis_link === R.thesis_break_trigger.thesis_link).map((t) => t.trigger_id));
   const byCause = fresh.reduce<Record<string, number>>((m, a) => ((m[a.cause] = (m[a.cause] ?? 0) + 1), m), {});
-  return { bootstrap: !bootstrapped, paused, candidates: alerts.length, fresh: fresh.length, by_cause: byCause, messages: sent, latency_min: latencies, ms: { collect: tFetch, total: Date.now() - t0 } };
+  // 🔎 Heimdallr 분석·🎤 발표자료 완료 확인 (D59) — dryRun 이면 건너뛴다
+  const analysis = opts.dryRun ? { skipped: "dryRun" } : await pollAnalysis(env().TELEGRAM_CHAT_ID).catch((e) => ({ error: String(e) }));
+  return { bootstrap: !bootstrapped, paused, candidates: alerts.length, fresh: fresh.length, by_cause: byCause, messages: sent, latency_min: latencies, analysis, ms: { collect: tFetch, total: Date.now() - t0 } };
 }

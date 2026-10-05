@@ -1,9 +1,10 @@
 /**
- * 🔎 추천 종목 심층 분석 버튼 (D59) — 순수 함수. 버튼 → Heimdallr 산업·기업 분석(Kairos, 노션) → 완료 알림 → 🎤 발표자료(Claude, PPT).
+ * 🔎 추천 종목 심층 분석 버튼 (D59·D60) — 순수 함수.
+ * 버튼 → Heimdallr Codex 분석(노션) → 🧠 Claude 심층 분석(자동: Codex 노션·Codex 자료·웹) → 완료 알림 → 🎤 발표자료(선택, 양식 PPT).
  * 판정과 무관한 참고 자료다(불변 규칙 5: 🟢 판정에 쓰지 않는다). 모든 메시지에 "매수 확정 신호 아님"(불변 규칙 3).
  * 콜백 데이터(64바이트 제한): an:c:<종목ID> · an:i:<산업명> · dk:<장부ID>
  */
-import type { AnalysisKind, AnalysisRequestResult } from "@/lib/ingest/heimdallr";
+import type { AnalysisKind, AnalysisRequestResult, ClaudeJob } from "@/lib/ingest/heimdallr";
 import type { Button } from "@/lib/links";
 import { esc, NOT_A_BUY_SIGNAL } from "./format";
 
@@ -57,29 +58,67 @@ export function reuseAfter(kind: AnalysisKind, now: Date, lastEarningsDate: stri
   return d30.toISOString();
 }
 
-const notionBtn = (url: string | null): KbButton[] => (url ? [{ text: "📝 노션에서 보기", url }] : []);
+const notionBtn = (url: string | null, text = "📝 노션에서 보기"): KbButton[] => (url ? [{ text, url }] : []);
+const codexBtn = (url: string | null) => notionBtn(url, "📝 Codex 분석");
+const claudeBtn = (url: string | null) => notionBtn(url, "🧠 Claude 분석");
 const deckBtn = (kind: AnalysisKind, localId: number | null): KbButton[] => (kind === "company" && localId ? [{ text: "🎤 발표자료", callback_data: `dk:${localId}` }] : []);
 const day = (iso: string | null) => (iso ? iso.slice(0, 10) : "-");
+const rowsOf = (...rs: KbButton[][]) => rs.filter((r) => r.length);
+
+/** 산업 분석의 Claude 선별 최고 기업 → 🏢 기업 분석 버튼 (JARVIS 종목 마스터에 있을 때만) */
+export type TopPick = { name: string; entityId: string | null };
+const pickBtn = (p: TopPick | null | undefined): KbButton[] => {
+  const b = p?.entityId ? cb(`🏢 ${p.name} 기업 분석`, `an:c:${p.entityId}`) : null;
+  return b ? [b] : [];
+};
+/** 🧠 다음에 할 일: 기업 = 🎤, 산업 = 선별 기업 🏢 */
+const nextRow = (kind: AnalysisKind, localId: number | null, pick?: TopPick | null): KbButton[] => (kind === "company" ? deckBtn(kind, localId) : pickBtn(pick));
 
 /** 버튼을 누른 직후 답장 */
-export function acceptReply(kind: AnalysisKind, target: string, r: { ok: true; data: AnalysisRequestResult } | { ok: false; reason: string }, localId: number | null): { text: string; buttons: KbButton[][] } {
+export function acceptReply(kind: AnalysisKind, target: string, r: { ok: true; data: AnalysisRequestResult } | { ok: false; reason: string }, localId: number | null, pick: TopPick | null = null): { text: string; buttons: KbButton[][] } {
   const head = `🔎 <b>${KIND[kind]}</b> · ${esc(target)}`;
   if (!r.ok) return { text: [head, `Heimdallr 요청 실패: ${esc(r.reason)}`, "<i>Heimdallr 쪽 연동(INTEGRATION_TASKS G)이 끝나야 동작합니다.</i>", "", FOOT].join("\n"), buttons: [] };
   const d = r.data;
   if (d.status === "reused") {
-    return { text: [head, `✅ ${day(d.completed_at)}에 끝난 분석이 있어 다시 돌리지 않습니다.`, "", FOOT].join("\n"), buttons: [[...notionBtn(d.notion_url), ...deckBtn(kind, localId)]].filter((x) => x.length) };
+    const c = d.claude;
+    const lines = [head, `✅ ${day(d.completed_at)}에 끝난 분석이 있어 다시 돌리지 않습니다.`];
+    if (c?.status === "sent") return { text: [...lines, "", FOOT].join("\n"), buttons: rowsOf([...codexBtn(d.notion_url), ...claudeBtn(c.notion_url)], nextRow(kind, localId, pick)) };
+    if (c && (c.status === "pending" || c.status === "working")) return { text: [...lines, "🧠 Claude 심층 분석이 진행 중입니다. 끝나면 알려드립니다.", "", FOOT].join("\n"), buttons: rowsOf(codexBtn(d.notion_url)) };
+    return { text: [...lines, "", FOOT].join("\n"), buttons: rowsOf([...codexBtn(d.notion_url), ...deckBtn(kind, localId)]) };
   }
   if (d.status === "in_progress") return { text: [head, "⏳ 이미 분석 중입니다. 끝나면 여기로 알려드립니다.", "", FOOT].join("\n"), buttons: [] };
   if (d.status === "rejected") return { text: [head, `❌ 접수 안 됨: ${esc(d.reason ?? "사유 없음")}`, "", FOOT].join("\n"), buttons: [] };
-  return { text: [head, "📥 접수했습니다. Heimdallr가 노션에 작성하면(보통 1~2시간, PC·Codex 실행 중일 때) 여기로 알려드립니다.", "", FOOT].join("\n"), buttons: [] };
+  return { text: [head, "📥 접수했습니다. Heimdallr(Codex)가 노션에 쓰면(보통 1~2시간, PC·Codex 실행 중일 때) 알려드리고, 이어서 🧠 Claude가 심층 분석합니다.", "", FOOT].join("\n"), buttons: [] };
 }
 
-/** 분석 완료·실패 알림 (poll) */
-export function doneReply(kind: AnalysisKind, target: string, status: "sent" | "failed" | "rejected", notionUrl: string | null, error: string | null, localId: number): { text: string; buttons: KbButton[][] } {
+/** Codex 분석 완료·실패 알림 (poll). claudePending = 🧠 Claude 심층 분석이 이어서 돈다 → 🎤 는 🧠 끝난 뒤(D60) */
+export function doneReply(kind: AnalysisKind, target: string, status: "sent" | "failed" | "rejected", notionUrl: string | null, error: string | null, localId: number, claudePending = false): { text: string; buttons: KbButton[][] } {
   const head = `${status === "sent" ? "✅" : "❌"} <b>${KIND[kind]} ${status === "sent" ? "완료" : "실패"}</b> · ${esc(target)}`;
   if (status !== "sent") return { text: [head, `원인: ${esc(error ?? status)}`, "다시 누르면 새로 요청합니다.", "", FOOT].join("\n"), buttons: [] };
+  if (claudePending) {
+    return { text: [`✅ <b>${KIND[kind]} (Codex) 완료</b> · ${esc(target)}`, "🧠 Claude가 이 노션 분석과 Codex가 쓴 자료·웹 검색으로 심층 분석을 이어서 합니다(보통 30분~1시간). 끝나면 다시 알려드립니다.", "", FOOT].join("\n"), buttons: rowsOf(codexBtn(notionUrl)) };
+  }
   const lines = [head, kind === "company" ? "🎤 발표자료 버튼을 누르면 Claude가 양식대로 PPT를 만들어 노션·드라이브에 저장합니다." : null, "", FOOT].filter((x) => x !== null);
-  return { text: lines.join("\n"), buttons: [[...notionBtn(notionUrl), ...deckBtn(kind, localId)]].filter((x) => x.length) };
+  return { text: lines.join("\n"), buttons: rowsOf([...notionBtn(notionUrl), ...deckBtn(kind, localId)]) };
+}
+
+/** 🧠 Claude 심층 분석 완료·실패 알림 (poll). 기업 → 🎤, 산업 → 선별 최고 기업 🏢. 실패해도 🎤 는 가능(발표자료 단계가 분석부터 한다) */
+export function claudeReply(kind: AnalysisKind, target: string, job: Pick<ClaudeJob, "status" | "notion_url" | "error">, codexUrl: string | null, localId: number, pick: TopPick | null = null): { text: string; buttons: KbButton[][] } {
+  const ok = job.status === "sent";
+  const lines = [`${ok ? "🧠" : "⚠️"} <b>Claude 심층 분석 ${ok ? "완료" : "실패"}</b> · ${esc(target)}`];
+  if (ok && kind === "company") lines.push("Codex 분석·Codex 자료·웹을 다시 확인해 산업 → 기업 → 시나리오까지 정리했습니다. 🎤 를 누르면 양식대로 발표자료(PPT·PDF)를 만듭니다.");
+  if (ok && kind === "industry") lines.push(pick ? `산업 리포트와 기업 선별을 마쳤습니다. 가장 매력적인 기업: <b>${esc(pick.name)}</b>${pick.entityId ? " — 🏢 로 기업 분석을 이어갈 수 있습니다." : ""}` : "산업 리포트와 기업 선별을 마쳤습니다.");
+  if (!ok) lines.push(`원인: ${esc(job.error ?? "알 수 없음")}`, kind === "company" ? "Codex 분석은 그대로 있습니다. 🎤 를 누르면 발표자료 단계에서 심층 분석부터 합니다." : "Codex 분석은 그대로 있습니다.");
+  lines.push("", FOOT);
+  return { text: lines.join("\n"), buttons: rowsOf([...codexBtn(codexUrl), ...(ok ? claudeBtn(job.notion_url) : [])], nextRow(kind, localId, ok ? pick : null)) };
+}
+
+/** Heimdallr 🧠 작업 상태 → JARVIS 장부 claude_status. done = 더 기다릴 것 없음(알림 대상이거나 🧠 없음) */
+export function claudeState(job: ClaudeJob | null | undefined): { claude_status: "queued" | "working" | "sent" | "failed" | "none"; done: boolean } {
+  if (!job) return { claude_status: "none", done: true };            // 이 기능 이전 분석 — 🎤 는 바로 가능(발표자료 단계가 분석부터)
+  if (job.status === "pending") return { claude_status: "queued", done: false };
+  if (job.status === "working") return { claude_status: "working", done: false };
+  return { claude_status: job.status, done: true };
 }
 
 /** 🎤 누른 직후 답장 */

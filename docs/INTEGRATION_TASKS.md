@@ -246,3 +246,40 @@
 2. 사용자가 JARVIS 브리핑의 `🏢` 버튼 1회 → Heimdallr 로컬 큐 → 노션 작성 → 30분 안에 JARVIS 에 "✅ 기업 분석 완료" + `🎤`. `🎤` → `kairos_deck_requests` → 노션 기업 페이지에 PDF·PPTX, 드라이브 기업 폴더에 3개 파일.
 3. 드라이브 기업 폴더가 없던 종목 1건: 폴더 생성 + 정기보고서 4건(국내) 또는 10-K/10-Q 4건(미국) 저장 확인.
 4. 시험용 노션 페이지를 만들지 않는다(기존 규칙) — 2·3은 실제 요청으로 확인한다.
+
+---
+
+## H. Heimdallr Call (Codex) — 🧠 Codex 완료 후 Claude 심층 분석 자동 실행 (D60, 2026-10-05 사용자 결정)
+
+**목적**: Codex(Kairos)가 노션 분석을 끝내면(`status='sent'`) **자동으로** 이 PC 의 Claude Code `kairos-deck` 스킬 **analysis 모드**를 실행해, Codex 노션 분석 + Codex 가 그 요청에 실제로 쓴 자료(체크포인트 장부·`state/sources/<ID>`) + 드라이브 + 웹 검색으로 심층 분석(사용자 지침 1단계·2단계)을 노션 `🧠 … Claude 심층 분석` 페이지(Codex 분석과 같은 🏢/🏭 페이지 아래)와 드라이브 `.md` 로 남긴다. 🎤 발표자료(deck 모드)는 사용자가 JARVIS 에서 고를 때만, **🧠 분석을 바탕으로** 만든다.
+**JARVIS 쪽(완료)**: `jarvis_analysis_status` 응답의 `claude` 필드를 읽어 "✅ Codex 완료 → 🧠 진행 중" → "🧠 완료 + [📝 Codex][🧠 Claude][🎤]"(산업은 🎤 대신 Claude 가 고른 최고 기업 `🏢` 버튼) 순서로 알린다. 계약은 JARVIS `lib/ingest/heimdallr.ts` 의 `ClaudeJob`·`AnalysisStatus.claude`·`AnalysisRequestResult.claude`.
+**스킬(완료)**: `~/.claude/skills/kairos-deck/SKILL.md` — `--mode analysis|deck` 입력·결과 JSON 이 아래 H-3 과 1:1. 노션 읽기·쓰기 스크립트 `scripts/notion_md.py`(Codex 페이지 읽기, 같은 부모에 🧠 페이지 발행·재실행 시 덮어쓰기).
+
+### H-1. 스키마 (`docs/migrations/kairos_claude.sql`, 재실행 안전)
+- `kairos_deck_requests` 에 `mode text not null default 'deck' check (mode in ('analysis','deck'))`, `analysis_md text`, `top_pick jsonb` 추가. 기존 행은 `deck`.
+- 열린 작업 유일 인덱스를 `(request_id, mode)` 기준으로 바꾼다(`status in ('pending','working','sent')`). 동시에 1개만 도는 `kairos_deck_single_worker_idx` 는 그대로 — analysis·deck 이 같은 Claude 를 하나씩 쓴다.
+- **자동 생성 트리거**: `kairos_requests` 가 `status` 를 `'sent'` 로 바꾸는 순간(이전 값 ≠ `'sent'`) `source='jarvis'` 이면 `kairos_deck_requests(request_id, mode='analysis')` 를 `on conflict do nothing` 으로 넣는다. deliver 와 같은 트랜잭션이라 JARVIS 가 "Codex 완료" 를 볼 때 🧠 작업이 이미 있다(경합 없음). 텔레그램 직접 요청은 지금처럼 Codex 분석만 한다.
+- `kairos_claim_deck()`: 같은 요청의 `analysis` 가 `pending·working` 이면 그 요청의 `deck` 은 집지 않는다(🧠 먼저). 나머지는 생성 순서. 반환 JSON 에 `mode` 포함.
+
+### H-2. RPC 응답 추가 (기존 계약 유지, 필드만 추가)
+- `jarvis_analysis_status`: 각 항목에 `claude: {status, notion_url, error, top_pick} | null`(그 요청의 최신 `mode='analysis'` 행). 기존 `deck` 은 최신 `mode='deck'` 행으로 한정.
+- `jarvis_request_analysis` 의 `reused` 응답에 같은 형식의 `claude` 추가(재사용 분석의 🧠 상태·링크).
+- `jarvis_request_deck`: 지금처럼 `company`·`sent` 일 때만. `mode='deck'` 행만 대상으로 dedupe. 🧠 가 진행 중이어도 접수(`queued`)하되 실행은 H-1 claim 규칙대로 🧠 다음.
+
+### H-3. 실행기 (`telegram_bridge/deck_runner.py`) — mode 별 프롬프트·검증
+- **analysis** (`request_id = A<id>`, 제한 90분):
+  ```
+  /kairos-deck --mode analysis --kind <request_kind> "<target_name>" [--code <code|ticker> --market <KR|US>]
+    --codex "<kairos_requests.notion_url>" --ledger "<절대경로 state\checkpoints\<로컬 작업 ID>.md>"
+    --sources "<절대경로 state\sources\<로컬 작업 ID>>" --drive-dir "<기업 폴더 또는 G-4 산업 폴더>" --request-id A<id>
+  ```
+  체크포인트·sources 경로는 `telegram_bridge/bridge.py checkpoint_path()` 와 같은 규칙(로컬 작업 ID). 없으면 그 옵션만 뺀다.
+  성공 검증: `notion_url` 이 노션 URL, `files` 에 `.md` 1개 이상이 `drive_dir` 안에 실제 존재, `analysis_md` 가 존재하는 절대경로. 저장: `status='sent'`, `notion_url`, `drive_dir`, `files`, `analysis_md`, `top_pick`(산업만).
+- **deck** (`request_id = D<id>`, 제한 120분): 같은 요청의 `mode='analysis'` 최신 `sent` 행이 있으면 `--analysis-md <그 analysis_md> --claude-notion <그 notion_url>` 를 넘기고, 없거나 `failed` 면 빼고 넘긴다(스킬이 분석부터 한다). 나머지 옵션·검증(pptx·pdf·md)은 지금과 같다.
+- 결과 파일 매칭(`result_file`)은 `A<id>`/`D<id>` 를 구분한다. 사용량 한도 재시도·타임아웃·단일 실행 규칙은 그대로.
+
+### H-4. 검증
+1. SQL: JARVIS 요청 1건을 `sent` 로 바꾸는 시험은 하지 않는다(실데이터). 트리거 정의·인덱스·RPC 응답 형태는 `\d`·함수 소스로 확인하고, 잘못된 토큰 `unauthorized` 를 다시 확인.
+2. 실제 흐름: JARVIS 🏢 1회 → Codex 노션 → 30분 안에 JARVIS "✅ (Codex) 완료 · 🧠 진행 중" → Claude 🧠 노션 페이지(Codex 분석과 같은 기업 페이지 아래)·드라이브 `YYMMDD_<기업>_Claude_심층분석.md` → JARVIS "🧠 완료 + 🎤" → 🎤 → PPT·PDF.
+3. 산업 1회: 🧠 결과의 `top_pick` 이 JARVIS 알림의 `🏢 <기업> 기업 분석` 버튼으로 나오는지.
+4. 시험용 노션 페이지를 만들지 않는다 — 2·3 은 실제 요청으로 확인한다.

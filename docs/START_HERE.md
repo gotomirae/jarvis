@@ -94,7 +94,7 @@
 | 🟢 알림 때 | 🚦 진입 보드 | 필수 조건 5개 ✅ 확인, 무효화 가격·1차 비중을 SnowBall에 기록 |
 | 주 1회 | ✅ 사후 검증 | 추천 승률·시장 대비 초과수익, 자동으로 빠진 기준(🚫)·우수 기준(⭐) 확인 |
 | 언제든 | 텔레그램 입력창 옆 **📌 바로가기** | 6개 프로젝트(JARVIS·Heimdallr·HermesCall·SnowBall·Sage·FlyWheel) 바로 열기. 링크가 바뀌면 `/pin` (D58) |
-| 브리핑 직후 | 텔레그램 **🔎 추천 종목 심층 분석** | `🏭 산업`·`🏢 기업` → Heimdallr가 노션에 분석(1~2시간) → 완료 알림의 `🎤 발표자료` → 양식 PPT가 노션·드라이브에 저장 (D59) |
+| 브리핑 직후 | 텔레그램 **🔎 추천 종목 심층 분석** | `🏭 산업`·`🏢 기업` → Codex가 노션에 분석(1~2시간) → 🧠 Claude가 자동으로 심층 분석(30분~1시간) → 원하면 `🎤 발표자료` → 양식 PPT가 노션·드라이브에 저장 (D59·D60) |
 
 - 추천 기준 자동 학습을 끄려면 `config/rules.yaml` → `pick_policy.auto_apply: false`(그러면 제안만 표시).
 - ⏱️ 점수 배점·임계값은 `config/rules.yaml` → `buy_timing`. 바꾸면 `docs/DECISIONS.md` 에 근거를 남긴다.
@@ -105,6 +105,7 @@
 - [ ] 긴 임의 토큰 1개를 만들어 **Vercel 환경변수 `HEIMDALLR_JARVIS_TOKEN`** 과 Heimdallr Supabase Vault `heimdallr_jarvis_token` 에 같은 값으로 넣는다(값은 어디에도 커밋하지 않는다)
 - [ ] Heimdallr Codex 세션에 `docs/INTEGRATION_TASKS.md` **G절**을 붙여 넣어 RPC·미국 종목·드라이브 자동 생성·🎤 실행기를 만든다
 - [ ] 이 PC: Claude Code 로그인 유지, PowerPoint 설치(발표자료 PDF 변환), Codex 앱·Google Drive 앱 실행
+- [ ] (D60) JARVIS SQL Editor에서 `supabase/migrations/0010_claude_analysis.sql` 실행 · Heimdallr Codex 세션에 **H절** 붙여 넣기
 - 그 전까지 버튼을 누르면 "Heimdallr 요청 실패 — 연동 준비 전" 안내만 나온다(아무것도 실행되지 않음).
 
 ---

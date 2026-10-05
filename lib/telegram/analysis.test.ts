@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { acceptReply, analysisKeyboard, analysisPrompt, deckAcceptReply, deckDoneReply, doneReply, parseCallback, reuseAfter } from "./analysis";
+import { acceptReply, analysisKeyboard, analysisPrompt, claudeReply, claudeState, deckAcceptReply, deckDoneReply, doneReply, parseCallback, reuseAfter } from "./analysis";
 import { inlineKeyboard } from "./send";
 
 const FOOT = "매수 확정 신호가 아닙니다";
@@ -42,7 +42,15 @@ describe("🔎 분석 버튼 (D59)", () => {
     expect(acceptReply("company", "<삼성>", { ok: false, reason: "RPC 없음" }, null).text).toContain("&lt;삼성&gt;");
     const reused = acceptReply("company", "삼성전기", { ok: true, data: { status: "reused", request_id: 7, notion_url: "https://n/1", completed_at: "2026-10-01T00:00:00Z" } }, 3);
     expect(reused.text).toContain("2026-10-01에 끝난 분석");
-    expect(reused.buttons).toEqual([[{ text: "📝 노션에서 보기", url: "https://n/1" }, { text: "🎤 발표자료", callback_data: "dk:3" }]]);
+    expect(reused.buttons).toEqual([[{ text: "📝 Codex 분석", url: "https://n/1" }, { text: "🎤 발표자료", callback_data: "dk:3" }]]);   // 🧠 없는 옛 분석 → 🎤 바로
+    const base = { status: "reused" as const, request_id: 7, notion_url: "https://n/1", completed_at: "2026-10-01T00:00:00Z" };
+    const rc = acceptReply("company", "삼성전기", { ok: true, data: { ...base, claude: { status: "sent", notion_url: "https://n/c", error: null } } }, 3);
+    expect(rc.buttons).toEqual([[{ text: "📝 Codex 분석", url: "https://n/1" }, { text: "🧠 Claude 분석", url: "https://n/c" }], [{ text: "🎤 발표자료", callback_data: "dk:3" }]]);
+    const rw = acceptReply("company", "삼성전기", { ok: true, data: { ...base, claude: { status: "working", notion_url: null, error: null } } }, 3);
+    expect(rw.text).toContain("🧠 Claude 심층 분석이 진행 중");
+    expect(rw.buttons).toEqual([[{ text: "📝 Codex 분석", url: "https://n/1" }]]);
+    const ri = acceptReply("industry", "반도체", { ok: true, data: { ...base, claude: { status: "sent", notion_url: "https://n/c", error: null } } }, 3, { name: "SK하이닉스", entityId: "KR:000660" });
+    expect(ri.buttons[1]).toEqual([{ text: "🏢 SK하이닉스 기업 분석", callback_data: "an:c:KR:000660" }]);
     expect(acceptReply("industry", "반도체", { ok: true, data: { status: "reused", request_id: 7, notion_url: null, completed_at: null } }, 3).buttons).toEqual([]);
     expect(acceptReply("industry", "반도체", { ok: true, data: { status: "in_progress", request_id: 7, notion_url: null, completed_at: null } }, null).text).toContain("이미 분석 중");
     expect(acceptReply("industry", "반도체", { ok: true, data: { status: "rejected", request_id: null, notion_url: null, completed_at: null, reason: "산업 미확인" } }, null).text).toContain("산업 미확인");
@@ -62,6 +70,33 @@ describe("🔎 분석 버튼 (D59)", () => {
     expect(f.text).toContain("❌");
     expect(f.text).toContain("SOURCE_ACCESS");
     expect(doneReply("company", "삼성전기", "rejected", null, null, 5).text).toContain("rejected");
+  });
+
+  it("🧠 Codex 완료 → Claude 진행 중 → Claude 완료/실패 (D60)", () => {
+    const pending = doneReply("company", "삼성전기", "sent", "https://n/2", null, 5, true);
+    expect(pending.text).toContain("(Codex) 완료");
+    expect(pending.text).toContain("🧠 Claude가");
+    expect(pending.buttons).toEqual([[{ text: "📝 Codex 분석", url: "https://n/2" }]]);          // 🎤 는 🧠 끝난 뒤
+    const ok = claudeReply("company", "삼성전기", { status: "sent", notion_url: "https://n/c", error: null }, "https://n/2", 5);
+    expect(ok.buttons).toEqual([[{ text: "📝 Codex 분석", url: "https://n/2" }, { text: "🧠 Claude 분석", url: "https://n/c" }], [{ text: "🎤 발표자료", callback_data: "dk:5" }]]);
+    expect(ok.text).toContain("Claude 심층 분석 완료");
+    const ind = claudeReply("industry", "반도체", { status: "sent", notion_url: "https://n/c", error: null }, "https://n/2", 6, { name: "<SK>", entityId: "KR:000660" });
+    expect(ind.text).toContain("<b>&lt;SK&gt;</b>");
+    expect(ind.buttons[1]).toEqual([{ text: "🏢 <SK> 기업 분석", callback_data: "an:c:KR:000660" }]);
+    const noEnt = claudeReply("industry", "반도체", { status: "sent", notion_url: null, error: null }, null, 6, { name: "TSMC", entityId: null });
+    expect(noEnt.buttons).toEqual([]);
+    expect(noEnt.text).not.toContain("🏢 로");
+    expect(claudeReply("industry", "반도체", { status: "sent", notion_url: null, error: null }, null, 6).text).toContain("기업 선별을 마쳤습니다.");
+    const failC = claudeReply("company", "삼성전기", { status: "failed", notion_url: null, error: "USAGE" }, "https://n/2", 5);
+    expect(failC.text).toContain("USAGE");
+    expect(failC.buttons).toEqual([[{ text: "📝 Codex 분석", url: "https://n/2" }], [{ text: "🎤 발표자료", callback_data: "dk:5" }]]);
+    const failI = claudeReply("industry", "반도체", { status: "failed", notion_url: null, error: null }, "https://n/2", 6, { name: "X", entityId: "KR:1" });
+    expect(failI.text).toContain("알 수 없음");
+    expect(failI.buttons).toEqual([[{ text: "📝 Codex 분석", url: "https://n/2" }]]);
+    expect(claudeState(null)).toEqual({ claude_status: "none", done: true });
+    expect(claudeState({ status: "pending", notion_url: null, error: null })).toEqual({ claude_status: "queued", done: false });
+    expect(claudeState({ status: "working", notion_url: null, error: null })).toEqual({ claude_status: "working", done: false });
+    expect(claudeState({ status: "failed", notion_url: null, error: null })).toEqual({ claude_status: "failed", done: true });
   });
 
   it("🎤 접수·완료", () => {

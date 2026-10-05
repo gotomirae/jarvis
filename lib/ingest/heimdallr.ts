@@ -47,13 +47,20 @@ export type AnalysisRequestInput = {
   industry: string | null;             // JARVIS 산업명(L1) — Heimdallr 가 Drive 산업 폴더와 짝 맞춤
   reuse_after: string;                 // 이 시각 이후 완료된 분석이 있으면 새로 돌리지 않고 그 링크를 돌려준다
 };
+/** 🧠 Claude 심층 분석(Codex 완료 후 Heimdallr 가 자동으로 거는 kairos-deck analysis 모드, D60) */
+export type ClaudeJob = {
+  status: "pending" | "working" | "sent" | "failed"; notion_url: string | null; error: string | null;
+  top_pick?: { name: string; market: "KR" | "US"; code: string } | null;     // 산업 분석만: 2단계 선별 최고 기업
+};
 export type AnalysisRequestResult = {
   status: "queued" | "in_progress" | "reused" | "rejected";
   request_id: number | null; notion_url: string | null; completed_at: string | null; reason?: string | null;
+  claude?: ClaudeJob | null;                                                // reused 일 때 그 분석의 🧠 상태
 };
 export type AnalysisStatus = {
   request_id: number; status: "pending" | "working" | "awaiting_input" | "rejected" | "failed" | "sending" | "sent" | "uncertain";
   stage: string | null; notion_url: string | null; error: string | null; completed_at: string | null;
+  claude?: ClaudeJob | null;                                                // 🧠 Claude 심층 분석 (없으면 이 기능 이전 분석)
   deck: { status: "pending" | "working" | "sent" | "failed"; notion_url: string | null; error: string | null } | null;
 };
 

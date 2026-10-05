@@ -66,6 +66,23 @@
 | D61 | 2026-10-06 | **분석 자료 범위 통일**: Codex·Claude 모두 노션 `2_1. 산업 & 종목`(산업 DB 전체 + 제목 일치)·`2. Invest_WiKi`(제목·관련 산업·수혜 기업·핵심 내용·Insight 일치)를 **내용 날짜 3개월 이내**만 사용(날짜 속성 → 제목 날짜 → 생성일, 마지막 수정일 불사용). Claude 는 추가로 JARVIS `GET /api/public/stock-context`(SnowBall 훼손조건·확신도·최근 결정·비중 구간, 🟢 판정, 추천 이력 — 금액 없음)와 Heimdallr 텔레그램 읽기 전용 검색, 산업 드라이브 폴더 규칙을 Codex 와 동일(날짜 하위 폴더 최신 1개)하게 맞춤. Codex 쪽은 INTEGRATION_TASKS I | 사용자 결정. 실측: 2_1 은 7/10 일괄 수정으로 2021년 글이 최근 수정으로 보임 → 수정일 기준이면 오염. SnowBall Heritage 노션은 개발 메모(논지 아님)라 논지는 JARVIS API 로 |
 ---
 
+## D58~D61 작업 기록 (2026-10-05~06) — 바로가기 고정 · 🔎 심층 분석 버튼 · 🧠 Claude 심층 분석 · 🎤 발표자료
+**흐름(최종)**: 브리핑 직후 `🔎 추천 종목 심층 분석` 메시지(🏭 산업·🏢 기업) → Heimdallr 토큰 RPC 접수 → Codex(Kairos) 노션 분석 → Heimdallr 트리거가 Claude Code `kairos-deck --mode analysis` 자동 실행(Codex 노션·Codex 작업 기록/원문 + 노션 2_1·Invest_WiKi + JARVIS 종목 맥락 + 드라이브 + 웹) → 노션 `🧠 … Claude 심층 분석`(Codex 분석과 같은 대상 페이지 아래)·드라이브 .md → JARVIS 알림 `[📝 Codex][🧠 Claude][🎤]`(산업은 Claude 선별 최고 기업 🏢) → 🎤 누를 때만 `--mode deck` 양식 20장 PPT·PDF → 노션 기업 페이지 첨부·드라이브. 판정(🟢)과 무관한 참고 자료, JARVIS 는 요청·상태·링크만.
+
+| 구분 | 위치 | 내용 |
+|---|---|---|
+| JARVIS (D58) | `lib/telegram/pin.ts`, `app/go`, `/pin`·`pin_links` | 6개 프로젝트 바로가기 고정 메시지 + 입력창 옆 `📌 바로가기` 메뉴 버튼(미니 앱 `/go`, 로그인 없이 공개 주소만, 기본 브라우저로 열기) |
+| JARVIS (D59·D60) | `lib/telegram/analysis.ts`(순수), `lib/jobs/analysis.ts`, 웹훅 callback_query, `poll` 30분, 0009·0010 | 버튼·재사용(기업 30일 & 그 사이 실적 없음 / 산업 30일)·장부 `jarvis.analysis_requests`·Codex 완료 → 🧠 완료 → 🎤 완료 알림, 연동 토큰 없으면 버튼 미발송, `/status`·poll 에 `🔎 Heimdallr 분석 연동` 점검(읽기 전용) |
+| JARVIS (D61) | `GET /api/public/stock-context?entity=` | SnowBall 원장 훼손조건·확신도·최근 결정·비중 구간, 🟢 판정(M1~M5), 추천 이력 — 금액·수량 없음 |
+| Claude 스킬 | `~/.claude/skills/kairos-deck/` | `references/analysis-spec.md`(Project "3. 투자 분석 및 발표자료 제작" 지침 원문) · `template-map.md`(양식 20장 매핑) · `deck_slots.py`(양식 887칸·그래프 4개 채우기, 선택 강조·52주 밴드 이동, 양식 예시 잔존 검사) · `export_pdf.ps1`(PowerPoint) · `notion_attach.py` · `notion_md.py`(Codex 페이지 읽기·🧠 페이지 발행·2_1/Invest_WiKi 3개월 수집) · `jarvis_context.py` · `.env`(JARVIS 공개 API 토큰, 커밋 금지) |
+| Heimdallr (Codex) | `C:\Codex\Heimdallr_Call_Codex` (실제 운영 폴더 — `C:\Claude\dev\Heimdallr_Call` 은 옛 사본) · 커밋 ec2228e(G) · c87178c · e4fcfff(H·I) | 토큰 RPC 3종, 미국 종목(SEC 명부), 산업명 ↔ 드라이브 폴더 표(`config/industry_folders.yaml`, 확인 질문 없음), 드라이브 자동 생성·최근 4개 분기 공시·IR 저장, 🧠/🎤 실행기(`deck_runner.py`, 동시 1개·사용량 재시도), 운영 SQL `kairos_jarvis.sql`·`kairos_claude.sql` 적용 |
+| Codex 스킬 | `C:\Users\user\.codex\skills\kairos\` | 노션 2_1·Invest_WiKi 추가(내용 날짜 3개월), SnowBall Heritage 노션(앱 개발 메모)은 분석 근거에서 제외 |
+
+- **자료 3개월 규칙**: 노션은 날짜 속성 → 제목 속 날짜 → 생성일(마지막 수정일 불사용 — 2_1 은 7/10 일괄 수정으로 2021년 글이 최신처럼 보임). 드라이브 기업 = 발행일 3개월 이내 전부, 산업 = 날짜 하위 폴더 최신 1개(Codex·Claude 동일).
+- **실측**: 바로가기 고정(id 52)·메뉴 버튼 등록 · Vercel→Heimdallr `link: ok` · stock-context 실데이터(삼성전기·삼성전자 훼손조건 2개씩) · 노션 refs 삼성전기 Invest_WiKi 36건 + 2_1 허브 1건(옛 글 제외) · 양식 채우기→PowerPoint PDF 변환·그래프 축 자동·강조 이동 렌더 확인 · Codex 테스트 1,275 통과 · JARVIS 309 tests ✅.
+- **보안 정리**: SnowBall Heritage 노션 페이지의 평문 토큰 2개 삭제(텔레그램 = SnowBall 봇, GitHub = SnowBall Vault `github_dispatch_token` 용으로 추정). **무효화·재발급은 사용자 몫**(GitHub 토큰 Delete → 새 토큰을 SnowBall Vault 에, @BotFather `/revoke` → SnowBall `.env.local`·Vercel `TELEGRAM_BOT_TOKEN`).
+- **남은 일**: ① 실제 버튼 1건으로 Codex → 🧠 → 🎤 끝까지 확인(시험 노션 페이지는 만들지 않는 원칙) ② 텔레그램 리서치 세션(`TELEGRAM_RESEARCH_API_ID/HASH` + `auth`)이 `not_configured` — 설정 전에는 Codex·Claude 모두 채널 직접 검색 불가 ③ 노출 토큰 2개 무효화·교체 ④ 동방메디컬 같은 미용기기 종목의 산업 폴더 짝(`15. 화장품` ↔ `4. 미용_의료기기`) 검토 ⑤ Claude Pro 사용량 — 요청당 🧠 1회(+🎤 1회), 몰리면 알림 지연.
+
 ## D53~D55 작업 기록 (2026-10-04)
 - 코드 게이트: `npm run typecheck` ✅ · `npm run test:coverage` ✅(26 files · 288 tests, 대상 파일 라인 100%) · `npm run build` ✅ · CI test ✅ · Vercel 배포 ✅(3e12778)
 - 실데이터 미리보기(발송 없음, 10/4 저녁): 🎯 후보 8 → TOP 5(🔥 2 · ⚖️ 3) · ⏸️ 대기 2. 추천 이력 소급 확인(예: 유니트론텍 8번째 추천 +4.9%)

@@ -77,6 +77,9 @@ describe("telegram commands", () => {
     expect((await handleCommand("/alerts off", ctx))?.text).toContain("사용법");
     expect(renderStatus({ ...status, alertsPaused: true })).toContain("⏸ 일시 정지");
     expect(renderStatus({ ...status, alertsPaused: false })).toContain("▶️ 켜짐");
+    expect(renderStatus({ ...status, analysisLink: { ok: true } })).toContain("🔎 Heimdallr 분석 연동: ✅");
+    expect(renderStatus({ ...status, analysisLink: { ok: false, note: "토큰 불일치" } })).toContain("❌ 토큰 불일치");
+    expect(renderStatus(status)).not.toContain("분석 연동");
   });
 
   it("help, planned and unknown commands; plain text ignored", async () => {

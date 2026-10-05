@@ -2,7 +2,8 @@
  * /status · /health 용 상태 수집 (서버 전용). 값은 노출하지 않고 설정 여부·최근 실행만.
  */
 import { dbConfigured, dbSelect } from "@/lib/db";
-import { presence, type EnvKey } from "@/lib/env";
+import { env, presence, type EnvKey } from "@/lib/env";
+import { analysisStatus } from "@/lib/ingest/heimdallr";
 import type { StatusCtx } from "@/lib/telegram/commands";
 import { kstString } from "@/lib/time";
 
@@ -11,8 +12,15 @@ const STATUS_KEYS: EnvKey[] = [
   "TELEGRAM_WEBHOOK_SECRET", "SNOWBALL_JARVIS_TOKEN", "HEIMDALLR_ANON_KEY", "HEIMDALLR_JARVIS_TOKEN", "HERMES_ANON_KEY", "SAGE_READ_KEY", "NOTION_API_KEY",
 ];
 
+/** 🔎 Heimdallr 분석 연동(D59) — 빈 목록 상태 조회(읽기 전용, 요청을 만들지 않음)로 토큰이 Vault 값과 맞는지 확인 */
+async function analysisLink(): Promise<{ ok: boolean; note?: string } | undefined> {
+  if (!env().HEIMDALLR_JARVIS_TOKEN) return undefined;
+  const r = await analysisStatus([]);
+  return r.ok ? { ok: true } : { ok: false, note: /unauthorized/.test(r.reason) ? "토큰 불일치(Vercel ↔ Heimdallr Vault)" : r.reason.slice(0, 80) };
+}
+
 export async function collectStatus(): Promise<StatusCtx> {
-  const base: StatusCtx = { nowKst: kstString(), env: presence(STATUS_KEYS), db: { ok: false, note: "미설정" }, jobs: [], sources: [] };
+  const base: StatusCtx = { nowKst: kstString(), env: presence(STATUS_KEYS), db: { ok: false, note: "미설정" }, jobs: [], sources: [], analysisLink: await analysisLink() };
   if (!dbConfigured()) return base;
   const jobs = await dbSelect<{ job: string; started_at: string; ok: boolean | null }>("job_runs", "select=job,started_at,ok&order=started_at.desc&limit=5");
   const src = await dbSelect<{ source: string; last_ok_at: string | null; consecutive_failures: number }>("source_health", "select=source,last_ok_at,consecutive_failures&order=source");

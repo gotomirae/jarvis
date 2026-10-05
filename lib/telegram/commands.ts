@@ -14,6 +14,7 @@ export type StatusCtx = {
   jobs: { job: string; at: string; ok: boolean | null }[];
   sources: { source: string; last_ok_at: string | null; consecutive_failures: number }[];
   alertsPaused?: boolean;
+  analysisLink?: { ok: boolean; note?: string };         // 🔎 Heimdallr 분석 연동 (D59)
 };
 
 export type CommandCtx = {
@@ -61,6 +62,7 @@ export function renderStatus(s: StatusCtx): string {
     `환경변수 ${envOk}/${Object.keys(s.env).length} 설정${missing.length ? ` · 미설정: ${esc(missing.join(", "))}` : ""}`,
     `DB: ${s.db.ok ? "✅" : "❌"}${s.db.note ? ` ${esc(s.db.note)}` : ""}`,
   ];
+  if (s.analysisLink) lines.push(`🔎 Heimdallr 분석 연동: ${s.analysisLink.ok ? "✅" : "❌"}${s.analysisLink.note ? ` ${esc(s.analysisLink.note)}` : ""}`);
   if (s.alertsPaused !== undefined) lines.push(`보유 경고 알림: ${s.alertsPaused ? "⏸ 일시 정지 (/alerts on 으로 재개)" : "▶️ 켜짐"}`);
   if (s.sources.length) {
     lines.push("", "<b>소스</b>");

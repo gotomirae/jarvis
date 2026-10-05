@@ -123,11 +123,11 @@ export default async function Today() {
         </div>
         <div className="glass rounded-xl p-4">
           <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
-            {fgNow && <span className="whitespace-nowrap">😱 공포·탐욕 <b className="text-gold">{fgNow.value} · {fgNow.rating}</b></span>}
+            {fgNow && <span className="whitespace-nowrap">😱 공포·탐욕 <b style={{ color: DC.fear_greed.color }}>{fgNow.value} · {fgNow.rating}</b></span>}
             {vixNow && <span className="whitespace-nowrap">🌪️ 변동성지수 <b className={vixNow.value >= DC.vix.fear_above ? "text-hot" : vixNow.value < DC.vix.calm_below ? "text-good" : "text-gold"}>{vixNow.value.toFixed(1)}</b></span>}
             <span className="whitespace-nowrap text-sub">↕️ 세 그래프는 같은 날짜가 같은 세로선 · 마우스를 올리면 함께 표시</span>
           </div>
-          {mc.indices.length ? <MarketPanel data={mc.indices} lines={mc.lines} bands={DC.fear_greed.bands} calm={DC.vix.calm_below} fear={DC.vix.fear_above} /> : <Empty text="시세 자료를 불러오지 못했습니다." />}
+          {mc.indices.length ? <MarketPanel data={mc.indices} lines={mc.lines} bands={DC.fear_greed.bands} calm={DC.vix.calm_below} fear={DC.vix.fear_above} fgColor={DC.fear_greed.color} /> : <Empty text="시세 자료를 불러오지 못했습니다." />}
         </div>
       </Section>
 

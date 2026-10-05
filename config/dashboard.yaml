@@ -6,14 +6,15 @@ cache_minutes: 60            # 서버 캐시(외부 시세 호출 최소화)
 
 # 🏠 오늘 — 주요 지수 (한 그래프, 기간 첫날 = 100 으로 맞춰 비교)
 indices:
-  - {sym: "^GSPC", label: "S&P 500", source: yahoo, color: "#60a5fa"}
-  - {sym: "^IXIC", label: "나스닥 종합", source: yahoo, color: "#a78bfa"}
-  - {sym: "^NDX", label: "나스닥 100", source: yahoo, color: "#f472b6"}
-  - {sym: "KOSPI", label: "코스피", source: naver, color: "#fcd34d"}
-  - {sym: "KOSDAQ", label: "코스닥", source: naver, color: "#34d399"}
+  - {sym: "^GSPC", label: "S&P 500", source: yahoo, color: "#3b82f6"}      # 파란색 (10/5 사용자 지정)
+  - {sym: "^IXIC", label: "나스닥 종합", source: yahoo, color: "#fef08a"}   # 연노란색
+  - {sym: "^NDX", label: "나스닥 100", source: yahoo, color: "#f59e0b"}     # 황금색
+  - {sym: "KOSPI", label: "코스피", source: naver, color: "#86efac"}       # 연녹색
+  - {sym: "KOSDAQ", label: "코스닥", source: naver, color: "#f472b6"}      # 분홍색
 
 vix: {sym: "^VIX", label: "변동성지수(VIX)", calm_below: 20, fear_above: 30}
 fear_greed:                  # CNN 공포·탐욕 지수 (0~100). 25 미만 극단적 공포 · 45 미만 공포 · 55 초과 탐욕 · 75 초과 극단적 탐욕
+  color: "#a855f7"           # 보라색 (10/5 사용자 지정)
   bands: {extreme_fear: 25, fear: 45, greed: 55, extreme_greed: 75}
 
 # 📡 산업 레이더 — 노션 산업(L1)별 대표 ETF (이름은 10/5 네이버·야후에서 확인)

@@ -18,7 +18,7 @@ export type DashboardConfig = {
   lookback_months: number; cache_minutes: number;
   indices: { sym: string; label: string; source: Src; color: string }[];
   vix: { sym: string; label: string; calm_below: number; fear_above: number };
-  fear_greed: { bands: { extreme_fear: number; fear: number; greed: number; extreme_greed: number } };
+  fear_greed: { color: string; bands: { extreme_fear: number; fear: number; greed: number; extreme_greed: number } };
   sector_proxies: Record<string, { sym: string; source: Src; name: string }>;
   cycle: CycleRules;
   entry_chart: { quarters: number; rsi_overbought: number; rsi_oversold: number };

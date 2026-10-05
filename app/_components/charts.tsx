@@ -15,9 +15,9 @@ const fmt = (v: unknown, digits = 1) => (typeof v === "number" ? v.toLocaleStrin
  * 📊 주요 지표 — 지수 흐름(첫날 = 100) · 공포·탐욕 · 변동성지수를 세로로 쌓는다 (10/5).
  * 세 그래프가 같은 데이터(날짜 합집합)·같은 여백·같은 축 폭을 써서 같은 날짜가 같은 세로선에 오고, 커서도 함께 움직인다(syncId).
  */
-export function MarketPanel({ data, lines, bands, calm, fear }: {
+export function MarketPanel({ data, lines, bands, calm, fear, fgColor }: {
   data: Record<string, unknown>[]; lines: { key: string; label: string; color: string }[];
-  bands: { extreme_fear: number; fear: number; greed: number; extreme_greed: number }; calm: number; fear: number;
+  bands: { extreme_fear: number; fear: number; greed: number; extreme_greed: number }; calm: number; fear: number; fgColor: string;
 }) {
   const sync = "market";
   const m = { top: 8, right: 16, bottom: 0, left: 0 };
@@ -39,7 +39,7 @@ export function MarketPanel({ data, lines, bands, calm, fear }: {
       {head("😱 공포·탐욕 지수", "0 극단적 공포 · 50 중립 · 100 극단적 탐욕")}
       <ResponsiveContainer width="100%" height={170}>
         <AreaChart data={data} syncId={sync} margin={m}>
-          <defs><linearGradient id="fgFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={GOLD} stopOpacity={0.45} /><stop offset="100%" stopColor={GOLD} stopOpacity={0.02} /></linearGradient></defs>
+          <defs><linearGradient id="fgFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={fgColor} stopOpacity={0.45} /><stop offset="100%" stopColor={fgColor} stopOpacity={0.02} /></linearGradient></defs>
           <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
           <XAxis dataKey="date" tick={tick} tickFormatter={md} minTickGap={40} />
           <YAxis tick={tick} width={W} domain={[0, 100]} ticks={[0, bands.extreme_fear, 50, bands.extreme_greed, 100]} />
@@ -47,7 +47,7 @@ export function MarketPanel({ data, lines, bands, calm, fear }: {
           <ReferenceArea y1={bands.extreme_greed} y2={100} fill={HOT} fillOpacity={0.12} />
           <ReferenceLine y={50} stroke={SUB} strokeDasharray="4 4" />
           <Tooltip {...tip} formatter={(v, _n, p) => [`${fmt(v)} · ${(p?.payload as { fg_rating?: string })?.fg_rating ?? ""}`, "공포·탐욕"]} />
-          <Area type="monotone" dataKey="fg" name="공포·탐욕" stroke={GOLD} fill="url(#fgFill)" strokeWidth={2} connectNulls />
+          <Area type="monotone" dataKey="fg" name="공포·탐욕" stroke={fgColor} fill="url(#fgFill)" strokeWidth={2} connectNulls />
         </AreaChart>
       </ResponsiveContainer>
       {head("🌪️ 변동성지수(VIX)", `${calm} 아래 안정 · ${fear} 위 공포`)}

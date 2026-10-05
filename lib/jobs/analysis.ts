@@ -79,7 +79,13 @@ async function handleDeck(chatId: number, id: number): Promise<string> {
 /** poll(30분): 열린 요청의 Heimdallr 상태 → 완료·실패 알림. 이미 알린 건 다시 보내지 않는다(notified_at) */
 export async function pollAnalysis(chatId: string | undefined): Promise<Record<string, unknown>> {
   const open = await dbSelect<Row>("analysis_requests", "select=*&or=(and(status.in.(queued,working),notified_at.is.null),deck_status.in.(queued,working))&heimdallr_id=not.is.null&limit=50");
-  if (!open.ok || !open.data.length) return { open: open.ok ? 0 : open.reason };
+  if (!open.ok) return { open: open.reason };
+  if (!open.data.length) {
+    // 열린 요청이 없어도 연동 상태는 남긴다(빈 목록 조회 = 읽기 전용) → 토큰 어긋남을 버튼 누르기 전에 안다
+    if (!env().HEIMDALLR_JARVIS_TOKEN) return { open: 0, link: "토큰 미설정" };
+    const ping = await analysisStatus([]);
+    return { open: 0, link: ping.ok ? "ok" : ping.reason.slice(0, 120) };
+  }
   const st = await analysisStatus([...new Set(open.data.map((x) => x.heimdallr_id as number))]);
   if (!st.ok) return { open: open.data.length, error: st.reason };
   const byId = new Map((st.data ?? []).map((s) => [s.request_id, s] as [number, AnalysisStatus]));

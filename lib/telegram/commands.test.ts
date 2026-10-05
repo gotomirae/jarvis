@@ -59,6 +59,7 @@ describe("telegram commands", () => {
     expect(m.buttons?.flat().map((b) => b.text)).toEqual(["📊 JARVIS", "🛡️ Heimdallr", "🧙 Sage", "🔄 FlyWheel", "⚡ HermesCall", "❄️ SnowBall"]);
     expect(m.text).toContain("📌 <b>프로젝트 바로가기</b>");
     expect(m.text).not.toContain("JARVIS_URL");
+    expect(m.text).toContain("입력창 옆 <b>📌 바로가기</b>");
     expect(renderPinnedLinks({ dashboards: six, jarvisUrl: undefined }).text).toContain("JARVIS_URL");
     expect((await handleCommand("/pin", { ...ctx, pin: async () => null }))?.text).toContain("맨 위에 고정했습니다");
     expect((await handleCommand("/pin", { ...ctx, pin: async () => "pinChatMessage: 400 <x>" }))?.text).toBe("📌 고정 실패: pinChatMessage: 400 &lt;x&gt;");

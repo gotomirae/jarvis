@@ -1,5 +1,5 @@
 /**
- * 세션 갱신 + 대시보드 보호 (PRD §8). 공개 경로: /login, /api/*(webhook·public API 는 자체 토큰으로 보호).
+ * 세션 갱신 + 대시보드 보호 (PRD §8). 공개 경로: /login, /go(바로가기), /api/*(webhook·public API 는 자체 토큰으로 보호).
  * 허용 이메일(ALLOWED_EMAIL) 외 세션은 로그아웃시킨다. DB 는 RLS(jarvis.is_allowed)로 한 번 더 막는다.
  */
 import { createServerClient } from "@supabase/ssr";
@@ -7,7 +7,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { env } from "@/lib/env";
 
 export function isPublicPath(path: string): boolean {
-  return path.startsWith("/login") || path.startsWith("/api/") || path === "/robots.txt";
+  // /go: 텔레그램 메뉴 버튼 바로가기(D58) — links.yaml 공개 주소만 보여 주므로 로그인 없이 연다
+  return path.startsWith("/login") || path.startsWith("/api/") || path === "/robots.txt" || path === "/go";
 }
 
 export async function updateSession(request: NextRequest) {

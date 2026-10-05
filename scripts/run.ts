@@ -55,6 +55,7 @@ const JOBS: Record<string, (args: Record<string, string>) => Promise<void>> = {
     const r = await pinLinks(need("TELEGRAM_CHAT_ID"));
     if (!r.ok) throw new Error(`pin_links 실패: ${r.reason}`);
     console.log(r.data.created ? `📌 새 바로가기 메시지 고정 (id ${r.data.messageId})` : `📌 기존 바로가기 메시지 갱신·고정 (id ${r.data.messageId})`);
+    console.log(r.data.menu ? `메뉴 버튼 실패: ${r.data.menu}` : "📌 입력창 옆 메뉴 버튼(바로가기) 설정");
   },
   ...P2_JOBS,
 };

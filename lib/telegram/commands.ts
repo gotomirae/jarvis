@@ -49,7 +49,7 @@ export function renderLinks(ctx: Pick<CommandCtx, "dashboards" | "jarvisUrl">): 
 export function renderPinnedLinks(ctx: Pick<CommandCtx, "dashboards" | "jarvisUrl">): Reply {
   const buttons = dashboardButtons(ctx.dashboards, ctx.jarvisUrl);
   const lines = ["📌 <b>프로젝트 바로가기</b>", "버튼을 누르면 각 프로젝트 대시보드가 열립니다."];
-  if (!ctx.jarvisUrl) lines.push("<i>JARVIS 버튼은 JARVIS_URL 설정 후 /pin 을 다시 보내면 생깁니다.</i>");
+  lines.push(ctx.jarvisUrl ? "입력창 옆 <b>📌 바로가기</b> 버튼으로도 언제든 열 수 있습니다." : "<i>JARVIS 버튼은 JARVIS_URL 설정 후 /pin 을 다시 보내면 생깁니다.</i>");
   return { text: lines.join("\n"), buttons: rows(buttons, 3) };
 }
 

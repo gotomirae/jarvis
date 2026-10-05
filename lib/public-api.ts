@@ -55,3 +55,29 @@ export function tokenOk(given: string | null, expected: string | undefined): boo
   for (let i = 0; i < Math.max(given.length, expected.length); i++) d |= (given.charCodeAt(i) || 0) ^ (expected.charCodeAt(i) || 0);
   return d === 0;
 }
+
+// ── 종목 맥락 (D61) — Claude kairos-deck 심층 분석이 읽는다. SnowBall 훼손조건·확신도·최근 결정 + JARVIS 진입 판정·추천 이력 ──
+export type StockContextInput = {
+  entity: { id: string; name: string; symbol: string; market: string; l1_names: string[] };
+  holding: { weight: number | null; heat_score: number | null; conviction?: number | null; thesis_version?: number | null;
+    invalidation_1?: string | null; invalidation_2?: string | null; invalidation_3?: string | null; open_triggers?: number;
+    last_decision_action?: string | null; last_decision_date?: string | null } | null;
+  entry: { date: string; level: string; m1: boolean; m2: boolean; m3: boolean; m4: boolean; m5: boolean; tag: string | null; invalidation_price: number | null } | null;
+  picks: string[];                                   // 이 종목이 🎯 추천에 오른 브리핑 발송 시각(ISO, 오름차순)
+};
+
+/** 금액·수량·원가·정확한 비중은 담지 않는다(D1·D26). 훼손조건은 사용자가 쓴 문장 그대로 */
+export function stockContext(x: StockContextInput) {
+  const h = x.holding;
+  return {
+    entity: x.entity,
+    snowball: h ? {
+      held: true, weight_bucket: weightBucket(h.weight), heat_score: h.heat_score ?? null, conviction: h.conviction ?? null, thesis_version: h.thesis_version ?? null,
+      invalidation: [h.invalidation_1, h.invalidation_2, h.invalidation_3].filter((s): s is string => !!s && !!s.trim()),
+      open_triggers: h.open_triggers ?? 0, last_decision: h.last_decision_action ? { action: h.last_decision_action, date: h.last_decision_date ?? null } : null,
+    } : { held: false },
+    entry: x.entry ? { date: x.entry.date, level: x.entry.level, conditions: { M1: x.entry.m1, M2: x.entry.m2, M3: x.entry.m3, M4: x.entry.m4, M5: x.entry.m5 }, tag: x.entry.tag, invalidation_price: x.entry.invalidation_price } : null,
+    recommendations: { count: x.picks.length, first_at: x.picks[0] ?? null, last_at: x.picks[x.picks.length - 1] ?? null },
+    note: "매수 확정 신호가 아님. 훼손조건·확신도는 SnowBall 원장 기준(읽기 전용).",
+  };
+}

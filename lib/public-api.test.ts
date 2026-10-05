@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { holdingsLite, industryHeat, tokenOk, weightBucket } from "./public-api";
+import { holdingsLite, industryHeat, stockContext, tokenOk, weightBucket } from "./public-api";
 
 describe("공개 API 응답", () => {
   it("비중 구간 (금액·정확한 비중 비노출)", () => {
@@ -30,5 +30,23 @@ describe("공개 API 응답", () => {
     expect(tokenOk("ab", "abc")).toBe(false);
     expect(tokenOk(null, "abc")).toBe(false);
     expect(tokenOk("abc", undefined)).toBe(false);
+  });
+
+  it("stock-context: 훼손조건·확신도·결정 + 진입 판정·추천 이력, 금액 비노출 (D61)", () => {
+    const entity = { id: "KR:009150", name: "삼성전기", symbol: "009150", market: "KR", l1_names: ["반도체"] };
+    const held = stockContext({ entity, picks: ["2026-10-01T07:30:00Z", "2026-10-05T19:20:00Z"],
+      holding: { weight: 0.031, heat_score: 72, conviction: 4, thesis_version: 2, invalidation_1: "OPM 10% 하회", invalidation_2: " ", invalidation_3: null, open_triggers: 1,
+        last_decision_action: "hold", last_decision_date: "2026-09-30", qty: 10, avg_cost_krw: 1 } as never,
+      entry: { date: "2026-10-02", level: "yellow", m1: true, m2: false, m3: true, m4: true, m5: false, tag: "PB", invalidation_price: 1200000 } });
+    expect(held.snowball).toEqual({ held: true, weight_bucket: "2~5%", heat_score: 72, conviction: 4, thesis_version: 2, invalidation: ["OPM 10% 하회"], open_triggers: 1, last_decision: { action: "hold", date: "2026-09-30" } });
+    expect(JSON.stringify(held)).not.toMatch(/qty|avg_cost|0\.031/);
+    expect(held.entry?.conditions).toEqual({ M1: true, M2: false, M3: true, M4: true, M5: false });
+    expect(held.recommendations).toEqual({ count: 2, first_at: "2026-10-01T07:30:00Z", last_at: "2026-10-05T19:20:00Z" });
+    const none = stockContext({ entity, holding: { weight: null, heat_score: null }, entry: null, picks: [] });
+    expect(none.snowball).toMatchObject({ held: true, conviction: null, thesis_version: null, open_triggers: 0, last_decision: null, invalidation: [] });
+    const notHeld = stockContext({ entity, holding: null, entry: null, picks: [] });
+    expect(notHeld.snowball).toEqual({ held: false });
+    expect(notHeld.entry).toBeNull();
+    expect(notHeld.recommendations).toEqual({ count: 0, first_at: null, last_at: null });
   });
 });

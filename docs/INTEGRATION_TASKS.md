@@ -283,3 +283,19 @@
 2. 실제 흐름: JARVIS 🏢 1회 → Codex 노션 → 30분 안에 JARVIS "✅ (Codex) 완료 · 🧠 진행 중" → Claude 🧠 노션 페이지(Codex 분석과 같은 기업 페이지 아래)·드라이브 `YYMMDD_<기업>_Claude_심층분석.md` → JARVIS "🧠 완료 + 🎤" → 🎤 → PPT·PDF.
 3. 산업 1회: 🧠 결과의 `top_pick` 이 JARVIS 알림의 `🏢 <기업> 기업 분석` 버튼으로 나오는지.
 4. 시험용 노션 페이지를 만들지 않는다 — 2·3 은 실제 요청으로 확인한다.
+
+---
+
+## I. Codex Kairos 자료 범위 추가 — 노션 2_1. 산업 & 종목 · 2. Invest_WiKi (D61, 2026-10-06 사용자 결정)
+
+**대상**: Codex 사용자 스킬 `C:\Users\user\.codex\skills\kairos\` (`SKILL.md` 조사 단계 2, `references/source-policy.md`). Heimdallr 저장소 문서(`telegram_bridge/WORKFLOW.md`, `docs/PRD.md` §8.7)의 자료 목록도 같이 고친다.
+**목적**: Codex(1차 분석)와 Claude(🧠 심층 분석, `~/.claude/skills/kairos-deck` — 이미 반영됨)가 **같은 노션 참고 자료**를 같은 3개월 규칙으로 철저히 읽는다.
+
+1. **참고 루트 추가** (기존 SnowBall Heritage·1. 기업 투자 분석·2. 산업 투자 분석에 더해):
+   - `2_1. 산업 & 종목` https://app.notion.com/p/36a9c770aa61809c95e5c1117f9779b5 — L1 산업별 데이터베이스(1a. AI, 1b. 반도체 …)와 일부 페이지(1l. 자율주행차 등). 대상 산업의 데이터베이스 전체 + 모든 산업 데이터베이스에서 제목에 대상 기업명·티커·핵심 제품이 들어간 글.
+   - `2. Invest_WiKi` 데이터베이스 https://app.notion.com/p/3999c770aa6180ecb514e74eb998e127 (2_4. Compounding_FlyWheel 아래) — `제목`·`관련 산업`·`수혜 기업`·`핵심 내용`·`Insight` 에 대상어가 들어간 글.
+2. **3개월 규칙 — 내용 날짜로 판단**: 날짜 속성(`날짜`) → 제목 속 날짜(YYYY-MM-DD·YYYYMMDD·YYMMDD, 달력 검증) → 생성일 순. **마지막 수정일은 쓰지 않는다**(2026-07-10 일괄 수정으로 2021년 글 `반도체 동향_210322` 이 최근 수정으로 보이는 실측). `[산업] …` 허브 페이지는 본문 중 날짜가 3개월 이내인 항목만 쓴다. 3개월 밖 글은 현재 판단 근거로 쓰지 않는다(변화 비교용 언급만).
+3. **기록**: 사용한 글마다 제목·노션 링크·내용 날짜·판단 기준을 체크포인트 장부에 남긴다(🧠 Claude 단계가 그대로 읽는다). 핵심 수치는 기존처럼 1차 출처로 재검증.
+4. **SnowBall Heritage 노션 페이지 주의**: 투자 논지가 아니라 SnowBall 앱 **개발 요청 메모**이며 평문 토큰이 들어 있다(사용자 조치 필요). 분석 근거로 쓰지 않도록 참고 루트에서 빼거나 "개발 메모 — 분석 근거 아님"으로 표시한다. 투자 논지·훼손조건은 JARVIS 가 SnowBall 원장에서 읽어 `GET /api/public/stock-context?entity=KR:005930`(헤더 `X-Jarvis-Token`)로 제공한다 — Codex 도 필요하면 이 API 를 쓴다(토큰은 Heimdallr `.env.txt` 의 `JARVIS_PUBLIC_TOKEN`, 이미 있으면 그대로).
+5. **텔레그램 리서치 세션**: `python -m src.collectors.telegram_sources status` 가 현재 `not_configured`(2026-10-06 실측) — Codex·Claude 모두 채널을 직접 검색하지 못한다. 사용자가 `TELEGRAM_RESEARCH_API_ID/HASH` 를 `.env.txt` 에 넣고 `auth` 1회를 하면 둘 다 쓴다(값을 채팅에 붙여 넣지 않는다).
+6. 검증: 스킬 문서만 바꾸는 작업이므로 시험 분석·시험 노션 페이지를 만들지 않는다. 다음 실제 요청의 체크포인트에 2_1·Invest_WiKi 사용 기록이 남는지로 확인한다.

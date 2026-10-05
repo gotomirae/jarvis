@@ -221,8 +221,8 @@
 - **기업 폴더**: 국내 `…\2. 기업분석\국내\<정식 기업명>\`, 미국 `…\2. 기업분석\해외\<TICKER>\`(예전 방식 `해외\YYMMDD_<TICKER>.pdf` 파일도 자료로 인정).
   - 폴더가 있고 분석일 기준 3개월 이내 자료가 있으면 → 내려받지 않고 그 최신 자료를 쓴다(기존 ADR 21).
   - 폴더가 없거나 3개월 이내 자료가 없으면 → 폴더를 만들고 아래를 저장: 파일명 `YYMMDD_<기업명>_<보고서명>.<확장자>`(YYMMDD = 공시 접수일), 이미 있으면 건너뜀.
-    - 국내: OpenDART(`DART_API_KEY`) `list.json` 정기공시(`pblntf_ty=A`) **최근 4건(사업·반기·분기보고서)** PDF + "기업설명회(IR)개최" 공시의 **최근 4개 분기 IR 자료** 첨부 PDF. DART 웹 PDF 는 1초 1건 이하로 받는다.
-    - 미국: SEC EDGAR(`SEC_USER_AGENT` 필수) submissions JSON → **최근 4건 10-K·10-Q** 본문 + 최근 4개 분기 8-K(Item 2.02)의 EX-99.1(실적 발표)·EX-99.2 등 IR 프레젠테이션.
+    - 국내: OpenDART(기존 `OPENDART_API_KEY`, 기존 `src/universe/corp_code.py`·`src/collectors/dart_*` 재사용) `list.json` 정기공시(`pblntf_ty=A`) **최근 4건(사업·반기·분기보고서)** PDF + "기업설명회(IR)개최" 공시의 **최근 4개 분기 IR 자료** 첨부 PDF. DART 웹 PDF 는 1초 1건 이하로 받는다.
+    - 미국: SEC EDGAR(새 환경변수 `SEC_USER_AGENT` 필수 — `.env.txt` 에 `Heimdallr/1.0 (본인 이메일)` 형식, `.env.example` 에 이름만 추가) submissions JSON → **최근 4건 10-K·10-Q** 본문 + 최근 4개 분기 8-K(Item 2.02)의 EX-99.1(실적 발표)·EX-99.2 등 IR 프레젠테이션.
     - IR 자료를 공시에 올리지 않는 회사는 "IR 자료 없음"으로 기록하고 계속한다. 다운로드 실패는 분석을 막지 않는다.
 - **산업 폴더**: G-4 로 못 찾으면 새 폴더 + 날짜 하위 폴더(`YYMMDD`)를 만든다. 산업 공통 자료는 자동으로 받지 않는다(표준 소스 없음) — Kairos 가 실제로 읽은 산업 원문 PDF 가 있으면 그 하위 폴더에 저장한다.
 - 드라이브는 이 PC 의 Google Drive for Desktop(`G:\`)에 파일로 쓴다(동기화는 앱이 한다). 실행 결과(만든 폴더·받은 파일·실패)를 체크포인트 장부에 남긴다.

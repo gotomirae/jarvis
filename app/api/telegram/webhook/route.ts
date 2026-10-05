@@ -11,6 +11,7 @@ import { kstString } from "@/lib/time";
 import { collectStatus } from "@/lib/status";
 import { handleCommand } from "@/lib/telegram/commands";
 import { safeEqual } from "@/lib/telegram/format";
+import { pinLinks } from "@/lib/telegram/pin";
 import { sendMessage } from "@/lib/telegram/send";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,7 @@ export async function POST(req: NextRequest) {
 
   const reply = await handleCommand(text, {
     dashboards: linksConfig().dashboards, jarvisUrl: e.JARVIS_URL, status: collectStatus,
+    pin: async () => { const r = await pinLinks(chatId); return r.ok ? null : r.reason; },
     setAlertPause: async (paused) => { await dbInsert("bot_state", [{ key: "holding_alert_pause", value: { paused, at: new Date().toISOString(), by: "telegram" }, updated_at: new Date().toISOString() }], { upsertOn: "key" }); },
     weekly: async () => {
       const r = await dbSelect<{ week: string; grounding_ok: boolean | null; created_at: string; notion_url: string | null }>("weekly_memos", "select=week,grounding_ok,created_at,notion_url&order=week.desc&limit=1");

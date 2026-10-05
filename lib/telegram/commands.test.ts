@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { handleCommand, parseCommand, renderStatus, type StatusCtx } from "./commands";
+import { handleCommand, parseCommand, renderPinnedLinks, renderStatus, type StatusCtx } from "./commands";
 
 const dashboards = {
   jarvis: { label: "📊 JARVIS", url: "${JARVIS_URL}/" },
@@ -50,6 +50,19 @@ describe("telegram commands", () => {
     expect(r2?.buttons?.[0][0]).toEqual({ text: "📊 JARVIS", url: "https://j.app/" });
     expect(r2?.buttons?.[1]).toHaveLength(1);
     expect(r2?.text).not.toContain("JARVIS_URL");
+  });
+
+  it("/pin: 6개 바로가기 고정 메시지·성공/실패 응답, ctx 없으면 알 수 없는 명령", async () => {
+    const six = { ...dashboards, hermescall: { label: "⚡ HermesCall", url: "https://h/" }, snowball: { label: "❄️ SnowBall", url: "https://s/" } };
+    const m = renderPinnedLinks({ dashboards: six, jarvisUrl: "https://j.app" });
+    expect(m.buttons?.map((r) => r.length)).toEqual([3, 3]);
+    expect(m.buttons?.flat().map((b) => b.text)).toEqual(["📊 JARVIS", "🛡️ Heimdallr", "🧙 Sage", "🔄 FlyWheel", "⚡ HermesCall", "❄️ SnowBall"]);
+    expect(m.text).toContain("📌 <b>프로젝트 바로가기</b>");
+    expect(m.text).not.toContain("JARVIS_URL");
+    expect(renderPinnedLinks({ dashboards: six, jarvisUrl: undefined }).text).toContain("JARVIS_URL");
+    expect((await handleCommand("/pin", { ...ctx, pin: async () => null }))?.text).toContain("맨 위에 고정했습니다");
+    expect((await handleCommand("/pin", { ...ctx, pin: async () => "pinChatMessage: 400 <x>" }))?.text).toBe("📌 고정 실패: pinChatMessage: 400 &lt;x&gt;");
+    expect((await handleCommand("/pin", ctx))?.text).toContain("알 수 없는 명령");
   });
 
   it("/alerts on|off 와 /status 표시", async () => {

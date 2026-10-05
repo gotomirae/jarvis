@@ -1,6 +1,6 @@
 /**
  * 텔레그램 명령 라우팅 (PRD §9.3) — 순수 함수. 데이터는 ctx 로 주입한다(테스트 가능).
- * P0: /status · /links. 나머지 명령은 해당 Phase 에서 구현한다.
+ * P0: /status · /links. /pin: 6개 프로젝트 바로가기 고정(D58). 나머지 명령은 해당 Phase 에서 구현한다.
  */
 import { dashboardButtons, rows, type Button, type DashboardsConfig } from "@/lib/links";
 import { esc, NOT_A_BUY_SIGNAL } from "./format";
@@ -23,6 +23,7 @@ export type CommandCtx = {
   setAlertPause?: (paused: boolean) => Promise<void>;     // /alerts on|off — 보유 경고 텔레그램 일시 정지
   weekly?: () => Promise<WeekCtx | null>;                 // /week — 최신 주간 투자위원회
   entry?: () => Promise<EntryCtx>;                        // /entry — 🟢·🟡·🔵 현황
+  pin?: () => Promise<string | null>;                     // /pin — 6개 프로젝트 바로가기 고정. 실패 사유 또는 null(성공)
 };
 
 export type WeekCtx = { week: string; grounded: boolean; publishedKst: string; notionUrl: string | null };
@@ -42,6 +43,14 @@ export function renderLinks(ctx: Pick<CommandCtx, "dashboards" | "jarvisUrl">): 
   const buttons = dashboardButtons(ctx.dashboards, ctx.jarvisUrl);
   const note = ctx.jarvisUrl ? "" : "\n<i>JARVIS 대시보드는 배포 후(JARVIS_URL 설정) 버튼이 생깁니다.</i>";
   return { text: `🔗 <b>대시보드</b>${note}`, buttons: rows(buttons, 3) };
+}
+
+/** 📌 대화 맨 위 고정 메시지 — 6개 프로젝트 바로가기(links.yaml dashboards). /pin·pin_links 잡이 보내고 고정한다(D58) */
+export function renderPinnedLinks(ctx: Pick<CommandCtx, "dashboards" | "jarvisUrl">): Reply {
+  const buttons = dashboardButtons(ctx.dashboards, ctx.jarvisUrl);
+  const lines = ["📌 <b>프로젝트 바로가기</b>", "버튼을 누르면 각 프로젝트 대시보드가 열립니다."];
+  if (!ctx.jarvisUrl) lines.push("<i>JARVIS 버튼은 JARVIS_URL 설정 후 /pin 을 다시 보내면 생깁니다.</i>");
+  return { text: lines.join("\n"), buttons: rows(buttons, 3) };
 }
 
 export function renderStatus(s: StatusCtx): string {
@@ -70,6 +79,10 @@ export async function handleCommand(text: string, ctx: CommandCtx): Promise<Repl
   if (!p) return null;
   if (p.cmd === "/status") return { text: renderStatus(await ctx.status()) };
   if (p.cmd === "/links") return renderLinks(ctx);
+  if (p.cmd === "/pin" && ctx.pin) {
+    const err = await ctx.pin();
+    return { text: err ? `📌 고정 실패: ${esc(err)}` : "📌 프로젝트 바로가기를 대화 맨 위에 고정했습니다. 링크가 바뀌면 /pin 을 다시 보내세요." };
+  }
   if (p.cmd === "/alerts") {
     const arg = p.arg.toLowerCase();
     if (!ctx.setAlertPause || !["on", "off"].includes(arg)) return { text: "사용법: /alerts off (보유 경고 알림 일시 정지) · /alerts on (다시 켜기)" };
@@ -79,7 +92,7 @@ export async function handleCommand(text: string, ctx: CommandCtx): Promise<Repl
   if (p.cmd === "/week" && ctx.weekly) return renderWeek(await ctx.weekly(), ctx.jarvisUrl);
   if (p.cmd === "/entry" && ctx.entry) return renderEntry(await ctx.entry(), ctx.jarvisUrl);
   if (p.cmd === "/start" || p.cmd === "/help") {
-    return { text: ["🤖 <b>JARVIS</b> — 사용 가능: /status · /links · /alerts on|off · /entry · /week", `준비 중: ${Object.keys(PLANNED).join(" ")}`].join("\n") };
+    return { text: ["🤖 <b>JARVIS</b> — 사용 가능: /status · /links · /pin · /alerts on|off · /entry · /week", `준비 중: ${Object.keys(PLANNED).join(" ")}`].join("\n") };
   }
   const phase = PLANNED[p.cmd];
   return { text: phase ? `${esc(p.cmd)} 는 ${phase}에서 제공됩니다. 지금은 /status · /links 를 쓸 수 있습니다.` : `알 수 없는 명령: ${esc(p.cmd)} — /help` };

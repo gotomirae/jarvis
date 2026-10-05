@@ -4,6 +4,7 @@
  *   source_smoke       5개 소스 anon SELECT·SnowBall RPC 실측 → smoke-out/source_smoke.json + 표 출력(값 비노출)
  *   outlook_smoke      M3 ② 무료 소스 4종 스모크 (Actions 에서 실행, LLM·유료 API 없음)
  *   telegram_webhook   webhook 등록/조회 (--action set|info|delete)
+ *   pin_links          6개 프로젝트 바로가기를 대화 맨 위에 고정 (D58, 텔레그램 /pin 과 동일)
  * P1 잡 (공통 옵션 --slot <이름>: 같은 슬롯이 이미 성공했으면 건너뜀, 없으면 수동 실행):
  *   holdings_sync      SnowBall 보유 → holdings_cache (07:10·16:10)
  *   entities_sync      종목 마스터 (일 03:00)
@@ -24,6 +25,8 @@ import { linkSmokeJob } from "./link_smoke";
 import { authSetupJob } from "./auth_setup";
 import { setPasswordJob } from "./set_password";
 import { P2_JOBS } from "./p2";
+import { need } from "@/lib/env";
+import { pinLinks } from "@/lib/telegram/pin";
 
 export function parseArgs(argv: string[]): { job: string; args: Record<string, string> } {
   const [job, ...rest] = argv;
@@ -48,6 +51,11 @@ const JOBS: Record<string, (args: Record<string, string>) => Promise<void>> = {
   link_smoke: linkSmokeJob,
   auth_setup: () => authSetupJob(),
   set_password: () => setPasswordJob(),
+  pin_links: async () => {
+    const r = await pinLinks(need("TELEGRAM_CHAT_ID"));
+    if (!r.ok) throw new Error(`pin_links 실패: ${r.reason}`);
+    console.log(r.data.created ? `📌 새 바로가기 메시지 고정 (id ${r.data.messageId})` : `📌 기존 바로가기 메시지 갱신·고정 (id ${r.data.messageId})`);
+  },
   ...P2_JOBS,
 };
 

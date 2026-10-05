@@ -5,7 +5,7 @@
 import { unstable_cache } from "next/cache";
 import { loadYaml, taxonomyConfig } from "@/lib/config/load";
 import { cycleOf, type Cycle, type CycleRules } from "@/lib/engine/cycle";
-import { attachQuarterly, indicatorSeries, monthsAgo, periodReturn, quartersAgoStart, rebaseMerge, weekWindow, type Bar, type IndicatorPoint, type Point } from "@/lib/engine/series";
+import { addColumns, attachQuarterly, indicatorSeries, monthReturn, monthsAgo, periodReturn, quartersAgoStart, rebaseMerge, weekWindow, type Bar, type IndicatorPoint, type Point } from "@/lib/engine/series";
 import { fearGreed, type FgPoint } from "@/lib/ingest/feargreed";
 import { read as heimdallr } from "@/lib/ingest/heimdallr";
 import { read as hermes } from "@/lib/ingest/hermescall";
@@ -36,7 +36,8 @@ const bars = (sym: string, source: Src, days: number) => unstable_cache(rawBars,
 
 export type MarketCharts = {
   from: string;
-  indices: Point[]; lines: { key: string; label: string; color: string; ret: number | null }[];
+  indices: Point[];   // 지수(첫날 = 100) + fg(공포·탐욕) + vix(변동성지수) — 날짜 합집합 하나로, 세 그래프가 같은 x축을 쓴다
+  lines: { key: string; label: string; color: string; ret: number | null; mtd: number | null; last: number | null; last_date: string | null }[];
   vix: { date: string; value: number }[]; fg: FgPoint[];
 };
 
@@ -46,12 +47,16 @@ export async function marketCharts(): Promise<MarketCharts> {
   const series = await Promise.all(C.indices.map((i) => bars(i.sym, i.source, 300)));
   const [vix, fg] = await Promise.all([bars(C.vix.sym, "yahoo", 300), unstable_cache(async (d: string) => { const r = await fearGreed(d); return r.ok ? r.data : []; }, ["jarvis-fg-v1"], { revalidate: TTL() })(from)]);
   const keyed = Object.fromEntries(C.indices.map((i, k) => [`s${k}`, series[k]]));
+  const vx = vix.filter((b) => b.date >= from).map((b) => ({ date: b.date, value: Math.round(b.close * 100) / 100 }));
+  const fgs = fg.filter((x) => x.date >= from);
   return {
     from,
-    indices: rebaseMerge(keyed, from),
-    lines: C.indices.map((i, k) => ({ key: `s${k}`, label: i.label, color: i.color, ret: periodReturn(series[k], from) })),
-    vix: vix.filter((b) => b.date >= from).map((b) => ({ date: b.date, value: Math.round(b.close * 100) / 100 })),
-    fg: fg.filter((x) => x.date >= from),
+    indices: addColumns(rebaseMerge(keyed, from), { fg: fgs, vix: vx }, from),
+    lines: C.indices.map((i, k) => {
+      const last = series[k][series[k].length - 1];
+      return { key: `s${k}`, label: i.label, color: i.color, ret: periodReturn(series[k], from), mtd: monthReturn(series[k]), last: last?.close ?? null, last_date: last?.date ?? null };
+    }),
+    vix: vx, fg: fgs,
   };
 }
 

@@ -1,4 +1,4 @@
-import { FearGreedChart, IndexChart, VixChart } from "@/app/_components/charts";
+import { MarketPanel } from "@/app/_components/charts";
 import { Bad, Card, Empty, Footer, Good, Guide, Hi, LinkRow, MarkLine, Nav, Page, Pct, Section, Stat } from "@/app/_components/ui";
 import { dashboardConfig, marketCharts } from "@/lib/dashboard/data";
 import { linksConfig, taxonomyConfig } from "@/lib/config/load";
@@ -108,22 +108,26 @@ export default async function Today() {
       </div>
 
       <Section title={`📊 주요 지표 (최근 ${DC.lookback_months}개월)`}>
-        <div className="glass rounded-xl p-4 space-y-2">
-          <p className="font-bold whitespace-nowrap">🌏 지수 흐름 <span className="text-sm font-normal text-sub">기간 첫날 = 100</span></p>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">{mc.lines.map((l) => <span key={l.key} className="whitespace-nowrap"><span style={{ color: l.color }}>●</span> {l.label} <Pct v={l.ret} /></span>)}</div>
-          {mc.indices.length ? <IndexChart data={mc.indices} lines={mc.lines} /> : <Empty text="시세 자료를 불러오지 못했습니다." />}
+        <div className="table-wrap">
+          <table className="text-sm">
+            <thead><tr><th>지수</th><th>현재</th><th>이번 달</th><th>최근 {DC.lookback_months}개월</th></tr></thead>
+            <tbody>{mc.lines.map((l) => (
+              <tr key={l.key} className="border-t border-line/50">
+                <td className="font-semibold whitespace-nowrap"><span style={{ color: l.color }}>●</span> {l.label}</td>
+                <td className="tabular-nums whitespace-nowrap">{l.last === null ? "-" : l.last.toLocaleString("en-US", { maximumFractionDigits: 2 })} <span className="text-xs text-sub">{l.last_date ? `${l.last_date.slice(5).replace("-", "/")} 종가` : ""}</span></td>
+                <td className="whitespace-nowrap"><Pct v={l.mtd} /></td>
+                <td className="whitespace-nowrap"><Pct v={l.ret} /></td>
+              </tr>
+            ))}</tbody>
+          </table>
         </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="glass rounded-xl p-4 space-y-1">
-            <p className="font-bold whitespace-nowrap">😱 공포·탐욕 지수 {fgNow && <span className="ml-1 text-gold">{fgNow.value} · {fgNow.rating}</span>}</p>
-            <p className="text-xs text-sub whitespace-nowrap">0 극단적 공포 · 50 중립 · 100 극단적 탐욕 (CNN)</p>
-            {mc.fg.length ? <FearGreedChart data={mc.fg} bands={DC.fear_greed.bands} /> : <Empty text="공포·탐욕 지수를 불러오지 못했습니다." />}
+        <div className="glass rounded-xl p-4">
+          <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
+            {fgNow && <span className="whitespace-nowrap">😱 공포·탐욕 <b className="text-gold">{fgNow.value} · {fgNow.rating}</b></span>}
+            {vixNow && <span className="whitespace-nowrap">🌪️ 변동성지수 <b className={vixNow.value >= DC.vix.fear_above ? "text-hot" : vixNow.value < DC.vix.calm_below ? "text-good" : "text-gold"}>{vixNow.value.toFixed(1)}</b></span>}
+            <span className="whitespace-nowrap text-sub">↕️ 세 그래프는 같은 날짜가 같은 세로선 · 마우스를 올리면 함께 표시</span>
           </div>
-          <div className="glass rounded-xl p-4 space-y-1">
-            <p className="font-bold whitespace-nowrap">🌪️ {DC.vix.label} {vixNow && <span className={`ml-1 ${vixNow.value >= DC.vix.fear_above ? "text-hot" : vixNow.value < DC.vix.calm_below ? "text-good" : "text-gold"}`}>{vixNow.value.toFixed(1)}</span>}</p>
-            <p className="text-xs text-sub whitespace-nowrap">{DC.vix.calm_below} 아래 안정 · {DC.vix.fear_above} 위 공포</p>
-            {mc.vix.length ? <VixChart data={mc.vix} calm={DC.vix.calm_below} fear={DC.vix.fear_above} /> : <Empty text="변동성지수를 불러오지 못했습니다." />}
-          </div>
+          {mc.indices.length ? <MarketPanel data={mc.indices} lines={mc.lines} bands={DC.fear_greed.bands} calm={DC.vix.calm_below} fear={DC.vix.fear_above} /> : <Empty text="시세 자료를 불러오지 못했습니다." />}
         </div>
       </Section>
 

@@ -94,3 +94,28 @@ export function attachQuarterly(points: IndicatorPoint[], quarters: { fy: number
   }
   return out;
 }
+
+/** 이번 달 수익률(%) — 마지막 봉이 속한 달의 직전 달 마지막 종가 대비. 직전 달 자료가 없으면 null */
+export function monthReturn(bars: Bar[]): number | null {
+  if (!bars.length) return null;
+  const end = bars[bars.length - 1];
+  const prev = [...bars].reverse().find((b) => b.date < `${end.date.slice(0, 7)}-01`);
+  return prev ? (end.close / prev.close - 1) * 100 : null;
+}
+
+/** 합친 시계열에 다른 값(공포·탐욕·변동성 등)을 날짜로 붙인다 — 날짜 합집합, 없는 값은 null. 세로 비교용 공통 x축 */
+export function addColumns(points: Point[], cols: Record<string, { date: string; value: number; [k: string]: unknown }[]>, from: string): Point[] {
+  const byDate = new Map(points.map((p) => [p.date, { ...p }]));
+  const keys = Object.keys(points[0] ?? {}).filter((k) => k !== "date");
+  for (const [k, xs] of Object.entries(cols)) {
+    for (const x of xs) {
+      if (x.date < from) continue;
+      const p = byDate.get(x.date) ?? byDate.set(x.date, { date: x.date, ...Object.fromEntries(keys.map((kk) => [kk, null])) } as Point).get(x.date)!;
+      p[k] = x.value;
+      if (typeof x.rating === "string") p[`${k}_rating`] = x.rating;
+    }
+  }
+  const all = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  const colKeys = Object.keys(cols);
+  return all.map((p) => ({ ...Object.fromEntries(colKeys.map((k) => [k, null])), ...p }) as Point);
+}

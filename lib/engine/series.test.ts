@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cycleOf, phaseOf } from "./cycle";
-import { attachQuarterly, indicatorSeries, monthsAgo, periodReturn, quarterEnd, quartersAgoStart, rebaseMerge, weekStart, weekWindow } from "./series";
+import { addColumns, attachQuarterly, indicatorSeries, monthReturn, monthsAgo, periodReturn, quarterEnd, quartersAgoStart, rebaseMerge, weekStart, weekWindow } from "./series";
 
 const bar = (date: string, close: number) => ({ date, close });
 
@@ -31,6 +31,21 @@ describe("대시보드 시계열 (D56)", () => {
     expect(weekWindow(xs)).toEqual({ start: "2026-10-05", end: "2026-10-06", change_pct: expect.closeTo(-10, 5) });
     expect(weekWindow([bar("2026-10-05", 1)])).toEqual({ start: "2026-10-05", end: "2026-10-05", change_pct: null });
     expect(weekWindow([])).toBeNull();
+  });
+  it("monthReturn: 직전 달 마지막 종가 대비", () => {
+    expect(monthReturn([bar("2026-08-31", 90), bar("2026-09-30", 100), bar("2026-10-01", 105), bar("2026-10-02", 110)])).toBeCloseTo(10);
+    expect(monthReturn([bar("2026-10-01", 105), bar("2026-10-02", 110)])).toBeNull();
+    expect(monthReturn([])).toBeNull();
+  });
+  it("addColumns: 공포·탐욕·변동성을 같은 날짜 축에 (날짜 합집합, 없는 값 null, 등급 함께)", () => {
+    const base = rebaseMerge({ a: [bar("2026-01-02", 10), bar("2026-01-05", 11)] }, "2026-01-01");
+    const m = addColumns(base, { fg: [{ date: "2025-12-31", value: 1 }, { date: "2026-01-02", value: 40, rating: "공포" }, { date: "2026-01-03", value: 42, rating: "공포" }], vix: [{ date: "2026-01-05", value: 18 }] }, "2026-01-01");
+    expect(m).toEqual([
+      { date: "2026-01-02", a: 100, fg: 40, fg_rating: "공포", vix: null },
+      { date: "2026-01-03", a: null, fg: 42, fg_rating: "공포", vix: null },
+      { date: "2026-01-05", a: 110, fg: null, vix: 18 },
+    ]);
+    expect(addColumns([], { v: [{ date: "2026-01-02", value: 1 }] }, "2026-01-01")).toEqual([{ date: "2026-01-02", v: 1 }]);
   });
   it("indicatorSeries: 예열 구간 제외·RSI 결측 앞부분 null · 분기 증가율 붙이기", () => {
     const bars = Array.from({ length: 60 }, (_, i) => bar(`2026-0${i < 30 ? 7 : 8}-${String((i % 30) + 1).padStart(2, "0")}`, 100 + Math.sin(i / 3) * 5 + i * 0.2));

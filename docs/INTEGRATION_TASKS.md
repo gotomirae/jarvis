@@ -328,3 +328,11 @@
 ### J-4. 지금 걸린 요청 처리와 검증
 - 설정 직후 **요청 -1(유니트론텍, JARVIS)** 이 사람 개입 없이 다음 heartbeat 에서 `claim` 되는지 확인 → 노션 작성 → `sent` → (H 트리거) 🧠 Claude 작업 생성 → JARVIS 알림까지 이어지는지 확인한다. 사용자가 대화를 열지 않은 상태로 검증한다.
 - `telegram_bridge/WORKFLOW.md`·`JARVIS.md`·AGENTS 에 "트리거 대화를 열어 둘 필요 없음, heartbeat 가 접수" 로 갱신하고 세션 기록·ADR 을 남긴 뒤 커밋·push.
+
+### J-5. (10/7 23:35 추가) 🧠 Claude 로그인 끊김 대비 + J 커밋
+- **실측**: 유니트론텍(-1) Codex 분석은 heartbeat 로 자동 완료(23:29 `sent`, 노션 3f29c770…). 이어서 생긴 🧠 작업 **A1 이 `CLAUDE_EXIT` 로 즉시 실패**, 이후 실행기 점검은 `CLAUDE_SUBSCRIPTION_REQUIRED` — `claude auth status` 가 `loggedIn: false`, `~/.claude/.credentials.json` 이 23:30 에 바뀜(로그인 갱신 실패로 로그아웃된 것으로 추정).
+- `deck_runner.py`: Claude 출력에 인증 오류(`/login`·`not logged in`·`Invalid API key`·`401`·`authentication`)가 있거나, `CLAUDE_EXIT` 직후 `claude auth status` 가 `loggedIn:false` 이면 **`failed` 가 아니라 `pending` + `retry_after` 30분**(USAGE 와 같은 재시도 경로, attempts 상한 유지). 로그인이 돌아오면 자동 재개된다. JARVIS 는 실패 알림 뒤 재시도도 다시 따라간다(acb7bbb).
+- 로그인 없음(`unavailable`)이 30분 넘게 계속되면 사용자에게 **하루 1회** 알림: "Claude 로그인 필요 — PowerShell `claude auth login`". 알림 경로는 Heimdallr 봇(사용자 개인 채팅) 또는 JARVIS 가 읽을 수 있는 상태 필드 중 기존 규약에 맞는 쪽.
+- (선택·권장) 무인 운영용 장기 토큰: 사용자가 `claude setup-token`(구독 기반 장기 토큰)을 만들어 `.env.txt` 의 `CLAUDE_CODE_OAUTH_TOKEN` 에 두면 `subscription_cli_env()` 가 **그 변수만 통과**(API 키·Bedrock 등 과금 경로는 계속 차단)하고 로그인 검사도 그 경우를 허용한다. 값은 출력·커밋하지 않는다.
+- 이번 **A1(유니트론텍 🧠)** 은 로그인 회복 뒤 `pending` 으로 되돌려 재실행한다.
+- J 변경분(현재 미커밋: AGENTS·PRD·traps·JARVIS.md·WORKFLOW.md·bridge.py·테스트 + ADR 033·세션 기록 2개)과 J-5 를 테스트 후 커밋·push.

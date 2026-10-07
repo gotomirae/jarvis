@@ -299,3 +299,32 @@
 4. ✅ **(2026-10-06 완료 — 하지 않는다)** SnowBall Heritage 노션 페이지(앱 개발 요청 메모)는 Codex 스킬 3개 파일·WORKFLOW.md·PRD.md 의 참고 루트에서 빼고 "분석 근거로 조회하지 않는다" 규칙을 넣었다(Heimdallr c87178c). 페이지의 평문 토큰도 지웠다. 투자 논지·훼손조건은 JARVIS `GET /api/public/stock-context?entity=KR:005930`(헤더 `X-Jarvis-Token`).
 5. **텔레그램 리서치 세션**: `python -m src.collectors.telegram_sources status` 가 현재 `not_configured`(2026-10-06 실측) — Codex·Claude 모두 채널을 직접 검색하지 못한다. 사용자가 `TELEGRAM_RESEARCH_API_ID/HASH` 를 `.env.txt` 에 넣고 `auth` 1회를 하면 둘 다 쓴다(값을 채팅에 붙여 넣지 않는다).
 6. 검증: 스킬 문서만 바꾸는 작업이므로 시험 분석·시험 노션 페이지를 만들지 않는다. 다음 실제 요청의 체크포인트에 2_1·Invest_WiKi 사용 기록이 남는지로 확인한다.
+
+---
+
+## J. Heimdallr Kairos 무인 자동 처리 — Codex 대화를 열지 않아도 분석이 시작되게 (D62, 2026-10-07)
+
+**문제(10/7 실측)**: JARVIS 🏢 유니트론텍 요청(-1)이 21:26 접수 → 수집기가 `codex queue --thread 01a0d886…`로 21:27·21:33·21:39 깨움(오류 없음) → **Codex 가 시작하지 않음**. `~/.codex/queue_1.sqlite` 에 그 대화 앞으로 메시지 3개가 쌓여 있고, 9/26 요청(893060870) 메시지도 다른 대화(`01a0b3d1…`)에 그대로 남아 있다. 큐 메시지는 **그 대화가 앱에서 열려 있을 때만** 전달된다. 또 트리거 대화 "텔레그램 기업·산업 분석 자동화"는 기록이 **135MB** 로 비대하다.
+**확인한 제약**: 화면 없는 `codex exec` 는 `$kairos` 스킬은 보이지만 **Notion·Google Drive 커넥터가 없다**(10/7 진단) → Kairos 의 노션 양식 작성·검증을 할 수 없으므로 exec 전환은 쓰지 않는다. 커넥터가 있는 **Codex 앱의 heartbeat 자동화**로 해결한다.
+
+### J-1. 전용 경량 대화
+- 프로젝트 `C:\Codex\Heimdallr_Call_Codex` 에 새 대화 **"Kairos 자동 분석 전용"** 을 만든다(기존 135MB 대화는 보관만, 더는 트리거로 쓰지 않음).
+- `python -m telegram_bridge.bridge configure-trigger --thread <새 대화 ID>` — 대기 중 요청의 깨우기 기록이 초기화되어 새 대화로 다시 보내진다. `poll` 의 `trigger_thread` 로 확인.
+
+### J-2. 접수 heartbeat 자동화 (상시 ACTIVE)
+- 새 heartbeat `kairos-intake`, 대상 = J-1 대화, **15분 간격, 07:00~24:00 KST**(브리핑 07:30·19:20 뒤 사용 구간). 기존 `kairos`(사용량 회복 재개)의 역할도 흡수해 하나로 운영하고, 기존 `kairos` 는 PAUSED 유지 또는 정리.
+- 프롬프트 요지(그대로 구현):
+  1. `.\.venv\Scripts\python.exe -X utf8 -m telegram_bridge.bridge poll` **한 번만** 실행.
+  2. `pending`·`working` 이 모두 없으면 **다른 도구를 쓰지 말고 조용히 종료**(알림 없음).
+  3. `working` 이 있으면 기존 재개 규칙(사용량 10% 이상일 때 같은 장부로 이어서 완료)을 따른다.
+  4. `working` 이 없고 `pending` 이 있으면 가장 오래된 **1건만** `claim` → `$kairos` 를 WORKFLOW.md 그대로 끝까지(노션 작성·재조회 검증·`deliver` / `fail`). 한 번에 1건, 나머지는 다음 실행.
+  5. 사용량이 부족하면 `pending` 그대로 두고 종료(다음 실행에서 재확인).
+  6. 텔레그램 리서치는 쓰지 않는다(사용자 결정 10/7). JARVIS 요청(`source='jarvis'`)은 Heimdallr 봇 메시지를 보내지 않는 기존 규칙 유지.
+- **유휴 비용 측정**: 빈 실행 1회의 토큰을 기록한다. 2만 토큰을 넘으면 간격을 30분으로 늘린다.
+
+### J-3. (선택·조사) 유휴 비용 0 으로
+- 수집기(`bridge ingest`)가 `pending` 이 생길 때 `~/.codex/automations/kairos-intake/automation.toml` 의 `status` 를 `ACTIVE`, 큐가 비면 `PAUSED` 로 바꾸는 방식이 **앱에 실제로 반영되는지** 1회 실측한다(앱이 파일 변경을 읽는지). 반영되면 적용하고, 아니면 J-2 상시 ACTIVE 유지. 앱 내부 sqlite(`queue_1.sqlite` 등)는 직접 수정하지 않는다.
+
+### J-4. 지금 걸린 요청 처리와 검증
+- 설정 직후 **요청 -1(유니트론텍, JARVIS)** 이 사람 개입 없이 다음 heartbeat 에서 `claim` 되는지 확인 → 노션 작성 → `sent` → (H 트리거) 🧠 Claude 작업 생성 → JARVIS 알림까지 이어지는지 확인한다. 사용자가 대화를 열지 않은 상태로 검증한다.
+- `telegram_bridge/WORKFLOW.md`·`JARVIS.md`·AGENTS 에 "트리거 대화를 열어 둘 필요 없음, heartbeat 가 접수" 로 갱신하고 세션 기록·ADR 을 남긴 뒤 커밋·push.

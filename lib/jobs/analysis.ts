@@ -95,7 +95,8 @@ async function handleDeck(chatId: number, id: number): Promise<string> {
 /** poll(30분): 열린 요청의 Heimdallr 상태 → 완료·실패 알림. 이미 알린 건 다시 보내지 않는다(notified_at) */
 export async function pollAnalysis(chatId: string | undefined): Promise<Record<string, unknown>> {
   const since = new Date(Date.now() - 3 * 86_400_000).toISOString();    // 🧠 대기는 3일까지만 본다(그 뒤엔 🎤 단계가 분석부터)
-  const open = await dbSelect<Row>("analysis_requests", `select=*&or=(and(status.in.(queued,working),notified_at.is.null),and(status.in.(sent,reused),claude_notified_at.is.null,created_at.gte.${since}),deck_status.in.(queued,working))&heimdallr_id=not.is.null&limit=50`);
+  // 🧠 실패는 3일 동안 계속 본다 — Heimdallr 가 재시도(pending·working)하면 다시 열고, 성공하면 완료 알림을 보낸다
+  const open = await dbSelect<Row>("analysis_requests", `select=*&or=(and(status.in.(queued,working),notified_at.is.null),and(status.in.(sent,reused),claude_notified_at.is.null,created_at.gte.${since}),and(claude_status.eq.failed,created_at.gte.${since}),deck_status.in.(queued,working))&heimdallr_id=not.is.null&limit=50`);
   if (!open.ok) return { open: open.reason };
   if (!open.data.length) {
     // 열린 요청이 없어도 연동 상태는 남긴다(빈 목록 조회 = 읽기 전용) → 토큰 어긋남을 버튼 누르기 전에 안다
@@ -127,7 +128,11 @@ export async function pollAnalysis(chatId: string | undefined): Promise<Record<s
         await dbUpdate("analysis_requests", `id=eq.${row.id}`, { status: "working", updated_at: now });
       }
     }
-    // ② 🧠 Claude 심층 분석 (Codex 완료 뒤, Heimdallr 가 자동 실행)
+    // ② 🧠 Claude 심층 분석 (Codex 완료 뒤, Heimdallr 가 자동 실행). 실패를 알린 뒤 Heimdallr 가 재시도하면 다시 연다
+    if (row.claude_status === "failed" && claudeNotified && s.claude && s.claude.status !== "failed") {
+      await dbUpdate("analysis_requests", `id=eq.${row.id}`, { claude_status: claudeState(s.claude).claude_status, claude_error: null, claude_notified_at: null, updated_at: now });
+      claudeNotified = null;
+    }
     if (["sent", "reused"].includes(codexStatus) && !claudeNotified && s.claude) {
       const cs = claudeState(s.claude);
       if (cs.done) {

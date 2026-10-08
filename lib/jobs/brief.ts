@@ -8,7 +8,7 @@ import { getState } from "./poll";
 import type { AxesEvidence } from "@/lib/engine/explain";
 import { perfLine, type PerfStat } from "@/lib/engine/feedback";
 import { buyReasons, consensusOf, EMPTY_IDEA, ideaCard, rankBuy } from "@/lib/engine/idea";
-import { assess, type Policy } from "@/lib/engine/pick-policy";
+import { assess, candidatePool, type Policy } from "@/lib/engine/pick-policy";
 import { issues } from "@/lib/engine/timing";
 import { yahooCandidates } from "@/lib/outcomes/ledger";
 import { recHistory, recLine, type BriefNote } from "@/lib/outcomes/rec-history";
@@ -52,7 +52,8 @@ export async function buildBrief(kind: "morning" | "evening", now = new Date()):
   const l1Name = new Map(taxonomyConfig().l1.map((r) => [r.code, r.name]));
   const all = qItems.ok ? qItems.data : [];
   const mine = all.filter((x) => ents.byId.get(x.entity_id)?.market === focus);
-  const buys = all.filter((x) => x.queue === "buy" && ents.byId.has(x.entity_id));
+  // 🎯 후보 = 매수 검토 큐 + ⏳ 눌림 대기(상승 초기 조건 만족 시 승격, D66) — 평가하려면 둘 다 근거가 필요
+  const buys = all.filter((x) => (x.queue === "buy" || R.pick_policy.promote_from.includes(x.queue)) && ents.byId.has(x.entity_id));
   const ax = buys.length ? await dbSelectAll<{ entity_id: string; evidence: AxesEvidence }>("axes_daily", `select=entity_id,evidence&date=eq.${date}&entity_id=in.(${buys.map((i) => `"${i.entity_id}"`).join(",")})`) : { ok: true as const, data: [] };
   const evBy = new Map((ax.ok ? ax.data : []).map((a) => [a.entity_id, a.evidence]));
 
@@ -61,13 +62,14 @@ export async function buildBrief(kind: "morning" | "evening", now = new Date()):
   //    추천 시장(아침 미국 · 저녁 국내)을 먼저 채우고, 모자라면 다른 시장으로 채운다 (아침 07:30 은 국내 장 시작 전이라 국내 추천도 유효)
   const [stats, policy, notes] = await Promise.all([latestPerfStats(), currentPolicy(), briefNotes()]);
   const today = kstDate(now);
-  const scored = buys.map((b) => {
+  const scored = candidatePool(buys.map((b) => {
     const ev = evBy.get(b.entity_id) ?? {};
     const e = ents.byId.get(b.entity_id)!;
     const p = (b.reason as { p?: number | null }).p ?? null;
     const a = assess({ ev, p, market: e.market, l1: e.primary_l1, riskOff: reg.risk_off, today }, R, policy, stats);
     return { ...b, e, ev, a, families: ev.families?.length ?? 0, p, industryGrowth: ev.idea?.industry?.realized_median ?? null, nextEvent: ev.next_event ?? null, perf: a.prior.score, timing: a.timing.score };
-  });
+  }), R.pick_policy.promote_from);
+  const promoted = new Set(scored.filter((b) => b.promoted).map((b) => b.entity_id));
   const bucketName = (d: string, b: string) => (d === "l1" ? l1Name.get(b) ?? b : d === "sources" ? FAMILY_NAME[b] ?? b : d === "families" ? `${b}개` : d === "market" ? (b === "KR" ? "국내" : "미국") : b);
   const MAX = R.pick_policy.top_max;
   const ok = scored.filter((b) => b.a.admit.ok);
@@ -81,7 +83,7 @@ export async function buildBrief(kind: "morning" | "evening", now = new Date()):
     const reasons = buyReasons({ idea, consensus: consensusOf(b.ev), grade: b.ev.F?.grade ?? null, score: b.ev.F?.score ?? null });
     const industry = idea.industry?.name ?? (e.primary_l1 ? l1Name.get(e.primary_l1) ?? "" : "");
     const h = hist.get(b.entity_id), px = prices.get(b.entity_id);
-    const history = recLine({ nth: (h?.count ?? 0) + 1, first_at: h?.first_at ?? null, first_price: h?.first_price ?? px?.first ?? null, cur_price: px?.price ?? null, cur_date: px?.date ?? null, currency: e.market === "KR" ? "KRW" : "USD" });
+    const history = (b.promoted ? "⏳ 눌림 대기 → 🚀 상승 초기 승격 · " : "") + recLine({ nth: (h?.count ?? 0) + 1, first_at: h?.first_at ?? null, first_price: h?.first_price ?? px?.first ?? null, cur_price: px?.price ?? null, cur_date: px?.date ?? null, currency: e.market === "KR" ? "KRW" : "USD" });
     return ideaCard(i + 1, { name: e.name, symbol: e.symbol, market: e.market, industry }, idea, reasons, b.ev.tech, linkLine(e as unknown as LinkEntity, ctx), perfLine(b.a.prior, R.feedback, bucketName), { timing: b.a.timing, history });
   });
   const picked = new Map(ranked.map((b, i) => [b.entity_id, i + 1]));
@@ -89,10 +91,10 @@ export async function buildBrief(kind: "morning" | "evening", now = new Date()):
     .map((b) => ({ name: b.e.name, why: [b.a.admit.why[0], issues(b.a.timing)].filter(Boolean).join(" — ") }));
   const pickLog = {
     picks: ranked.map((b) => ({ id: b.entity_id, rank: picked.get(b.entity_id) as number, price: prices.get(b.entity_id)?.price ?? null, price_date: prices.get(b.entity_id)?.date ?? null })),
-    candidates: scored.map((b) => ({ id: b.entity_id, picked: picked.has(b.entity_id), rank: picked.get(b.entity_id) ?? null, features: b.a.features })),
+    candidates: scored.map((b) => ({ id: b.entity_id, picked: picked.has(b.entity_id), rank: picked.get(b.entity_id) ?? null, features: b.a.features, from: b.queue })),
     policy_as_of: policy?.as_of ?? null,
   };
-  const others = OTHERS.map((q) => ({ icon: QUEUE_LABEL[q].split(" ")[0], label: QUEUE_LABEL[q].replace(/^\S+\s/, ""), names: mine.filter((x) => x.queue === q).map((x) => ents.byId.get(x.entity_id)!.name) }));
+  const others = OTHERS.map((q) => ({ icon: QUEUE_LABEL[q].split(" ")[0], label: QUEUE_LABEL[q].replace(/^\S+\s/, ""), names: mine.filter((x) => x.queue === q && !promoted.has(x.entity_id)).map((x) => ents.byId.get(x.entity_id)!.name) }));
 
   // 실적: 아침 = 밤사이 HermesCall 미국 발표, 저녁 = 오늘 Heimdallr ★○
   const earnings: BriefData["earnings"] = { title: kind === "morning" ? "밤사이 미국 실적 (HermesCall)" : "오늘 국내 실적 ★○ (Heimdallr)", lines: [] };

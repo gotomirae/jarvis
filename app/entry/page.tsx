@@ -1,10 +1,10 @@
-import { StockChart } from "@/app/_components/charts";
+import { PickChart } from "@/app/_components/charts";
 import { Card, Empty, Footer, Guide, Hi, LinkRow, Nav, Page, Section } from "@/app/_components/ui";
 import { linksConfig, taxonomyConfig } from "@/lib/config/load";
 import { dashboardConfig, stockCharts } from "@/lib/dashboard/data";
 import type { Conds, Tag } from "@/lib/engine/entry";
 import { COND_NAME, INVALIDATION_BASIS, m1Text, m2Text, m5Text, priceText, TAG_NAME } from "@/lib/engine/entry-view";
-import type { IndicatorPoint } from "@/lib/engine/series";
+import type { PickPoint } from "@/lib/engine/series";
 import { env } from "@/lib/env";
 import { stockLinks, type LinkEntity } from "@/lib/links";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -17,7 +17,7 @@ type Ev = Record<"m1" | "m2" | "m3" | "m4" | "m5", C> & { source_date?: string; 
 type Row = { date: string; entity_id: string; market: "KR" | "US"; level: "green" | "yellow" | "none"; tag: Tag | null; invalidation_price: number | null; first_weight_pct: number | null; gate_result: { allowed?: boolean; reasons?: string[]; sent?: boolean; note?: string }; evidence: Ev; created_at: string };
 type Ent = LinkEntity & { id: string; name: string; symbol: string; market: "KR" | "US" };
 type Blue = { entity_id: string; source: string; d0: string; d0_low: number | null; armed_until: string; promoted_at: string | null };
-type Charts = Map<string, { points: IndicatorPoint[]; op_label: string }>;
+type Charts = Map<string, { points: PickPoint[]; op_label: string }>;
 
 const MARKET = { KR: "🇰🇷", US: "🇺🇸" } as const;
 const ICON: Record<keyof Conds, string> = { m1: "📊", m2: "〽️", m3: "🌱", m4: "📅", m5: "🤝" };
@@ -54,8 +54,8 @@ function ChartBox({ id, market, charts }: { id: string; market: "KR" | "US"; cha
   const DC = dashboardConfig();
   return (
     <details open className="rounded-lg bg-panel2/50 px-3 py-2">
-      <summary className="cursor-pointer text-arc text-sm whitespace-nowrap">📉 최근 {DC.entry_chart.quarters}개 분기 · 주가 · MACD · RSI (같은 날짜를 세로로 비교)</summary>
-      {c?.points.length ? <StockChart id={id} data={c.points} opLabel={c.op_label} overbought={DC.entry_chart.rsi_overbought} oversold={DC.entry_chart.rsi_oversold} currency={market === "KR" ? "KRW" : "USD"} />
+      <summary className="cursor-pointer text-arc text-sm whitespace-nowrap">📉 최근 {DC.pick_chart.months}개월 · 주가 · {DC.pick_chart.ma.join("·")}일선 · MACD · RSI</summary>
+      {c?.points.length ? <PickChart id={id} data={c.points} ma={DC.pick_chart.ma} opLabel={c.op_label} overbought={DC.entry_chart.rsi_overbought} oversold={DC.entry_chart.rsi_oversold} currency={market === "KR" ? "KRW" : "USD"} rec={null} />
         : <p className="text-sm text-sub mt-2">시세 자료를 불러오지 못했습니다.</p>}
     </details>
   );

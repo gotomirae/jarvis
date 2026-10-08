@@ -6,7 +6,7 @@
  */
 import { describeSignal, rsiBand, type AxesEvidence, type TechRef } from "./explain";
 import type { ChartRef } from "./technicals";
-import { checkLines, VERDICT_NAME, type FlowRef, type Timing } from "./timing";
+import { checkLines, setupLine, VERDICT_NAME, type FlowRef, type Timing } from "./timing";
 import { brokerKo } from "@/lib/labels";
 
 export type IdeaEvidence = {
@@ -113,7 +113,7 @@ export function ideaCard(rank: number, e: { name: string; symbol: string; market
   return {
     perf,
     verdict: t ? `${VERDICT_NAME[t.verdict]} (점수 ${t.score > 0 ? "+" : ""}${t.score})` : null,
-    timing: t ? checkLines(t) : [],
+    timing: t ? [setupLine(t), ...checkLines(t)] : [],
     history: extra.history ?? null,
     rank, name: e.name, code: e.symbol, industry: e.industry, flag: e.market === "US" ? "🇺🇸" : "🇰🇷",
     thesis: idea.thesis ? `${cleanThesis(idea.thesis.text)} (${idea.thesis.source}${idea.thesis.as_of ? ` ${idea.thesis.as_of}` : ""})` : null,

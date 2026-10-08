@@ -5,9 +5,9 @@ import { linksConfig, taxonomyConfig } from "@/lib/config/load";
 import { explain, type AxesEvidence } from "@/lib/engine/explain";
 import type { PerfStat } from "@/lib/engine/feedback";
 import { buyReasons, consensusOf, EMPTY_IDEA, ideaCard, rankBuy } from "@/lib/engine/idea";
-import { assess, type Assessed, type Policy } from "@/lib/engine/pick-policy";
+import { assess, candidatePool, type Assessed, type Policy } from "@/lib/engine/pick-policy";
 import type { Queue } from "@/lib/engine/queues";
-import { issues, VERDICT_SHORT } from "@/lib/engine/timing";
+import { issues, setupLine, VERDICT_SHORT } from "@/lib/engine/timing";
 import { env } from "@/lib/env";
 import { rules } from "@/lib/jobs/context";
 import { stockLinks, type LinkEntity } from "@/lib/links";
@@ -25,7 +25,7 @@ type Ctx = Parameters<typeof stockLinks>[1];
 const SECTIONS: { queue: Queue; title: string; about: string[] }[] = [
   { queue: "take_profit", title: "💰 익절 검토", about: ["보유 종목 중 과열 점수 · 주가 반영도가 모두 높음", "👉 일부 이익 실현 검토"] },
   { queue: "radar", title: "🔭 선행 관찰", about: ["산업 이야기 · 실적 촉매는 켜짐, 실적 숫자는 확인 전", "실적 발표 45일 이내 → 발표 뒤 🎯 로 올라올 수 있음"] },
-  { queue: "pullback_wait", title: "⏳ 눌림 대기", about: ["실적은 좋지만 주가가 이미 많이 반영됨", "👉 반영도가 50 아래로 내려오면 다시 보기"] },
+  { queue: "pullback_wait", title: "⏳ 눌림 대기", about: ["실적은 좋지만 주가가 이미 많이 반영됨", "🚀 상승 초기 조건(눌림 + 5·20일선 · MACD 돌파 직전 · 직후)을 만족하면 위 🎯 후보로 승격"] },
 ];
 
 /** 오늘 (PRD §8): 요약 타일 → 시장 국면(+공포·탐욕) → 주요 지표 → 🎯 지금 사기 좋은 종목(그래프·추천 후 수익률) → 대기 → 익절 → 선행 관찰 → 눌림 대기. 보유 경고는 🦾 포트폴리오 탭(10/8) */
@@ -66,19 +66,22 @@ export default async function Today() {
   const entryRows = ((ee.data ?? []) as { date: string; market: string; level: string }[]).filter((x) => (x.market === "KR" ? x.date === lastKR.data?.date : x.date === lastUS.data?.date));
   const hist = recHistory((notes.data ?? []) as BriefNote[], (c) => (byId.has(`KR:${c}`) ? `KR:${c}` : byId.has(`US:${c}`) ? `US:${c}` : null));
 
-  // 🎯 후보 평가 — 브리핑과 같은 함수(assess · rankBuy)
+  // 🎯 후보 평가 — 브리핑과 같은 함수(assess · candidatePool · rankBuy). ⏳ 눌림 대기도 상승 초기 조건을 만족하면 후보로 승격(D66)
   const today = kstDate();
-  const cands = q.filter((x) => x.queue === "buy" && byId.has(x.entity_id)).map((x) => {
+  const cands = candidatePool(q.filter((x) => (x.queue === "buy" || R.pick_policy.promote_from.includes(x.queue)) && byId.has(x.entity_id)).map((x) => {
     const e = byId.get(x.entity_id)!;
     const ev = evBy.get(x.entity_id) ?? {};
     const p = (x.reason as { p?: number | null }).p ?? null;
     const a = assess({ ev, p, market: e.market, l1: e.primary_l1 ?? null, riskOff: r?.risk_off === true, today }, R, policy, (st.data ?? []) as PerfStat[]);
     return { ...x, e, ev, a, p, families: ev.families?.length ?? 0, industryGrowth: ev.idea?.industry?.realized_median ?? null, nextEvent: ev.next_event ?? null, perf: a.prior.score, timing: a.timing.score };
-  });
+  }), R.pick_policy.promote_from);
+  const promoted = new Set(cands.filter((c) => c.promoted).map((c) => c.entity_id));
   const good = cands.filter((c) => c.a.admit.ok);
   const top = [...rankBuy(good.filter((c) => c.e.market === "KR"), good.length), ...rankBuy(good.filter((c) => c.e.market === "US"), good.length)];
   const waiting = cands.filter((c) => !c.a.admit.ok).sort((x, y) => y.a.timing.score - x.a.timing.score);
-  const charts = await pickCharts(top.map((c) => c.entity_id));
+  // 종목 그래프 — 🎯 · ⏸️ 대기 · 💰 익절 · 🔭 선행 관찰 · ⏳ 눌림 대기 모두 같은 조건 (10/8)
+  const charts = await pickCharts([...new Set([...top, ...waiting].map((c) => c.entity_id).concat(q.filter((x) => SECTIONS.some((s) => s.queue === x.queue) && byId.has(x.entity_id)).map((x) => x.entity_id)))]);
+  const chartCfg: ChartCfg = { ma: DC.pick_chart.ma, overbought: DC.entry_chart.rsi_overbought, oversold: DC.entry_chart.rsi_oversold };
 
   // 보유 경고 개수 (자세한 내용은 🦾 포트폴리오 탭, 10/8)
   const alertBy = new Set(((alerts.data ?? []) as { entity_id: string | null; payload: { name?: string; asset_id?: string } }[]).map((a) => a.entity_id ?? a.payload?.asset_id ?? a.payload?.name ?? "-"));
@@ -134,32 +137,36 @@ export default async function Today() {
         <Guide items={[
           <>🏢 <b className="text-white">좋은 기업</b> = 실적 · 산업 · 신호 합의 (매수 검토 후보)</>,
           <>⏱️ <b className="text-gold">지금 사기 좋은가</b> = 가격 · 추세 · 수급 · 과열</>,
+          <>🚀 <b className="text-hot">필수: 상승 초기</b> = 고점 대비 눌림 + 5·20일선 · MACD 상향 돌파 <b className="text-white">직전 · 직후(3일 이내)</b></>,
+          <>⏳ 눌림 대기 종목도 상승 초기 조건을 만족하면 <b className="text-hot">승격</b> (주가 반영도는 보정 중 → 비중 작게)</>,
           <>⏸️ 대기이거나 사후 검증에서 승률 낮은 기준에 걸리면 제외</>,
           <>📨 시장별 상위 {R.pick_policy.top_max}개가 텔레그램 추천</>,
         ]} />
         {policy?.exclude.length ? <p className="text-sm">📐 사후 검증으로 빠진 기준: {policy.exclude.map((x) => <span key={x.title} className="mr-2 rounded-full border border-hot/50 bg-hot/10 px-2 py-0.5 text-hot">{x.title}</span>)}</p> : null}
         {top.length === 0 ? <Empty text={cands.length ? `오늘은 지금 사기 좋은 종목이 없습니다 — 후보 ${cands.length}개 모두 타이밍 대기.` : "매수 검토 후보가 없습니다."} /> : top.map((c) => {
           const rank = (c.e.market === "KR" ? top.filter((x) => x.e.market === "KR") : top.filter((x) => x.e.market === "US")).indexOf(c) + 1;
-          return <IdeaView key={c.entity_id} c={c} rank={rank} hist={hist.get(c.entity_id)} ctx={ctx} telegram={rank <= R.pick_policy.top_max} chart={charts.get(c.entity_id)} chartCfg={{ ma: DC.pick_chart.ma, overbought: DC.entry_chart.rsi_overbought, oversold: DC.entry_chart.rsi_oversold }} />;
+          return <IdeaView key={c.entity_id} c={c} rank={rank} hist={hist.get(c.entity_id)} ctx={ctx} telegram={rank <= R.pick_policy.top_max} chart={charts.get(c.entity_id)} chartCfg={chartCfg} />;
         })}
       </Section>
 
       <Section title="⏸️ 좋은 기업이지만 지금은 대기" count={waiting.length}>
-        <Guide items={["실적 · 산업은 좋지만 지금 가격 · 추세 · 수급이 별로", "점수가 오르면 위 목록으로 올라옴"]} />
-        {waiting.length === 0 ? <Empty text="없음" /> : (
-          <ul className="grid gap-2 sm:grid-cols-2">
-            {waiting.map((c) => (
-              <li key={c.entity_id} className="glass rounded-lg px-3 py-2 text-sm">
-                <a href={`/stock/${encodeURIComponent(c.entity_id)}`} className="font-semibold link">{c.e.market === "US" ? "🇺🇸" : "🇰🇷"} {c.e.name}</a>
-                <span className="ml-2 text-warn font-semibold">{VERDICT_SHORT[c.a.timing.verdict]} {c.a.timing.score > 0 ? "+" : ""}{c.a.timing.score}</span>
-                <div className="text-xs text-sub">{[c.a.admit.why.join(" · "), issues(c.a.timing)].filter(Boolean).join(" — ")}</div>
-              </li>
-            ))}
-          </ul>
-        )}
+        <Guide items={["실적 · 산업은 좋지만 지금 가격 · 추세 · 수급이 별로", <>🚀 상승 초기 조건(눌림 + 5·20일선 · MACD 돌파 직전 · 직후)이 <b className="text-hot">안 맞아도</b> 여기</>, "조건이 맞으면 위 🎯 목록으로 올라옴"]} />
+        {waiting.length === 0 ? <Empty text="없음" /> : waiting.map((c) => (
+          <Card key={c.entity_id} tone="muted">
+            <p className="text-base font-bold">
+              <a href={`/stock/${encodeURIComponent(c.entity_id)}`} className="hover:text-arc">{c.e.market === "US" ? "🇺🇸" : "🇰🇷"} {c.e.name}</a>
+              <span className="ml-2 text-sm font-normal text-sub">{c.e.symbol}</span>
+              <span className="ml-2 text-sm text-warn font-semibold">{VERDICT_SHORT[c.a.timing.verdict]} {c.a.timing.score > 0 ? "+" : ""}{c.a.timing.score}</span>
+              {c.promoted && <span className="ml-2 text-xs text-hot">⏳ 눌림 대기에서 승격</span>}
+            </p>
+            <ul className="list-none"><MarkLine text={setupLine(c.a.timing)} /></ul>
+            <p className="text-sm">⏸️ <b className="text-warn">대기 이유</b> {[c.a.admit.why.join(" · "), issues(c.a.timing)].filter(Boolean).join(" — ")}</p>
+            <StockGraph id={c.entity_id} market={c.e.market} chart={charts.get(c.entity_id)} cfg={chartCfg} hist={hist.get(c.entity_id)} />
+          </Card>
+        ))}
       </Section>
 
-      {SECTIONS.map((s) => <QueueSection key={s.queue} {...s} q={q} byId={byId} evBy={evBy} ctx={ctx} />)}
+      {SECTIONS.map((s) => <QueueSection key={s.queue} {...s} q={q.filter((x) => !promoted.has(x.entity_id))} byId={byId} evBy={evBy} ctx={ctx} charts={charts} chartCfg={chartCfg} hist={hist} />)}
 
       <Section title="🚦 진입 신호 · 관찰 · 실적 돌파">
         <Guide items={["🟢 진입 신호 = 필수 조건 5개 모두 충족", "🟡 관찰 · 🔵 실적 돌파도 함께", <a key="e" className="link" href="/entry">🚦 진입 보드에서 보기 →</a>]} />
@@ -169,10 +176,19 @@ export default async function Today() {
   );
 }
 
-type Cand = { entity_id: string; e: Ent; ev: AxesEvidence; a: Assessed; p: number | null };
+type Cand = { entity_id: string; e: Ent; ev: AxesEvidence; a: Assessed; p: number | null; promoted: boolean };
 
 /** 🎯 카드 — 이름 → 추천 이력 → 지금 매수 매력 → 아이디어 → 🏢 | ⏱️ → 이벤트·리스크 → 링크 */
 type ChartCfg = { ma: [number, number]; overbought: number; oversold: number };
+type Charts = Map<string, { points: PickPoint[]; bars: Bar[] }>;
+
+/** 종목 그래프 — 🎯 카드와 같은 조건(12개월 주가 · 5·20일선 · MACD · RSI), 추천받은 적 있으면 첫 추천일 표시 */
+function StockGraph({ id, market, chart, cfg, hist }: { id: string; market: "KR" | "US"; chart: { points: PickPoint[]; bars: Bar[] } | undefined; cfg: ChartCfg; hist: RecHist | undefined }) {
+  if (!chart?.points.length) return <Empty text="주가 자료를 불러오지 못했습니다." />;
+  const rr = recReturn(hist, chart.bars);
+  return <PickChart id={id} data={chart.points} ma={cfg.ma} overbought={cfg.overbought} oversold={cfg.oversold} currency={market === "KR" ? "KRW" : "USD"} rec={rr ? { date: rr.first_date, price: rr.first_price } : null} />;
+}
+
 function IdeaView({ c, rank, hist, ctx, telegram, chart, chartCfg }: { c: Cand; rank: number; hist: RecHist | undefined; ctx: Ctx; telegram: boolean; chart: { points: PickPoint[]; bars: Bar[] } | undefined; chartCfg: ChartCfg }) {
   const cur = c.e.market === "KR" ? "KRW" : "USD";
   const rr = recReturn(hist, chart?.bars ?? []);
@@ -191,6 +207,7 @@ function IdeaView({ c, rank, hist, ctx, telegram, chart, chartCfg }: { c: Cand; 
             <a href={`/stock/${encodeURIComponent(c.entity_id)}`} className="hover:text-arc">{card.flag} {card.name}</a>
             <span className="ml-2 text-sm font-normal text-sub">{card.code}{card.industry ? ` · ${card.industry}` : ""}</span>
           </p>
+          {c.promoted && <p className="text-sm mt-1"><span className="rounded-full border border-hot/60 bg-hot/10 px-2.5 py-0.5 text-hot font-bold">⏳ 눌림 대기 → 🚀 상승 초기 승격</span> <span className="text-sub">주가 반영도 {c.p === null ? "-" : Math.round(c.p)} (보정 중이라 비중 작게)</span></p>}
           <RecBadge rr={rr} currency={cur} />
           {telegram && <p className="text-xs text-good mt-0.5">📨 텔레그램 추천 대상 (시장별 상위)</p>}
         </div>
@@ -220,8 +237,9 @@ function IdeaView({ c, rank, hist, ctx, telegram, chart, chartCfg }: { c: Cand; 
   );
 }
 
-function QueueSection({ queue, title, about, q, byId, evBy, ctx }: {
+function QueueSection({ queue, title, about, q, byId, evBy, ctx, charts, chartCfg, hist }: {
   queue: Queue; title: string; about: string[]; q: QItem[]; byId: Map<string, Ent>; evBy: Map<string, AxesEvidence>; ctx: Ctx;
+  charts: Charts; chartCfg: ChartCfg; hist: Map<string, RecHist>;
 }) {
   const xs = q.filter((x) => x.queue === queue);
   return (
@@ -240,6 +258,7 @@ function QueueSection({ queue, title, about, q, byId, evBy, ctx }: {
             </p>
             <p>👉 <Hi>결론</Hi> {ex.conclusion}</p>
             <ul className="space-y-0.5">{ex.reasons.map((t, i) => <li key={i}>▪️ {t}</li>)}</ul>
+            {e && <StockGraph id={x.entity_id} market={e.market} chart={charts.get(x.entity_id)} cfg={chartCfg} hist={hist.get(x.entity_id)} />}
             {e && <LinkRow links={stockLinks(e, ctx)} />}
           </Card>
         );

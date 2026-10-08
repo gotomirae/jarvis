@@ -143,60 +143,6 @@ export function SectorChart({ data, week, up }: { data: { date: string; close: n
   );
 }
 
-type IP = { date: string; close: number; macd: number; signal: number; hist: number; rsi: number | null; op_yoy: number | null };
-
-/** 🚦 종목 — 주가(+분기 영업이익 증가율 금색) · MACD · RSI 를 세로로 쌓고 같은 날짜 커서로 맞춘다 */
-export function StockChart({ id, data, opLabel, overbought, oversold, currency }: { id: string; data: IP[]; opLabel: string; overbought: number; oversold: number; currency: "KRW" | "USD" }) {
-  const sync = `stk-${id}`;
-  const m = { top: 6, right: 8, bottom: 0, left: 0 };
-  const price = (v: unknown) => (typeof v === "number" ? (currency === "KRW" ? `${Math.round(v).toLocaleString("en-US")}원` : `$${v.toFixed(2)}`) : "-");
-  return (
-    <div className="space-y-1">
-      <p className="text-xs text-sub whitespace-nowrap">📈 주가 <span className="text-gold">● {opLabel}(전년 대비, 오른쪽 축)</span></p>
-      <ResponsiveContainer width="100%" height={210}>
-        <ComposedChart data={data} syncId={sync} margin={m}>
-          <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
-          <XAxis dataKey="date" tick={tick} tickFormatter={md} minTickGap={50} />
-          <YAxis yAxisId="p" tick={tick} width={58} domain={["auto", "auto"]} tickFormatter={(v) => fmt(v, 0)} />
-          <YAxis yAxisId="q" orientation="right" tick={{ ...tick, fill: GOLD }} width={46} tickFormatter={(v) => `${v}%`} />
-          <Tooltip {...tip} labelFormatter={(l) => String(l)} formatter={(v, n) => (n === opLabel ? [`${fmt(v)}%`, n] : [price(v), n])} />
-          <Line yAxisId="p" type="monotone" dataKey="close" name="주가" stroke={ARC} dot={false} strokeWidth={1.8} />
-          <Line yAxisId="q" type="linear" dataKey="op_yoy" name={opLabel} stroke={GOLD} strokeWidth={2} connectNulls dot={{ r: 4, fill: GOLD, stroke: "#fff" }} />
-        </ComposedChart>
-      </ResponsiveContainer>
-      <p className="text-xs text-sub whitespace-nowrap">📊 MACD(추세 지표) <span className="text-arc">— MACD</span> <span className="text-gold">— 시그널</span> · 막대 = 차이</p>
-      <ResponsiveContainer width="100%" height={130}>
-        <ComposedChart data={data} syncId={sync} margin={m}>
-          <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
-          <XAxis dataKey="date" tick={tick} tickFormatter={md} minTickGap={50} />
-          <YAxis tick={tick} width={58} tickFormatter={(v) => fmt(v, 1)} />
-          <YAxis yAxisId="r" orientation="right" width={46} tick={false} />
-          <Tooltip {...tip} formatter={(v, n) => [fmt(v, 2), n]} />
-          <ReferenceLine y={0} stroke={SUB} />
-          <Bar dataKey="hist" name="차이" isAnimationActive={false}>
-            {data.map((p, i) => <Cell key={i} fill={p.hist >= 0 ? HOT : COOL} fillOpacity={0.6} />)}
-          </Bar>
-          <Line type="monotone" dataKey="macd" name="MACD" stroke={ARC} dot={false} strokeWidth={1.5} />
-          <Line type="monotone" dataKey="signal" name="시그널" stroke={GOLD} dot={false} strokeWidth={1.5} />
-        </ComposedChart>
-      </ResponsiveContainer>
-      <p className="text-xs text-sub whitespace-nowrap">🌡️ RSI(과열 지표) <span className="text-hot">{overbought} 이상 과열</span> · <span className="text-cool">{oversold} 이하 침체</span></p>
-      <ResponsiveContainer width="100%" height={110}>
-        <LineChart data={data} syncId={sync} margin={m}>
-          <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
-          <XAxis dataKey="date" tick={tick} tickFormatter={mdd} minTickGap={50} />
-          <YAxis tick={tick} width={58} domain={[0, 100]} ticks={[oversold, 50, overbought]} />
-          <YAxis yAxisId="r" orientation="right" width={46} tick={false} />
-          <ReferenceArea y1={overbought} y2={100} fill={HOT} fillOpacity={0.1} />
-          <ReferenceArea y1={0} y2={oversold} fill={COOL} fillOpacity={0.1} />
-          <Tooltip {...tip} formatter={(v) => [fmt(v), "RSI"]} />
-          <Line type="monotone" dataKey="rsi" name="RSI" stroke={GOOD} dot={false} strokeWidth={1.5} connectNulls />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
 /** 📅 과거 사례 — 시작일 = 100, x = 경과 거래일. 지금(current)은 금색 굵은 선 (D63) */
 export function PathChart({ data, lines, days }: { data: Record<string, unknown>[]; lines: { key: string; label: string; color: string; current: boolean; last: number | null }[]; days: number }) {
   const ticks = [0, 20, 40, 60, 80, 100, 120, 150, 200, 250].filter((t) => t <= days).map(String);
@@ -219,11 +165,14 @@ export function PathChart({ data, lines, days }: { data: Record<string, unknown>
  * 🎯 지금 사기 좋은 종목 — 최근 12개월 주가 + 5·20일선 · MACD · RSI 를 한 상자에 세로로 쌓고 같은 날짜 커서로 맞춘다 (10/8 사용자 요청).
  * rec = 첫 추천일·기준가 → 세로선과 점으로 표시.
  */
-type PP = { date: string; close: number; ma_fast: number | null; ma_slow: number | null; macd: number; signal: number; hist: number; rsi: number | null };
+type PP = { date: string; close: number; ma_fast: number | null; ma_slow: number | null; macd: number; signal: number; hist: number; rsi: number | null; op_yoy?: number | null };
 const MA_SLOW = "#f472b6";
-export function PickChart({ id, data, ma, overbought, oversold, currency, rec }: {
+export function PickChart({ id, data, ma, overbought, oversold, currency, rec, opLabel }: {
   id: string; data: PP[]; ma: [number, number]; overbought: number; oversold: number; currency: "KRW" | "USD"; rec: { date: string; price: number } | null;
+  opLabel?: string;   // 🚦 진입 보드: 분기 영업이익(또는 주당순이익) 전년 대비 증가율을 오른쪽 축에 금색 점으로
 }) {
+  const op = !!opLabel && data.some((p) => typeof p.op_yoy === "number");
+  const RW = op ? 46 : 0;   // 오른쪽 축 폭 — 세 그래프가 같은 x 위치를 쓰도록 모두 같은 폭
   const sync = `pick-${id}`;
   const m = { top: 8, right: 8, bottom: 0, left: 0 };
   const W = 62;
@@ -233,18 +182,20 @@ export function PickChart({ id, data, ma, overbought, oversold, currency, rec }:
   const key = (c: string, t: string) => <span className="inline-flex items-center gap-1 whitespace-nowrap" style={{ color: c }}><span className="inline-block h-[3px] w-4 rounded" style={{ background: c }} />{t}</span>;
   return (
     <div className="rounded-lg border border-line/70 bg-panel2/40 p-2 space-y-1">
-      <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs font-semibold">📈 {key(ARC, "주가")}{key(GOLD, fast)}{key(MA_SLOW, slow)}{recX && <span className="text-good whitespace-nowrap">┊ 🎯 첫 추천</span>}</p>
+      <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs font-semibold">📈 {key(ARC, "주가")}{key(GOLD, fast)}{key(MA_SLOW, slow)}{recX && <span className="text-good whitespace-nowrap">┊ 🎯 첫 추천</span>}{op && <span className="text-gold whitespace-nowrap">● {opLabel}(전년 대비, 오른쪽 축)</span>}</p>
       <ResponsiveContainer width="100%" height={200}>
         <ComposedChart data={data} syncId={sync} margin={m}>
           <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
           <XAxis dataKey="date" tick={tick} tickFormatter={md} minTickGap={40} />
           <YAxis tick={tick} width={W} domain={["auto", "auto"]} tickFormatter={(v) => fmt(v, 0)} />
-          <Tooltip {...tip} formatter={(v, n) => [price(v), n]} />
+          {op ? <YAxis yAxisId="q" orientation="right" tick={{ ...tick, fill: GOLD }} width={RW} tickFormatter={(v) => `${v}%`} /> : null}
+          <Tooltip {...tip} formatter={(v, n) => (n === opLabel ? [`${fmt(v)}%`, n] : [price(v), n])} />
           {recX && <ReferenceLine x={recX} stroke={GOOD} strokeDasharray="4 3" />}
           <Line type="monotone" dataKey="close" name="주가" stroke={ARC} dot={false} strokeWidth={1.8} isAnimationActive={false} />
           <Line type="monotone" dataKey="ma_fast" name={fast} stroke={GOLD} dot={false} strokeWidth={1.2} isAnimationActive={false} connectNulls />
           <Line type="monotone" dataKey="ma_slow" name={slow} stroke={MA_SLOW} dot={false} strokeWidth={1.2} isAnimationActive={false} connectNulls />
           {recX && rec && <ReferenceDot x={recX} y={rec.price} r={5} fill={GOOD} stroke="#fff" label={{ value: "추천", fill: GOOD, fontSize: 11, position: "top" }} />}
+          {op ? <Line yAxisId="q" type="linear" dataKey="op_yoy" name={opLabel} stroke={GOLD} strokeWidth={2} connectNulls dot={{ r: 4, fill: GOLD, stroke: "#fff" }} isAnimationActive={false} /> : null}
         </ComposedChart>
       </ResponsiveContainer>
       <p className="text-xs font-semibold whitespace-nowrap">📊 MACD(추세) <span className="text-arc">— MACD</span> <span className="text-gold">— 시그널</span> <span className="text-sub">· 막대 = 차이(빨강 상승 · 파랑 하락)</span></p>
@@ -253,6 +204,7 @@ export function PickChart({ id, data, ma, overbought, oversold, currency, rec }:
           <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
           <XAxis dataKey="date" tick={tick} tickFormatter={md} minTickGap={40} />
           <YAxis tick={tick} width={W} tickFormatter={(v) => fmt(v, 1)} />
+          {op ? <YAxis yAxisId="r" orientation="right" width={RW} tick={false} /> : null}
           <Tooltip {...tip} formatter={(v, n) => [fmt(v, 2), n]} />
           <ReferenceLine y={0} stroke={SUB} />
           {recX && <ReferenceLine x={recX} stroke={GOOD} strokeDasharray="4 3" />}
@@ -269,6 +221,7 @@ export function PickChart({ id, data, ma, overbought, oversold, currency, rec }:
           <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
           <XAxis dataKey="date" tick={tick} tickFormatter={md} minTickGap={40} />
           <YAxis tick={tick} width={W} domain={[0, 100]} ticks={[oversold, 50, overbought]} />
+          {op ? <YAxis yAxisId="r" orientation="right" width={RW} tick={false} /> : null}
           <ReferenceArea y1={overbought} y2={100} fill={HOT} fillOpacity={0.1} />
           <ReferenceArea y1={0} y2={oversold} fill={COOL} fillOpacity={0.1} />
           {recX && <ReferenceLine x={recX} stroke={GOOD} strokeDasharray="4 3" />}

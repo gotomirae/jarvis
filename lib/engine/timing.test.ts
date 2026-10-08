@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ChartRef } from "./technicals";
-import { checkLines, checkMarks, daysUntil, flowCheck, issues, qty, streakOf, timingOf, type FlowRef, type TimingRules } from "./timing";
+import { checkLines, checkMarks, crossPhase, daysUntil, flowCheck, issues, qty, setupLine, streakOf, timingOf, type FlowRef, type TimingRules } from "./timing";
 
 const TR: TimingRules = {
   p: { great_max: 25, good_max: 40 },
+  p_weight: 1,
+  setup: { require: true, just_after_days: 3 },
   position: { chase_above_pct: -5, deep_below_pct: -40 },
   rsi: { overheat_min: 70, near_hot_min: 65, rebound_max: 45 },
   flow_days: 2,
@@ -88,7 +90,7 @@ describe("timingOf — 좋은 기업과 지금 사기 좋은 주식 구분", () 
   });
   it("고점 근처·깊은 낙폭·중립 상태·자료 없음 → ⚖️ 분할 접근 등", () => {
     const near: ChartRef = { ...chart, high: { ...chart.high, drawdown_pct: -3 }, rsi: { ...chart.rsi!, value: 55, dir: "down" },
-      macd: { ...chart.macd!, state: "above" }, ma: { ...chart.ma!, state: "below", streak: 2 } };
+      macd: { ...chart.macd!, state: "above", streak: 10 }, ma: { ...chart.ma!, state: "below", streak: 2 } };
     const t = timingOf({ p: 30, chart: near, flow: null, eventDays: 120, riskOff: false }, TR);
     expect(checkLines(t).slice(1, 5)).toEqual([
       "⚠️ 고점 대비 -3.0% — 고점 근처, 추격 매수 주의 (52주 최고 13,600원 · 26/03/12, 현재 10,880원)",
@@ -111,6 +113,29 @@ describe("timingOf — 좋은 기업과 지금 사기 좋은 주식 구분", () 
     const none = timingOf({ p: null, chart: null, flow: null, eventDays: -3, riskOff: false }, TR);
     expect(checkLines(none)).toEqual(["➖ 주가 반영도 계산 전", "➖ 가격 자료 없음", "➖ 외국인·기관 수급 자료 없음", "➖ 90일 안 상승 이벤트 없음"]);
     expect(none).toMatchObject({ score: 0, verdict: "wait" });
+  });
+  it("🎯 필수 조건 — 눌림 + 5·20일선 · MACD 상향 돌파 직전·오늘·직후 (10/8)", () => {
+    const ok = timingOf({ p: 20, chart, flow: null, eventDays: null, riskOff: false }, TR);
+    expect(ok.setup).toEqual({ required: true, ok: true, why: [], parts: { pullback: true, ma: "pre", macd: "pre" } });
+    expect(setupLine(ok)).toBe("✅ 상승 초기 조건 — ✅ 눌림 · ✅ 5·20일선 돌파 직전 · ✅ MACD 돌파 직전");
+    // 돌파 2일째(직후) = ✅ 상승 초기 · 4일째 = 이미 위(필수 조건 탈락)
+    const post = timingOf({ p: 20, chart: { ...chart, macd: { ...chart.macd!, state: "above", streak: 2 }, ma: { ...chart.ma!, state: "cross_today", streak: 1 } }, flow: null, eventDays: null, riskOff: false }, TR);
+    expect(checkLines(post)).toContain("✅ MACD가 시그널선 상향 돌파 2일째 — 상승 초기");
+    expect(post.setup.parts).toEqual({ pullback: true, ma: "today", macd: "post" });
+    const late = timingOf({ p: 20, chart: { ...chart, high: { ...chart.high, drawdown_pct: -3 }, macd: { ...chart.macd!, state: "above", streak: 4 }, ma: { ...chart.ma!, state: "below", streak: 0 } }, flow: null, eventDays: null, riskOff: false }, TR);
+    expect(late.setup).toMatchObject({ ok: false, why: ["고점 대비 눌림 아님(-3.0%)", "5·20일선 상향 돌파 직전·직후 아님", "MACD 시그널 상향 돌파 직전·직후 아님"] });
+    expect(setupLine(late)).toBe("❌ 상승 초기 조건 — ❌ 눌림 · ❌ 5·20일선 아님 · ❌ MACD 아님");
+    const newHigh = timingOf({ p: 20, chart: { ...chart, high: { ...chart.high, days: 0, drawdown_pct: 0 }, ma: null, macd: null }, flow: null, eventDays: null, riskOff: false }, TR);
+    expect(newHigh.setup.why).toEqual(["고점 대비 눌림 아님(신고가)", "이동평균선 상향 돌파 직전·직후 아님", "MACD 시그널 상향 돌파 직전·직후 아님"]);
+    const none = timingOf({ p: 20, chart: null, flow: null, eventDays: null, riskOff: false }, TR);
+    expect(none.setup).toEqual({ required: true, ok: false, why: ["가격 자료 없음"], parts: null });
+    expect(setupLine(none)).toBe("❌ 상승 초기 조건 — 가격 자료 없음");
+    expect(crossPhase(null, 3)).toBe("no");
+  });
+  it("주가 반영도 점수 배율(p_weight) — 보정 중이라 작게", () => {
+    const half = { ...TR, p_weight: 0.5 };
+    const pts = (p: number) => timingOf({ p, chart: null, flow: null, eventDays: null, riskOff: false }, half).checks[0].pts;
+    expect([pts(20), pts(30), pts(60)]).toEqual([1, 0.5, -0.5]);
   });
   it("daysUntil", () => {
     expect(daysUntil("2026-10-14", "2026-10-04")).toBe(10);

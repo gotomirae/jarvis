@@ -85,7 +85,7 @@ export function quartersAgoStart(today: string, n: number): string {
 }
 
 /** 분기 영업이익 증가율을 분기말 이후 첫 거래일 점에 붙인다(그 기간 밖이면 버림) */
-export function attachQuarterly(points: IndicatorPoint[], quarters: { fy: number; fq: number; op_yoy: number | null }[]): IndicatorPoint[] {
+export function attachQuarterly<T extends IndicatorPoint>(points: T[], quarters: { fy: number; fq: number; op_yoy: number | null }[]): T[] {
   const out = points.map((p) => ({ ...p }));
   for (const q of quarters) {
     if (q.op_yoy === null) continue;

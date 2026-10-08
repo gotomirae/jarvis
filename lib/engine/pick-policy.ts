@@ -17,6 +17,7 @@ export type PolicyRules = {
   min_gap_pctp: number;              // 전체 대비 이만큼(%p) 이상 나쁠 때만 제외
   base_exclude_verdicts: Verdict[];  // 기본 기준: 이 매력 단계는 TOP 추천 제외 (wait)
   scope: string;                     // 학습 표본 scope (pick_all)
+  promote_from: string[];            // 이 큐에서 상승 초기 조건(setup)을 만족하면 🎯 후보로 올림 (D66: pullback_wait)
 };
 
 export type Rule = { kind: "verdict" | "check" | "score"; bucket: string; title: string; evidence: string; good: boolean };
@@ -62,9 +63,10 @@ export function derivePolicy(stats: PerfStat[], r: PolicyRules, horizon: number,
   return base;
 }
 
-/** TOP 추천 자격 — 기본 기준(대기 제외) + 적용 중인 배운 기준. 탈락 사유를 함께 돌려준다 */
+/** TOP 추천 자격 — 필수 조건(눌림 + 5·20일선 · MACD 돌파 직전·직후, 10/8) + 기본 기준(대기 제외) + 적용 중인 배운 기준. 탈락 사유를 함께 돌려준다 */
 export function admits(t: Timing, policy: Policy | null, r: Pick<PolicyRules, "base_exclude_verdicts">, scoreCuts: number[]): { ok: boolean; why: string[] } {
   const why: string[] = [];
+  if (t.setup.required && !t.setup.ok) why.push(...t.setup.why.map((w) => `필수 조건: ${w}`));
   if (r.base_exclude_verdicts.includes(t.verdict)) why.push(`기본 기준: ${VERDICT_SHORT[t.verdict]}`);
   if (policy?.applied) {
     const marks = new Set(t.checks.map((k) => `${k.key}:${k.mark}`));
@@ -92,4 +94,12 @@ export function assess(x: { ev: AxesEvidence; p: number | null; market: "KR" | "
   const features = featuresOf({ families: x.ev.families, p: x.p, grade: x.ev.F?.grade, market: x.market, l1: x.l1, timing: { score: timing.score, verdict: timing.verdict, checks: checkMarks(timing) } });
   const scope = priorScope(stats, R.pick_policy, R.feedback.primary_horizon);
   return { timing, admit: admits(timing, policy, R.pick_policy, R.feedback.timing_score_buckets), features, prior: perfPrior(features, stats, scope, R.feedback), scope };
+}
+
+/**
+ * 🎯 후보 풀 (D66) — 🎯 매수 검토 큐 전부 + promote_from 큐(⏳ 눌림 대기) 중 상승 초기 조건을 만족하는 종목.
+ * 주가 반영도는 보정 중이라 큐 경계(axes.P.buy_max)로 거르지 않고 ⏱️ 점수(p_weight)로만 반영한다. 올라온 종목도 admits 를 똑같이 거친다.
+ */
+export function candidatePool<T extends { queue: string; a: Assessed }>(xs: T[], promoteFrom: string[]): (T & { promoted: boolean })[] {
+  return xs.filter((x) => x.queue === "buy" || (promoteFrom.includes(x.queue) && x.a.timing.setup.ok)).map((x) => ({ ...x, promoted: x.queue !== "buy" }));
 }

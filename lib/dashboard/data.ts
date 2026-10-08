@@ -5,7 +5,7 @@
 import { unstable_cache } from "next/cache";
 import { loadYaml, taxonomyConfig } from "@/lib/config/load";
 import { cycleOf, type Cycle, type CycleRules } from "@/lib/engine/cycle";
-import { addColumns, attachQuarterly, indicatorSeries, monthReturn, monthsAgo, periodReturn, pickSeries, quartersAgoStart, rebaseMerge, weekWindow, type Bar, type IndicatorPoint, type PickPoint, type Point } from "@/lib/engine/series";
+import { addColumns, attachQuarterly, monthReturn, monthsAgo, periodReturn, pickSeries, rebaseMerge, weekWindow, type Bar, type PickPoint, type Point } from "@/lib/engine/series";
 import { fearGreed, type FgPoint } from "@/lib/ingest/feargreed";
 import { read as heimdallr } from "@/lib/ingest/heimdallr";
 import { read as hermes } from "@/lib/ingest/hermescall";
@@ -21,7 +21,7 @@ export type DashboardConfig = {
   fear_greed: { color: string; bands: { extreme_fear: number; fear: number; greed: number; extreme_greed: number } };
   sector_proxies: Record<string, { sym: string; source: Src; name: string }>;
   cycle: CycleRules;
-  entry_chart: { quarters: number; rsi_overbought: number; rsi_oversold: number };
+  entry_chart: { rsi_overbought: number; rsi_oversold: number };
   pick_chart: { months: number; ma: [number, number] };
 };
 export const dashboardConfig = () => loadYaml<DashboardConfig>("dashboard.yaml");
@@ -82,11 +82,11 @@ export async function sectorCharts(): Promise<SectorChart[]> {
   }));
 }
 
-/** 🚦 진입 보드 종목 그래프 — 최근 N분기 주가·MACD·RSI + 분기 영업이익(미국은 없으면 주당순이익) 전년 대비 증가율 */
-export async function stockCharts(ids: string[]): Promise<Map<string, { points: IndicatorPoint[]; op_label: string }>> {
+/** 🚦 진입 보드 종목 그래프 — 🎯 와 같은 조건(최근 N개월 주가 · 5·20일선 · MACD · RSI, 10/8) + 분기 영업이익(미국은 없으면 주당순이익) 전년 대비 증가율 */
+export async function stockCharts(ids: string[]): Promise<Map<string, { points: PickPoint[]; op_label: string }>> {
   const C = dashboardConfig();
   const R = rules();
-  const from = quartersAgoStart(kstDate(), C.entry_chart.quarters);
+  const from = monthsAgo(kstDate(), C.pick_chart.months);
   const kr = ids.filter((i) => i.startsWith("KR:")).map((i) => i.slice(3));
   const us = ids.filter((i) => i.startsWith("US:")).map((i) => i.slice(3));
   const fy = String(Number(from.slice(0, 4)) - 1);
@@ -101,14 +101,14 @@ export async function stockCharts(ids: string[]): Promise<Map<string, { points: 
     const k = q.code ? `KR:${q.code}` : `US:${q.symbol}`;
     qs.set(k, [...(qs.get(k) ?? []), q]);
   }
-  const out = new Map<string, { points: IndicatorPoint[]; op_label: string }>();
+  const out = new Map<string, { points: PickPoint[]; op_label: string }>();
   await Promise.all(ids.map(async (id) => {
     const [m, sym] = id.split(":");
     const xs = await bars(m === "US" ? sym.replace(/\./g, "-") : sym, m === "US" ? "yahoo" : "naver", 820);
     if (!xs.length) return;
     const quarters = qs.get(id) ?? [];
     const useEps = m === "US" && quarters.length > 0 && quarters.every((q) => q.op_yoy === null);
-    const pts = indicatorSeries(xs, from, R.entry_core.M2_macd_pre_cross.params, R.tech_display.rsi_period);
+    const pts = pickSeries(xs, from, R.entry_core.M2_macd_pre_cross.params, R.tech_display.rsi_period, C.pick_chart.ma);
     out.set(id, { points: attachQuarterly(pts, quarters.map((q) => ({ fy: q.fiscal_year, fq: q.fiscal_quarter, op_yoy: useEps ? q.eps_yoy ?? null : q.op_yoy }))), op_label: useEps ? "주당순이익 증가율" : "영업이익 증가율" });
   }));
   return out;

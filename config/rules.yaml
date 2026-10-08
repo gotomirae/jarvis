@@ -201,6 +201,10 @@ feedback:                            # 성과 피드백 (PRD §7.3 게이트 6 �
 # ─────────────────────────────────────────────────────────────
 buy_timing:
   p: {great_max: 25, good_max: 40}                     # 주가 반영도 <25 크게 덜 반영 · <40 덜 반영 · 그 외 이미 반영
+  p_weight: 0.5                                        # 주가 반영도 점수 배율 — 보정 중이라 작게(사용자 지정 10/8, 향후 상향 예정)
+  setup:                                               # 🎯 필수 조건 (사용자 지정 10/8 — 상승 초기에 투자): 하나라도 아니면 TOP 추천 제외
+    require: true                                      #   ① 고점 대비 눌림(position 사이 구간) ② 5·20일선 ③ MACD 시그널 — 상향 돌파 직전 · 오늘 · 직후
+    just_after_days: 3                                 #   "바로 직후" = 상향 돌파 후 3거래일 이내 (돌파 당일 = 1일째)
   position: {chase_above_pct: -5.0, deep_below_pct: -40.0}   # 52주 고점 대비 −5% 위 = 추격 주의, −40% 아래 = 하락 추세 의심, 사이 = 눌림
   rsi: {overheat_min: 70, near_hot_min: 65, rebound_max: 45}   # RSI ≥70 과열(감점) · 65~70 과열 근접(표시만) · ≤45 에서 상승 전환 = 반등 시작
   flow_days: 2                                         # 외국인 또는 기관 N일 연속 순매수 (사용자 지정 매수 근거)
@@ -214,7 +218,7 @@ buy_timing:
     deep: -1
     rsi_hot: -2
     rsi_rebound: 1
-    cross: 1                                           # MACD·5일선 상향 돌파 당일·직전 (각각)
+    cross: 1                                           # MACD·5일선 상향 돌파 직전·당일·직후 (각각)
     trend_down: -1                                     # 아래로 벌어지는 중 (각각)
     flow_buy: 2                                        # 외국인 또는 기관 연속 순매수
     flow_proxy: 1                                      # 미국 매집일 대용(D15)
@@ -234,6 +238,7 @@ pick_policy:
   base_exclude_verdicts: ["wait"]  # 기본 기준: ⏸️ 지금은 대기 종목은 TOP 추천에 올리지 않음
   scope: "pick_all"                # 학습 표본 = 추천 여부와 무관한 후보 전체(선택 편향 방지)
   top_max: 5                       # 브리핑 TOP 추천 최대 수
+  promote_from: ["pullback_wait"]  # ⏳ 눌림 대기 중 상승 초기 조건(buy_timing.setup) 만족 종목은 🎯 후보로 올림 — 주가 반영도 보정 중(사용자 지정 10/8, D66)
 
 weekly:                              # 🏛️ 주간 투자위원회 (PRD §10, P4) — lib/jobs/weekly.ts
   market:                            # Ⅰ-1 시장 요약 (야후 chart; KOSPI·KOSDAQ 은 네이버 공식 종가)

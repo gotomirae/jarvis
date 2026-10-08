@@ -3,6 +3,8 @@
  *  · 좋은 기업이어도 이미 많이 오르거나 과열·추세 이탈·수급 이탈이면 "지금은 대기" — 투자하기 좋은 주식만 TOP 추천에 올린다.
  *  · 점수·임계값은 rules.yaml `buy_timing`. 🎯 추천 선별·순위·표시 전용 — 🟢 진입 신호(M1~M5, lib/engine/entry.ts)와 무관(불변 규칙 4).
  *  · 자료가 없는 항목은 0점(➖ 자료 없음) — 없는 자료를 좋게도 나쁘게도 보지 않는다.
+ *  · 🎯 필수 조건(setup, 사용자 지정 10/8 — 상승 초기 진입): 고점 대비 눌림 + 5·20일선 상향 돌파 직전·직후 + MACD 시그널 상향 돌파 직전·직후.
+ *    하나라도 아니면 TOP 추천 제외(pick-policy.admits). 주가 반영도는 보정 중이라 점수 비중을 p_weight 로 낮춘다.
  */
 import type { ChartRef, CrossState } from "./technicals";
 
@@ -13,6 +15,8 @@ export type FlowRef =
 
 export type TimingRules = {
   p: { great_max: number; good_max: number };
+  p_weight: number;                                    // 주가 반영도 점수 배율 (보정 중 → 작게, 10/8)
+  setup: { require: boolean; just_after_days: number }; // 🎯 필수 조건 · 상향 돌파 후 N거래일 이내 = "바로 직후"
   position: { chase_above_pct: number; deep_below_pct: number };
   rsi: { overheat_min: number; near_hot_min: number; rebound_max: number };
   flow_days: number;
@@ -32,7 +36,10 @@ export type CheckKey = "p" | "position" | "rsi" | "macd" | "ma" | "flow" | "even
 export type Mark = "pass" | "warn" | "fail" | "none";
 export type Check = { key: CheckKey; mark: Mark; pts: number; text: string };
 export type Verdict = "high" | "mid" | "wait";
-export type Timing = { score: number; verdict: Verdict; checks: Check[] };
+export type Setup = { required: boolean; ok: boolean; why: string[]; parts: { pullback: boolean; ma: CrossPhase; macd: CrossPhase } | null };
+export type Timing = { score: number; verdict: Verdict; checks: Check[]; setup: Setup };
+/** 상향 돌파 국면 — 직전(pre) · 오늘(today) · 직후 N일 이내(post) · 아님(no) */
+export type CrossPhase = "pre" | "today" | "post" | "no";
 
 export const MARK_ICON: Record<Mark, string> = { pass: "✅", warn: "⚠️", fail: "❌", none: "➖" };
 export const VERDICT_NAME: Record<Verdict, string> = { high: "🔥 지금 매수 매력 높음", mid: "⚖️ 분할 접근 가능", wait: "⏸️ 좋은 기업이지만 지금은 대기" };
@@ -82,9 +89,15 @@ export function flowCheck(f: FlowRef | null | undefined, r: TimingRules): Check 
   return { key: "flow", mark: "none", pts: 0, text: `연속 순매수 아님 (${streakWord("외국인", fs)} · ${streakWord("기관", is)}) — ${detail}` };
 }
 
-function crossCheck(key: "macd" | "ma", state: CrossState, widening: boolean, label: string, r: TimingRules): Check {
+export function crossPhase(x: { state: CrossState; streak: number } | null | undefined, justAfter: number): CrossPhase {
+  if (!x) return "no";
+  return x.state === "near" ? "pre" : x.state === "cross_today" ? "today" : x.state === "above" && x.streak <= justAfter ? "post" : "no";
+}
+
+function crossCheck(key: "macd" | "ma", state: CrossState, streak: number, widening: boolean, label: string, r: TimingRules): Check {
   if (state === "cross_today") return { key, mark: "pass", pts: r.points.cross, text: `${label} 오늘 상향 돌파 — 추세 전환` };
   if (state === "near") return { key, mark: "pass", pts: r.points.cross, text: `${label} 상향 돌파 직전 — 추세 전환 임박` };
+  if (state === "above" && streak <= r.setup.just_after_days) return { key, mark: "pass", pts: r.points.cross, text: `${label} 상향 돌파 ${streak}일째 — 상승 초기` };
   if (state === "above") return { key, mark: "none", pts: 0, text: `${label} 이미 위 — 상승 추세 유지` };
   return widening
     ? { key, mark: "fail", pts: r.points.trend_down, text: `${label} 아래로 벌어지는 중 — 하락 추세` }
@@ -99,9 +112,10 @@ export function timingOf(x: TimingInput, r: TimingRules): Timing {
   if (x.p === null) checks.push({ key: "p", mark: "none", pts: 0, text: "주가 반영도 계산 전" });
   else {
     const v = Math.round(x.p);
-    checks.push(x.p < r.p.great_max ? { key: "p", mark: "pass", pts: P.p_great, text: `주가 반영도 ${v}/100 — 실적에 비해 주가가 크게 덜 오름` }
-      : x.p < r.p.good_max ? { key: "p", mark: "pass", pts: P.p_good, text: `주가 반영도 ${v}/100 — 실적에 비해 주가가 덜 오름` }
-      : { key: "p", mark: "fail", pts: P.p_high, text: `주가 반영도 ${v}/100 — 이미 많이 반영됨` });
+    const w = r.p_weight;
+    checks.push(x.p < r.p.great_max ? { key: "p", mark: "pass", pts: P.p_great * w, text: `주가 반영도 ${v}/100 — 실적에 비해 주가가 크게 덜 오름` }
+      : x.p < r.p.good_max ? { key: "p", mark: "pass", pts: P.p_good * w, text: `주가 반영도 ${v}/100 — 실적에 비해 주가가 덜 오름` }
+      : { key: "p", mark: "fail", pts: P.p_high * w, text: `주가 반영도 ${v}/100 — 이미 많이 반영됨` });
   }
   const c = x.chart;
   if (!c) checks.push({ key: "position", mark: "none", pts: 0, text: "가격 자료 없음" });
@@ -120,8 +134,8 @@ export function timingOf(x: TimingInput, r: TimingRules): Timing {
         : c.rsi.value <= r.rsi.rebound_max && c.rsi.dir === "up" ? { key: "rsi", mark: "pass", pts: P.rsi_rebound, text: `RSI ${v} ${dir} 낮은 곳에서 반등 시작 (${c.rsi.days}일 전 ${Math.floor(c.rsi.prev)})` }
         : { key: "rsi", mark: "none", pts: 0, text: `RSI ${v} ${dir} 과열 아님` });
     }
-    if (c.macd) checks.push(crossCheck("macd", c.macd.state, !c.macd.improving, "MACD가 시그널선", r));
-    if (c.ma) checks.push(crossCheck("ma", c.ma.state, c.ma.streak === 0, `${c.ma.n[0]}일선이 ${c.ma.n[1]}일선`, r));
+    if (c.macd) checks.push(crossCheck("macd", c.macd.state, c.macd.streak, !c.macd.improving, "MACD가 시그널선", r));
+    if (c.ma) checks.push(crossCheck("ma", c.ma.state, c.ma.streak, c.ma.streak === 0, `${c.ma.n[0]}일선이 ${c.ma.n[1]}일선`, r));
   }
   checks.push(flowCheck(x.flow, r));
   checks.push(x.eventDays !== null && x.eventDays >= 0 && x.eventDays <= r.event_within_days
@@ -129,7 +143,29 @@ export function timingOf(x: TimingInput, r: TimingRules): Timing {
     : { key: "event", mark: "none", pts: 0, text: `${r.event_within_days}일 안 상승 이벤트 없음` });
   if (x.riskOff) checks.push({ key: "regime", mark: "warn", pts: P.risk_off, text: "시장 위험 회피 국면 — 나눠서 적게" });
   const score = checks.reduce((a, k) => a + k.pts, 0);
-  return { score, verdict: score >= r.verdict.high_min ? "high" : score >= r.verdict.mid_min ? "mid" : "wait", checks };
+  return { score, verdict: score >= r.verdict.high_min ? "high" : score >= r.verdict.mid_min ? "mid" : "wait", checks, setup: setupOf(c, checks, r) };
+}
+
+const PHASE_WORD: Record<CrossPhase, string> = { pre: "돌파 직전", today: "오늘 돌파", post: "돌파 직후", no: "아님" };
+
+/** 🎯 필수 조건 — 눌림 + 5·20일선 · MACD 상향 돌파 직전·직후 (상승 초기 진입, 사용자 지정 10/8) */
+export function setupOf(c: ChartRef | null | undefined, checks: Check[], r: TimingRules): Setup {
+  if (!c) return { required: r.setup.require, ok: false, why: ["가격 자료 없음"], parts: null };
+  const parts = { pullback: checks.some((k) => k.key === "position" && k.mark === "pass"), ma: crossPhase(c.ma, r.setup.just_after_days), macd: crossPhase(c.macd, r.setup.just_after_days) };
+  const why: string[] = [];
+  if (!parts.pullback) why.push(`고점 대비 눌림 아님(${c.high.days === 0 ? "신고가" : pct1(c.high.drawdown_pct)})`);
+  if (parts.ma === "no") why.push(`${c.ma ? `${c.ma.n[0]}·${c.ma.n[1]}일선` : "이동평균선"} 상향 돌파 직전·직후 아님`);
+  if (parts.macd === "no") why.push("MACD 시그널 상향 돌파 직전·직후 아님");
+  return { required: r.setup.require, ok: why.length === 0, why, parts };
+}
+
+/** 필수 조건 한 줄 — "🎯 상승 초기 조건 ✅ 눌림 · 5·20일선 돌파 직전 · MACD 돌파 직후" */
+export function setupLine(t: Timing): string {
+  const s = t.setup;
+  if (!s.parts) return `❌ 상승 초기 조건 — ${s.why.join(" · ")}`;
+  const p = s.parts;
+  const body = [`${p.pullback ? "✅" : "❌"} 눌림`, `${p.ma !== "no" ? "✅" : "❌"} 5·20일선 ${PHASE_WORD[p.ma]}`, `${p.macd !== "no" ? "✅" : "❌"} MACD ${PHASE_WORD[p.macd]}`].join(" · ");
+  return `${s.ok ? "✅" : "❌"} 상승 초기 조건 — ${body}`;
 }
 
 /** 표시 줄: "✅ 주가 반영도 33/100 — …" */

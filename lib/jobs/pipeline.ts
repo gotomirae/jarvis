@@ -106,8 +106,8 @@ export async function runPipeline(now = new Date(), opts: { submit?: boolean } =
   // 큐에 든 종목은 기술적 참고(판정 미사용)를 근거에 저장 — 화면·브리핑은 DB 만 읽는다(PRD §8)
   const tech = await techRefs(queueRows.map((q) => q.entity_id), now);
   for (const r of axesRows) { const t = tech.get(r.entity_id as string); if (t) (r.evidence as Record<string, unknown>).tech = t; }
-  // 🎯 매수 검토 종목은 투자 아이디어·매수 근거(원 프로젝트 분석·분기 실적·산업 성장·이벤트·리스크)를 함께 저장 — 표시 전용
-  const ideas = await ideaEvidence(queueRows.filter((q) => q.queue === "buy").map((q) => q.entity_id), ents, now);
+  // 🎯 매수 검토 종목(+ 승격 후보 큐 ⏳ 눌림 대기, D66)은 투자 아이디어·매수 근거(원 프로젝트 분석·분기 실적·산업 성장·이벤트·리스크·일봉 지표)를 함께 저장 — 표시·🎯 선별 전용
+  const ideas = await ideaEvidence(queueRows.filter((q) => q.queue === "buy" || R.pick_policy.promote_from.includes(q.queue)).map((q) => q.entity_id), ents, now);
   for (const r of axesRows) {
     const x = ideas.get(r.entity_id as string);
     if (x) Object.assign(r.evidence as Record<string, unknown>, { idea: x.idea, next_event: x.nextEvent });

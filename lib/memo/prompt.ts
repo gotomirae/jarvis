@@ -5,6 +5,8 @@
 import { z } from "zod";
 
 export const NarrativeSchema = z.object({
+  last_week_review: z.string().describe("Ⅱ 지난주 전략 복기 — 지난주 스탠스·매수 검토·시나리오·결정 중 무엇이 맞고 틀렸는지, 그 이유와 교훈 3~5문장. 지난주 메모가 없으면 '지난주 메모 없음'"),
+  scenario_hit: z.enum(["Bull", "Base", "Bear", "판단 어려움"]).describe("지난주 시나리오 중 이번 주 실제 전개에 가장 가까웠던 것 (지난주 메모가 없으면 판단 어려움)"),
   market_view: z.string().describe("Ⅰ 이번 주 증시 해석 — 3~5문장"),
   industry_causes: z.string().describe("Ⅰ-3 산업 상위·하위의 원인을 근거 항목과 연결 — 2~4문장"),
   portfolio_view: z.string().describe("Ⅰ-7 내 포트폴리오 주간 평가 — 1~3문장"),
@@ -18,6 +20,7 @@ export const NarrativeSchema = z.object({
   })),
   wrong_reasons: z.array(z.string()).describe("내가 틀릴 수 있는 이유 3가지"),
   decisions: z.array(z.string()).describe("이번 주말에 결정할 것 3가지"),
+  next_actions: z.array(z.string()).describe("Ⅲ-6 다음 주 실행 계획 3~5개 — 지난주 복기의 교훈을 반영하고, 매수 검토·캘린더·포트폴리오 정책(해외 비중 밴드)과 연결"),
 });
 export type Narrative = z.infer<typeof NarrativeSchema>;
 
@@ -29,7 +32,9 @@ export const SYSTEM = `당신은 개인 투자자의 주간 투자위원회 서�
 3. 매수·매도를 지시하지 않는다. "검토", "확인", "점검"으로 쓴다. 판정은 이미 끝났고 서술은 해석이다.
 4. 시나리오 확률은 probability 정수 필드에만 쓰고, 문장 안에는 쓰지 않는다. 세 시나리오(Bull·Base·Bear) 합계는 100이다.
 5. 표식을 인용할 때는 사실표의 그 항목 이름에 맞게 쓴다(예: "산업 흐름 강도" 표식을 "실적 근거"라고 부르지 않는다). "이번 주 실적(이미 발표)" 그룹은 이미 끝난 일이고, 다음 주 일정은 "캘린더" 그룹뿐이다.
-6. 문장은 짧고 쉬운 말로. 약어(PRI, YoY, CAGR 등)는 풀어서 쓴다.`;
+6. 문장은 짧고 쉬운 말로. 약어(PRI, YoY, CAGR 등)는 풀어서 쓴다.
+7. 지난주 전략 피드백(지난주 스탠스·매수 검토 성과·시나리오·결정할 것)을 반드시 먼저 복기하고, 다음 주 스탠스·실행 계획·시나리오·결정할 것은 그 복기의 교훈을 반영해 쓴다(같은 실수를 반복하지 않도록, 맞은 판단은 이어서). 지난주 메모가 없다고 적혀 있으면 복기는 "지난주 메모 없음"으로 쓴다.
+8. 포트폴리오 정책(해외 투자 비중 밴드, 종목당 상한)을 다음 주 실행 계획에 참고한다. 밴드를 벗어났으면 되돌리는 방향을 "검토"로 쓴다.`;
 
 export function userPrompt(week: string, factText: string, brief: string): string {
   return [

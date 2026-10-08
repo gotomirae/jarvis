@@ -2,6 +2,7 @@
 /**
  * 대시보드 그래프 (recharts, 표시 전용 — D56). 색: 글자 흰색·보조 하늘색(회색 금지), 상승 빨강·하락 파랑, 핵심 금색.
  */
+import { useId } from "react";
 import { Area, AreaChart, Bar, CartesianGrid, Cell, ComposedChart, Line, LineChart, ReferenceArea, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, usePlotArea, useXAxisScale, useYAxisScale, XAxis, YAxis } from "recharts";
 
 const SUB = "#bcd4ff", GRID = "rgba(36,64,122,0.55)", GOLD = "#fcd34d", HOT = "#ff6b6b", COOL = "#60a5fa", GOOD = "#34d399", ARC = "#67e8f9";
@@ -123,23 +124,44 @@ export function MarketPanel({ data, lines, bands, calm, fear, fgColor }: {
   );
 }
 
-/** 섹터 12개월 — 이번 주 구간 표시 */
-export function SectorChart({ data, week, up }: { data: { date: string; close: number }[]; week: { start: string; end: string } | null; up: boolean }) {
+/** 섹터 12개월 — 이번 주 구간 표시 + 바로 아래 MACD (10/8 사용자 요청, 같은 날짜 커서) */
+export function SectorChart({ data, week, up }: { data: { date: string; close: number; macd?: number; signal?: number; hist?: number }[]; week: { start: string; end: string } | null; up: boolean }) {
   const c = up ? HOT : COOL;
   const s = week ? data.find((p) => p.date === week.start) : undefined, e = week ? data.find((p) => p.date === week.end) : undefined;
+  const sync = `sec-${useId()}`;
+  const m = { top: 6, right: 6, bottom: 0, left: 0 };
+  const hasMacd = data.some((p) => typeof p.macd === "number");
   return (
-    <ResponsiveContainer width="100%" height={150}>
-      <AreaChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: -18 }}>
-        <defs><linearGradient id={`sec${up ? "u" : "d"}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={c} stopOpacity={0.35} /><stop offset="100%" stopColor={c} stopOpacity={0.02} /></linearGradient></defs>
-        <XAxis dataKey="date" tick={{ ...tick, fontSize: 10 }} tickFormatter={md} minTickGap={50} />
-        <YAxis tick={{ ...tick, fontSize: 10 }} width={46} domain={["auto", "auto"]} tickFormatter={(v) => fmt(v, 0)} />
-        <Tooltip {...tip} formatter={(v) => [fmt(v, 2), "종가"]} />
-        {week && <ReferenceArea x1={week.start} x2={week.end} fill={GOLD} fillOpacity={0.18} />}
-        <Area type="monotone" dataKey="close" stroke={c} fill={`url(#sec${up ? "u" : "d"})`} strokeWidth={1.8} />
-        {s && <ReferenceDot x={s.date} y={s.close} r={4} fill={ARC} stroke="#fff" label={{ value: "시작", fill: ARC, fontSize: 10, position: "top" }} />}
-        {e && <ReferenceDot x={e.date} y={e.close} r={4} fill={GOLD} stroke="#fff" label={{ value: "끝", fill: GOLD, fontSize: 10, position: "top" }} />}
-      </AreaChart>
-    </ResponsiveContainer>
+    <div>
+      <ResponsiveContainer width="100%" height={150}>
+        <AreaChart data={data} syncId={sync} margin={m}>
+          <defs><linearGradient id={`sec${up ? "u" : "d"}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={c} stopOpacity={0.35} /><stop offset="100%" stopColor={c} stopOpacity={0.02} /></linearGradient></defs>
+          <XAxis dataKey="date" tick={{ ...tick, fontSize: 10 }} tickFormatter={md} minTickGap={50} />
+          <YAxis tick={{ ...tick, fontSize: 10 }} width={50} domain={["auto", "auto"]} tickFormatter={(v) => fmt(v, 0)} />
+          <Tooltip {...tip} formatter={(v, n) => [fmt(v, 2), n === "close" ? "종가" : n]} />
+          {week && <ReferenceArea x1={week.start} x2={week.end} fill={GOLD} fillOpacity={0.18} />}
+          <Area type="monotone" dataKey="close" name="close" stroke={c} fill={`url(#sec${up ? "u" : "d"})`} strokeWidth={1.8} isAnimationActive={false} />
+          {s && <ReferenceDot x={s.date} y={s.close} r={4} fill={ARC} stroke="#fff" label={{ value: "시작", fill: ARC, fontSize: 10, position: "top" }} />}
+          {e && <ReferenceDot x={e.date} y={e.close} r={4} fill={GOLD} stroke="#fff" label={{ value: "끝", fill: GOLD, fontSize: 10, position: "top" }} />}
+        </AreaChart>
+      </ResponsiveContainer>
+      {hasMacd && <>
+        <p className="text-[11px] font-semibold whitespace-nowrap">📊 MACD <span className="text-arc">— MACD</span> <span className="text-gold">— 시그널</span> <span className="text-sub">· 막대 빨강 상승 · 파랑 하락</span></p>
+        <ResponsiveContainer width="100%" height={80}>
+          <ComposedChart data={data} syncId={sync} margin={m}>
+            <XAxis dataKey="date" hide />
+            <YAxis tick={{ ...tick, fontSize: 9 }} width={50} tickFormatter={(v) => fmt(v, 1)} />
+            <Tooltip {...tip} formatter={(v, n) => [fmt(v, 3), n]} />
+            <ReferenceLine y={0} stroke={SUB} />
+            <Bar dataKey="hist" name="차이" isAnimationActive={false}>
+              {data.map((p, i) => <Cell key={i} fill={(p.hist ?? 0) >= 0 ? HOT : COOL} fillOpacity={0.6} />)}
+            </Bar>
+            <Line type="monotone" dataKey="macd" name="MACD" stroke={ARC} dot={false} strokeWidth={1.3} isAnimationActive={false} />
+            <Line type="monotone" dataKey="signal" name="시그널" stroke={GOLD} dot={false} strokeWidth={1.3} isAnimationActive={false} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </>}
+    </div>
   );
 }
 

@@ -18,8 +18,9 @@ export type Strategy = {
   stance: { label: string; value: string; tone: Tone }[];
   snapshot: { label: string; value: string; note: string; tone: Tone }[];
   scenarios: { name: string; prob: number; tone: Tone; when: string; path: string; targets: string; cash: string; play: string }[];
+  plans?: { term: "3m" | "6m"; title: string; period: string; goal: string[]; allocation: string[]; moves: string[]; checkpoints: StrategyEvent[]; success: string[] }[];
   strategies: {
-    id: string; icon: string; title: string; l1: string[]; conviction: string; horizon: string;
+    id: string; term?: "3m" | "6m"; icon: string; title: string; l1: string[]; conviction: string; horizon: string;
     thesis: string[]; precedent: string[]; plan: { when: string; action: string }[]; watch: string[]; exit: string[];
     tickers: { name: string; code: string; market: "KR" | "US" }[];
   }[];

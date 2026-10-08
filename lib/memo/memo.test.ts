@@ -62,10 +62,12 @@ describe("compose", () => {
     week: "2026-W40", range: "09-28 ~ 10-02", asOf: "2026-10-03 09:30", flywheel: "FlyWheel 주간 리포트 도착",
     market: t, flows: null, industries: { kr: t, us: { head: ["a"], rows: [] } }, earnings: ["MU 실적"], macro: [], sage: ["반도체 — 강세 멘토"],
     portfolio: t, contrib: t, regime: "정상", review: [], failDist: t, stance: "정상", calendar: [], industryView: t, noBasis: [], outlooks: [],
-    buyList: t, holdings: ["⚠️ 테슬라"],
+    buyList: t, holdings: ["⚠️ 테슬라"], policy: "🌏 해외 55.0%", prev: null,
   };
   const n: NarrativeText = { market_view: "시장 해석", industry_causes: "원인", portfolio_view: "평가", stance: "스탠스", industry_view: "의견",
-    scenarios: [{ name: "Bull", probability: 30, view: "v", trigger: "t" }], wrong_reasons: ["w1"], decisions: ["d1"] };
+    scenarios: [{ name: "Bull", probability: 30, view: "v", trigger: "t" }], wrong_reasons: ["w1"], decisions: ["d1"],
+    last_week_review: "지난주 복기", scenario_hit: "Base", next_actions: ["실행1"] };
+  const prev = { week: "2026-W40", stance: "정상 · 밴드 [[F002]]", result: "코스피 [[F001]]", buyReview: t, hit: "적중 [[F001]]", scenarios: t, actions: ["메모리 1차"], decisions: ["테슬라 결정"] };
   it("mdTable: 파이프 치환·빈 표", () => {
     expect(mdTable(t)).toEqual(["| 지표 | 주간 |", "|---|---|", "| KOSPI | [[F001]] |", "| A/B | x |"]);
     expect(mdTable({ head: ["a"], rows: [] })).toEqual(["- 자료 없음"]);
@@ -73,12 +75,31 @@ describe("compose", () => {
   it("서술 있음: 고정 순서 + 시나리오·이유·결정", () => {
     const md = composeMemo({ ...d, noBasis: ["여행"], flows: t }, n, null);
     expect(md).toContain("# 🏛️ JARVIS 주간 투자위원회 2026-W40");
-    expect(md.indexOf("## Ⅰ.")).toBeLessThan(md.indexOf("## Ⅱ."));
+    expect(md.indexOf("## Ⅰ.")).toBeLessThan(md.indexOf("## Ⅲ."));
     expect(md).toContain("시장 해석");
     expect(md).toContain("| Bull | 30% | v | t |");
     expect(md).toContain("- w1");
     expect(md).toContain("성장 근거 없음: 여행");
     expect(md).not.toContain("⚠️ 서술");
+  });
+  it("지난주 전략 피드백 (D67): 있음 · 없음 · 서술 없음", () => {
+    const md = composeMemo({ ...d, prev }, n, null);
+    expect(md.indexOf("## Ⅱ. 지난주 전략 피드백")).toBeGreaterThan(md.indexOf("## Ⅰ."));
+    expect(md.indexOf("## Ⅲ. 다음 주 투자 전략")).toBeGreaterThan(md.indexOf("## Ⅱ."));
+    expect(md).toContain("지난주 메모 2026-W40");
+    expect(md).toContain("👉 실제 전개에 가장 가까웠던 시나리오: **Base**");
+    expect(md).toContain("- 메모리 1차\n- 테슬라 결정");
+    expect(md).toContain("### 5. 복기와 교훈\n지난주 복기");
+    expect(md).toContain("### 6. 다음 주 실행 계획 (지난주 피드백 반영)\n- 실행1");
+    expect(md).toContain("🌏 해외 55.0%");
+    expect(composeMemo(d, n, null)).toContain("- 지난주 메모 없음 — 다음 주부터 복기합니다.");
+    const noN = composeMemo({ ...d, prev: { ...prev, stance: "", actions: [], decisions: [] } }, null, null);
+    expect(noN).toContain("### 1. 지난주 기본 스탠스 → 이번 주 결과\n- 자료 없음");
+    expect(noN).toContain("- 지난주 결정할 것 자료 없음");
+    expect(noN).not.toContain("가장 가까웠던 시나리오");
+    expect(briefOf({ ...d, prev })).toContain("[지난주 2026-W40 스탠스] 정상");
+    expect(briefOf({ ...d, prev: { ...prev, actions: [], decisions: [] } })).toContain("[지난주 실행 계획] 없음");
+    expect(briefOf(d)).toContain("[지난주 전략] 지난주 메모 없음");
   });
   it("서술 없음: 경고·표만", () => {
     const md = composeMemo(d, null, null);

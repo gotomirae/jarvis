@@ -5,7 +5,7 @@
 import { unstable_cache } from "next/cache";
 import { loadYaml, taxonomyConfig } from "@/lib/config/load";
 import { cycleOf, type Cycle, type CycleRules } from "@/lib/engine/cycle";
-import { addColumns, attachQuarterly, monthReturn, monthsAgo, periodReturn, pickSeries, rebaseMerge, weekWindow, type Bar, type PickPoint, type Point } from "@/lib/engine/series";
+import { addColumns, attachQuarterly, indicatorSeries, monthReturn, monthsAgo, periodReturn, pickSeries, rebaseMerge, weekWindow, type Bar, type PickPoint, type Point } from "@/lib/engine/series";
 import { fearGreed, type FgPoint } from "@/lib/ingest/feargreed";
 import { read as heimdallr } from "@/lib/ingest/heimdallr";
 import { read as hermes } from "@/lib/ingest/hermescall";
@@ -64,11 +64,12 @@ export async function marketCharts(): Promise<MarketCharts> {
 
 export type SectorChart = {
   code: string; name: string; proxy: string; market: "KR" | "US";
-  points: { date: string; close: number }[]; week: ReturnType<typeof weekWindow>; ret12m: number | null; cycle: Cycle | null;
+  points: { date: string; close: number; macd: number; signal: number; hist: number }[]; week: ReturnType<typeof weekWindow>; ret12m: number | null; cycle: Cycle | null;
 };
 
 export async function sectorCharts(): Promise<SectorChart[]> {
   const C = dashboardConfig();
+  const R = rules();
   const from = monthsAgo(kstDate(), C.lookback_months);
   return Promise.all(taxonomyConfig().l1.map(async (l) => {
     const p = C.sector_proxies[l.code];
@@ -76,7 +77,8 @@ export async function sectorCharts(): Promise<SectorChart[]> {
     const pts = xs.filter((b) => b.date >= from);
     return {
       code: l.code, name: l.name, proxy: p?.name ?? "대표 ETF 없음", market: p?.source === "naver" ? "KR" : "US",
-      points: pts.map((b) => ({ date: b.date, close: b.close })), week: weekWindow(pts), ret12m: periodReturn(xs, from),
+      // MACD 는 1년 이전 봉까지 넣어 예열한 뒤 기간 안만 (10/8 사용자 요청 — 주가 바로 아래 MACD)
+      points: indicatorSeries(xs, from, R.entry_core.M2_macd_pre_cross.params, R.tech_display.rsi_period).map((p) => ({ date: p.date, close: p.close, macd: p.macd, signal: p.signal, hist: p.hist })), week: weekWindow(pts), ret12m: periodReturn(xs, from),
       cycle: cycleOf(xs.map((b) => b.close), C.cycle),
     } as SectorChart;
   }));

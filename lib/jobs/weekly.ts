@@ -15,7 +15,9 @@ import { exportPerformance } from "@/lib/ingest/snowball";
 import { createNotionPage } from "@/lib/ingest/notion";
 import { dashboardButtons, rows as btnRows } from "@/lib/links";
 import { llmJson } from "@/lib/llm/router";
-import { briefOf, composeMemo, mdToNotion, type MemoData, type NarrativeText, type Table } from "@/lib/memo/compose";
+import { briefOf, composeMemo, mdToNotion, type MemoData, type NarrativeText, type PrevReview, type Table } from "@/lib/memo/compose";
+import { parsePrevPlan, scoreBuys } from "@/lib/memo/prev-plan";
+import { regionLine, regionMix } from "@/lib/engine/portfolio-policy";
 import { factBook, factLines, type FactBook } from "@/lib/memo/fact-table";
 import { checkAll, checkProbabilities, render } from "@/lib/memo/grounding";
 import { NarrativeSchema, SYSTEM, userPrompt, type Narrative } from "@/lib/memo/prompt";
@@ -60,9 +62,11 @@ export async function collectMemo(now = new Date()): Promise<{ data: MemoData; f
 
   // Ⅰ-1 시장
   const market: Table = { head: ["지표", "주간", "수준"], rows: [] };
+  const mret = new Map<string, number | null>();   // 지난주 전략 채점용 기준 지수 주간 수익률 (D67)
   for (const m of W.market.returns) {
     const b = m.source === "naver" ? await naverDaily(m.sym, 30) : await chart(m.sym, "1mo").then((r) => (r.ok ? { ok: true as const, data: r.data.closes } : r));
     const bars = b.ok ? b.data : [];
+    mret.set(m.label, weekRet(bars, start, end));
     market.rows.push([m.label, F("시장", `${m.label} 주간 수익률`, weekRet(bars, start, end), "pct_signed"), F("시장", `${m.label} 주말 종가`, lastOn(bars, end)?.close ?? null, "num", 2)]);
   }
   for (const m of W.market.levels) {
@@ -249,6 +253,38 @@ export async function collectMemo(now = new Date()): Promise<{ data: MemoData; f
   const holdAll = [...hold.values()].sort((x, y) => Number(y.includes("허용")) - Number(x.includes("허용")) || Number(y.startsWith("💰")) - Number(x.startsWith("💰")));
   const holdList = holdAll.length > 12 ? [...holdAll.slice(0, 12), `외 ${F("보유 대응", "위 목록에 보이지 않은 나머지 보유 경고 수(전체가 아님)", holdAll.length - 12, "int")}건 — 대시보드 아이언맨의 포트폴리오 참고`] : holdAll;
 
+  // Ⅱ 지난주 전략 피드백 (사용자 지정 10/8, D67) — 지난주 메모의 "다음 주 투자 전략"을 이번 주 숫자로 채점
+  const prevMemo = await dbSelect<{ week: string; body_md: string | null }>("weekly_memos", `select=week,body_md&week=lt.${week}&order=week.desc&limit=1`);
+  const pm = prevMemo.ok ? prevMemo.data[0] : undefined;
+  const plan = pm?.body_md ? parsePrevPlan(pm.week, pm.body_md) : null;
+  let prev: PrevReview | null = null;
+  if (plan) {
+    const KR_BENCH = "KOSPI", US_BENCH = "S&P 500";
+    const sc = scoreBuys(plan.buy, (name) => {
+      const id = ents.resolveName(name);
+      const us = id?.startsWith("US:") ?? false;
+      return { ret: id ? kr5.get(id) ?? us5.get(id) ?? null : null, bench: mret.get(us ? US_BENCH : KR_BENCH) ?? null, benchName: us ? US_BENCH : KR_BENCH };
+    });
+    const G = "지난주 전략";
+    prev = {
+      week: plan.week,
+      stance: plan.stance ? txt(fb, G, "지난주 기본 스탠스", plan.stance) : "",
+      result: `이번 주 ${KR_BENCH} ${F(G, `이번 주 ${KR_BENCH} 수익률(채점 기준)`, mret.get(KR_BENCH) ?? null, "pct_signed")} · ${US_BENCH} ${F(G, `이번 주 ${US_BENCH} 수익률(채점 기준)`, mret.get(US_BENCH) ?? null, "pct_signed")} · 시장 국면 ${regime}`,
+      buyReview: { head: ["종목", "지난주 단계", "이번 주 수익률", "기준 지수", "기준 지수 수익률", "초과", "결과"], rows: sc.rows.map((r) => [
+        nmx(r.name), txt(fb, G, "지난주 단계", r.stage), F(G, `${r.name} 이번 주 수익률`, r.ret, "pct_signed"), r.benchName, F(G, `${r.name} 기준 지수 수익률`, r.bench, "pct_signed"),
+        F(G, `${r.name} 기준 지수 대비 초과`, r.excess, "pctp"), r.hit === null ? "➖ 자료 없음" : r.hit ? "✅ 시장 이김" : "❌ 시장에 짐"]) },
+      hit: `👉 지난주 매수 검토 ${F(G, "채점된 지난주 매수 검토 종목 수", sc.scored, "int")}개 중 ${F(G, "기준 지수를 이긴 종목 수", sc.hits, "int")}개가 기준 지수를 이김`,
+      scenarios: { head: ["시나리오", "지난주 확률", "지난주 예상 전개", "확인하기로 한 트리거"], rows: plan.scenarios.map((x) => [x.name, F(G, `지난주 ${x.name} 확률`, x.probability, "pct", 0), txt(fb, G, `지난주 ${x.name} 전개`, x.view), txt(fb, G, `지난주 ${x.name} 트리거`, x.trigger)]) },
+      actions: plan.actions.map((x) => txt(fb, G, "지난주 실행 계획", x)),
+      decisions: plan.decisions.map((x) => txt(fb, G, "지난주 결정할 것", x)),
+    };
+  }
+  // 포트폴리오 정책 — 해외 비중 50~60% · 종목 상한 (SnowBall D-71 과 같은 값, 표시·전략 참고)
+  const PP = R.portfolio_policy;
+  const mix = regionMix(holdings.positions.map((p) => ({ market: p.market, weight: p.weight })), PP);
+  const pc = (x: number) => `${Math.round(x * 100)}%`;
+  const policy = `📐 포트폴리오 정책: ${txt(fb, "포트폴리오 정책", "해외 비중 현황", regionLine(mix, PP))} · 종목 상한 ${txt(fb, "포트폴리오 정책", "종목당 상한", `글로벌 시총 20위 ${pc(PP.tier_caps.global_top20)} · 미국 ${pc(PP.tier_caps.us)} · 국내 ${pc(PP.tier_caps.kr)}`)}`;
+
   // FlyWheel 주간 리포트 (노션)
   const fw = await findFlywheelReport(week, start);
   const flywheel = fw ? `FlyWheel 주간 리포트 도착 (${fw})` : "FlyWheel 주간 리포트 미도착";
@@ -256,7 +292,7 @@ export async function collectMemo(now = new Date()): Promise<{ data: MemoData; f
   const data: MemoData = {
     week, range: `${F("기간", "시작일", start, "text")} ~ ${F("기간", "종료일", end, "text")}`, asOf: kstString(now), flywheel,
     market, flows, industries, earnings: earnings.map((e) => txt(fb, "이번 주 실적(이미 발표)", "이번 주 실적 항목", e)), macro, sage,
-    portfolio, contrib, regime, review, failDist, stance, calendar, industryView, noBasis, outlooks, buyList, holdings: holdList,
+    portfolio, contrib, regime, review, failDist, stance, calendar, industryView, noBasis, outlooks, buyList, holdings: holdList, policy, prev,
   };
   const krBaskets = [...krBasket.entries()].filter(([, b]) => b.w.length >= W.basket_min_members).map(([l1, b]) => ({ l1, w: mean(b.w), m: mean(b.m) }));
   return { data, fb, flywheelFound: !!fw, krBaskets, heatDate: heatLast.ok ? heatLast.data[0]?.date ?? null : null };
@@ -291,14 +327,15 @@ async function narrate(data: MemoData, fb: FactBook, now: Date): Promise<{ n: Na
     usd += r.data.usd;
     const x = r.data.data;
     const sc = ["Bull", "Base", "Bear"].map((nm) => x.scenarios.find((s) => s.name === nm)).filter((s): s is Narrative["scenarios"][number] => !!s);
-    const texts = [x.market_view, x.industry_causes, x.portfolio_view, x.stance, x.industry_view, ...sc.flatMap((s) => [s.view, s.trigger]), ...x.wrong_reasons, ...x.decisions];
+    const texts = [x.last_week_review, x.market_view, x.industry_causes, x.portfolio_view, x.stance, x.industry_view, ...sc.flatMap((s) => [s.view, s.trigger]), ...x.wrong_reasons, ...x.decisions, ...x.next_actions];
     const g = checkAll(texts, ids, allow);
     const probs = sc.length === 3 ? checkProbabilities(sc.map((s) => s.probability)) : ["시나리오 3개가 아님"];
-    const violations = [...g.violations, ...probs, ...(x.wrong_reasons.length < 3 ? ["틀릴 수 있는 이유 3개 미만"] : []), ...(x.decisions.length < 3 ? ["결정할 것 3개 미만"] : [])];
+    const violations = [...g.violations, ...probs, ...(x.wrong_reasons.length < 3 ? ["틀릴 수 있는 이유 3개 미만"] : []), ...(x.decisions.length < 3 ? ["결정할 것 3개 미만"] : []), ...(x.next_actions.length < 3 ? ["다음 주 실행 계획 3개 미만"] : [])];
     if (!violations.length) {
       const rd = (s: string) => render(s, fb.display);
       return { n: { market_view: rd(x.market_view), industry_causes: rd(x.industry_causes), portfolio_view: rd(x.portfolio_view), stance: rd(x.stance), industry_view: rd(x.industry_view),
-        scenarios: sc.map((s) => ({ name: s.name, probability: s.probability, view: rd(s.view), trigger: rd(s.trigger) })), wrong_reasons: x.wrong_reasons.slice(0, 3).map(rd), decisions: x.decisions.slice(0, 3).map(rd) }, note: null, attempts: attempt, usd, violations: [] };
+        scenarios: sc.map((s) => ({ name: s.name, probability: s.probability, view: rd(s.view), trigger: rd(s.trigger) })), wrong_reasons: x.wrong_reasons.slice(0, 3).map(rd), decisions: x.decisions.slice(0, 3).map(rd),
+        last_week_review: rd(x.last_week_review), scenario_hit: x.scenario_hit, next_actions: x.next_actions.slice(0, 5).map(rd) }, note: null, attempts: attempt, usd, violations: [] };
     }
     last = violations;
     user = `${user}\n\n## 직전 응답의 규칙 위반 (모두 고쳐서 다시)\n${violations.slice(0, 20).map((v) => `- ${v}`).join("\n")}`;

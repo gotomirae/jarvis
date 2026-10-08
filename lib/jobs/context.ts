@@ -2,6 +2,7 @@
  * 배치·라우트 공용 로더 (서버 전용). JARVIS DB 와 원천 어댑터에서 판정 입력을 모은다.
  * 원천 실패는 빈 값으로 견디고(불변 규칙 6) source_health 에 남긴다.
  */
+import type { PortfolioPolicy } from "@/lib/engine/portfolio-policy";
 import { loadYaml, taxonomyConfig } from "@/lib/config/load";
 import { dbSelectAll } from "@/lib/db";
 import { krCode, marketOf, usSymbol } from "@/lib/entities";
@@ -43,6 +44,7 @@ export type Rules = {
   feedback: FeedbackRules;
   buy_timing: TimingRules;
   pick_policy: PolicyRules & { top_max: number };
+  portfolio_policy: PortfolioPolicy;
   weekly: {
     market: { returns: { sym: string; label: string; source?: "naver" | "yahoo" }[]; levels: { sym: string; label: string }[] };
     basket_min_market_cap_krw: number; basket_min_members: number; cash_band: { normal: string; risk_off: string };

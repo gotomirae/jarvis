@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { PathChart } from "@/app/_components/charts";
 import { Card, Empty, Footer, Guide, Nav, Page, Section } from "@/app/_components/ui";
 import { taxonomyConfig } from "@/lib/config/load";
+import { rules } from "@/lib/jobs/context";
 import { loadStrategy, precedentCharts, strategyMonths, type StrategyEvent } from "@/lib/dashboard/strategy";
 import { kstDate } from "@/lib/time";
 
@@ -31,6 +32,10 @@ export default async function StrategyPage({ searchParams }: { searchParams: Pro
   const charts = await precedentCharts(s);
   const l1 = new Map(taxonomyConfig().l1.map((x) => [x.code, x.name]));
   const nowYm = kstDate().slice(0, 7);
+  const PP = rules().portfolio_policy;
+  const pc = (x: number) => `${Math.round(x * 100)}%`;
+  const TERM = { "3m": "⏱️ 3개월", "6m": "🗓️ 6개월" } as const;
+  const groups = s.plans?.length ? (["3m", "6m"] as const).map((k) => ({ k, xs: s.strategies.filter((x) => (x.term ?? "6m") === k) })).filter((g) => g.xs.length) : [{ k: null, xs: s.strategies }];
 
   return (
     <Page wide>
@@ -88,10 +93,35 @@ export default async function StrategyPage({ searchParams }: { searchParams: Pro
         </div>
       </Section>
 
+      <Section title="🗺️ 3개월 · 6개월 투자 전략" count={s.plans?.length ?? 0}>
+        <Guide items={[<>📐 포트폴리오 정책 — 🌏 <b className="text-gold">해외 {pc(PP.overseas_band.low)}~{pc(PP.overseas_band.high)}</b> 유지 · ⚖️ 종목 상한 <b className="text-gold">글로벌 시총 20위 {pc(PP.tier_caps.global_top20)}</b> · 미국 {pc(PP.tier_caps.us)} · 국내 {pc(PP.tier_caps.kr)}</>, "3개월 계획의 성공 · 실패 기준이 6개월 계획을 계속할지 정한다"]} />
+        {!s.plans?.length ? <Empty text="이 달 호에는 기간별 계획이 없습니다." /> : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {s.plans.map((p) => (
+              <div key={p.term} className={`glass rounded-xl border-t-4 ${p.term === "3m" ? "border-arc/70" : "border-gold/70"} p-4 space-y-2 text-sm`}>
+                <p className={`text-xs font-bold ${p.term === "3m" ? "text-arc" : "text-gold"}`}>{TERM[p.term]} · {p.period}</p>
+                <p className="text-base font-extrabold leading-snug">{p.title}</p>
+                <Block title="🎯 목표">{p.goal.map((x, i) => <li key={i}>{x}</li>)}</Block>
+                <Block title="💼 비중">{p.allocation.map((x, i) => <li key={i}>{x}</li>)}</Block>
+                <Block title="🪜 핵심 행동">{p.moves.map((x, i) => <li key={i}>{x}</li>)}</Block>
+                <div>
+                  <p className="font-bold mb-1">📍 점검일</p>
+                  <ul className="flex flex-wrap gap-1.5">{p.checkpoints.map((c, i) => <li key={i} className="rounded-full border border-line bg-panel2/70 px-2 py-0.5 text-xs"><span className="text-gold tabular-nums">{c.date}</span> {c.title}</li>)}</ul>
+                </div>
+                <Block title="🏁 성공 · 실패 기준">{p.success.map((x, i) => <li key={i} className={x.startsWith("❌") ? "text-hot" : "text-good"}>{x}</li>)}</Block>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
       <Section title="🎯 핵심 투자 전략" count={s.strategies.length}>
         <Guide items={["💡 왜 지금 → 📜 과거엔 어땠나 → 🪜 언제 · 얼마나 → 🚪 언제 손 떼나", "분할 회차는 '조건이 맞을 때만' 실행 — 날짜가 와도 조건이 안 맞으면 건너뜀", <>종목은 예시 — 실제 매수 판단은 <a className="link" href="/">🏠 오늘</a> 의 ⏱️ 타이밍 · <a className="link" href="/entry">🚦 진입 보드</a> 로</>]} />
-        {s.strategies.map((x, n) => (
-          <Card key={x.id} tone={n === 0 ? "gold" : "muted"}>
+        {groups.map((g) => (
+          <div key={g.k ?? "all"} className="space-y-3">
+            {g.k && <p className={`text-base font-bold ${g.k === "3m" ? "text-arc" : "text-gold"}`}>{TERM[g.k]} 전략 · {g.xs.length}개</p>}
+          {g.xs.map((x) => { const n = s.strategies.indexOf(x); return (
+            <Card key={x.id} tone={n === 0 ? "gold" : "muted"}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <p className="text-lg font-bold"><span className="mr-2 rounded-md bg-gold px-2 py-0.5 text-ink text-sm align-middle">{n + 1}</span>{x.icon} {x.title}</p>
               <div className="flex flex-wrap gap-1.5 text-xs">
@@ -122,6 +152,8 @@ export default async function StrategyPage({ searchParams }: { searchParams: Pro
               {x.tickers.map((t) => <span key={t.code} className="rounded-full border border-arc/50 bg-arc/10 px-2.5 py-1 text-arc">{t.market === "US" ? "🇺🇸" : "🇰🇷"} {t.name} <span className="text-sub">{t.code}</span></span>)}
             </div>
           </Card>
+          ); })}
+          </div>
         ))}
       </Section>
 

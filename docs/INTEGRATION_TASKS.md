@@ -336,3 +336,14 @@
 - (선택·권장) 무인 운영용 장기 토큰: 사용자가 `claude setup-token`(구독 기반 장기 토큰)을 만들어 `.env.txt` 의 `CLAUDE_CODE_OAUTH_TOKEN` 에 두면 `subscription_cli_env()` 가 **그 변수만 통과**(API 키·Bedrock 등 과금 경로는 계속 차단)하고 로그인 검사도 그 경우를 허용한다. 값은 출력·커밋하지 않는다.
 - 이번 **A1(유니트론텍 🧠)** 은 로그인 회복 뒤 `pending` 으로 되돌려 재실행한다.
 - J 변경분(현재 미커밋: AGENTS·PRD·traps·JARVIS.md·WORKFLOW.md·bridge.py·테스트 + ADR 033·세션 기록 2개)과 J-5 를 테스트 후 커밋·push.
+
+## K. SnowBall Heritage — 종목 등급별 동적 비중 상한 · 해외 비중 50~60% (D67 · SnowBall D-71, 2026-10-08)
+
+> 사용자 요청으로 **이 세션에서 SnowBall 저장소를 직접 수정**했다(이 문서는 기록용). SnowBall 쪽 남은 일만 아래에 둔다.
+
+- [x] `lib/rules/position-tiers.ts`(+테스트): 글로벌 시총 20위 25% · 미국 10% · 국내 10% · 기타 10%, `min(등급 상한, 규칙 hard_cap)`. 포트폴리오 · 종목 상세 · 전략 탭 · `alerts` 잡(factor_log → JARVIS 계약 RPC) 반영
+- [x] 해외 비중 밴드 50~60%(주식 포트폴리오 기준): 포트폴리오 탭 상단 표시 + `alerts` 잡 `allocation_drift` 알림
+- [x] SnowBall 커밋·push (36bc288, 2026-10-08)
+- [ ] 다음 `slot` 실행(07:00·16:00) 뒤 JARVIS 🦾 포트폴리오의 "허용 비중"이 새 상한으로 바뀌었는지 확인
+- [ ] (선택) 기본 base 10% 에서는 글로벌 20위도 계수 최대 ≈ 20.6% — 25% 까지 쓰려면 전략 탭 › 동적 리스크 규칙의 base 를 올린다
+- [ ] 글로벌 20위 목록(`GLOBAL_TOP20`, 기준일 2026-10-08)은 분기마다 갱신

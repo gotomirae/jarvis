@@ -1,6 +1,8 @@
 import { Bad, Card, Empty, Footer, Guide, Hi, Nav, Section } from "@/app/_components/ui";
 import { taxonomyConfig } from "@/lib/config/load";
 import { pLevel } from "@/lib/engine/explain";
+import { regionLine, regionMix } from "@/lib/engine/portfolio-policy";
+import { rules } from "@/lib/jobs/context";
 import { fmtWeight } from "@/lib/format";
 import { yesNo } from "@/lib/labels";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -45,6 +47,10 @@ export default async function Portfolio() {
   const tx = taxonomyConfig();
   const name = (c: string) => tx.l1.find((r) => r.code === c)?.name ?? c;
   const th = "py-1 pr-2 font-normal";
+  // 포트폴리오 정책(사용자 지정 10/8, SnowBall D-71): 종목 상한 글로벌 시총 20위 25% · 미국 10% · 국내 10%, 해외 비중 50~60%
+  const PP = rules().portfolio_policy;
+  const mix = regionMix(positions.map((p) => ({ market: p.market, weight: p.weight })), PP);
+  const pc = (x: number) => `${Math.round(x * 100)}%`;
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-4 space-y-8">
@@ -60,6 +66,11 @@ export default async function Portfolio() {
         ))}
       </Section>
       <Section title="🦾 아이언맨의 포트폴리오" count={positions.length}>
+        <div className={`glass rounded-xl border-l-4 ${mix?.status === "within" ? "border-l-good" : "border-l-hot"} px-4 py-3 text-sm space-y-1`}>
+          <p className="font-bold">📐 포트폴리오 정책</p>
+          <p className={mix?.status === "within" ? "text-good font-semibold" : "text-hot font-semibold"}>{regionLine(mix, PP)}</p>
+          <p>⚖️ 종목당 동적 허용 상한 — <b className="text-gold">글로벌 시총 20위 {pc(PP.tier_caps.global_top20)}</b> · 미국 {pc(PP.tier_caps.us)} · 국내 {pc(PP.tier_caps.kr)} <span className="text-sub">(주식 포트폴리오 대비 · SnowBall이 계산한 값을 아래 표에 표시)</span></p>
+        </div>
         <Guide items={["❄️ SnowBall 장부를 읽어서 표시 (편집 · 매매 입력은 SnowBall)", <>🔴 비중이 <b className="text-hot">허용 비중을 넘으면 빨간색</b></>, "⚠️ 최근 7일 보유 경고가 있으면 맨 오른쪽 표시"]} />
         <details className="glass rounded-lg px-3 py-2 text-sm">
           <summary className="cursor-pointer text-arc whitespace-nowrap">📖 열 설명 보기</summary>

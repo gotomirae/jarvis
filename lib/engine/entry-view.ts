@@ -5,7 +5,7 @@
 import type { Conds, Tag } from "./entry";
 
 export const TAG_NAME: Record<Tag, string> = { PB: "눌림", SW: "횡보", CU: "캐치업", PEAD_PB: "실적 돌파 후 눌림" };
-export const COND_NAME = { m1: "① 실적 증가·가속, 주가 미반영", m2: "② MACD 상향 교차 직전", m3: "③ 산업 고성장", m4: "④ 6개월 내 상승 이벤트", m5: "⑤ 매수 수급 2일 연속" } as const;
+export const COND_NAME = { m1: "① 실적 가속 또는 영익 턴어라운드, 주가 미반영", m2: "② MACD 상향 교차 직전", m3: "③ 산업 고성장", m4: "④ 6개월 내 상승 이벤트", m5: "⑤ 매수 수급 2일 연속" } as const;
 
 type D = Record<string, unknown> | null | undefined;
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -16,8 +16,15 @@ export function m1Text(d: D): string {
   if (!d) return "";
   const out: string[] = [];
   const rev = pair(d.rev_yoy), op = pair(d.op_yoy);
-  if (rev) out.push(`매출 전년 대비 ${sg(rev[1])}→${sg(rev[0])}%`);
-  if (op) out.push(`${d.profit_basis === "eps" ? "주당순이익" : "영업이익"} 전년 대비 ${sg(op[1])}→${sg(op[0])}%`);
+  const profit = d.profit_basis === "eps" ? "주당순이익" : "영업이익";
+  if (d.earnings_path === "turnaround") {   // 원 프로젝트가 영업이익 턴어라운드 경로로 통과시킨 경우(D68, INTEGRATION_TASKS L)
+    out.push(`${profit} 흑자 전환(턴어라운드)`);
+    const r0 = rev?.[0] ?? (Array.isArray(d.rev_yoy) ? num(d.rev_yoy[0]) : null);
+    if (r0 !== null) out.push(`매출 전년 대비 ${sg(r0)}%`);
+  } else {
+    if (rev) out.push(`매출 전년 대비 ${sg(rev[1])}→${sg(rev[0])}%`);
+    if (op) out.push(`${profit} 전년 대비 ${sg(op[1])}→${sg(op[0])}%`);
+  }
   const pe = num(d.drawdown_from_post_earnings_high), hi = num(d.drawdown_from_52w_high);
   if (d.price_state === "PB") {
     if (pe !== null && pe <= -10) out.push(`실적 발표 후 고점 대비 ${sg(pe)}%`);

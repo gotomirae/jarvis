@@ -44,6 +44,12 @@ describe("매수 검토 추천 — 순위·근거·카드", () => {
     ]);
   });
 
+  it("① 영업이익 턴어라운드 (D68)", () => {
+    const g = { ...idea.growth!, rev_yoy: 21.4, op_yoy: null, turnaround: true };
+    expect(buyReasons({ idea: { ...idea, growth: g, industry: null }, consensus: [], grade: "△", score: 61 })).toEqual(["① 영업이익 턴어라운드: 매출 +21% · 영업이익 흑자 전환 (2026Q2, 전년 대비) · Heimdallr △ 61점"]);
+    expect(buyReasons({ idea: { ...idea, growth: { ...g, rev_yoy: null, op_yoy: 5, op_label: "주당순이익" }, industry: null }, consensus: [] })).toEqual(["① 영업이익 턴어라운드: 주당순이익 흑자 전환 (2026Q2, 전년 대비)"]);
+  });
+
   it("근거 일부만 있을 때", () => {
     const g = { ...idea.growth!, op_yoy: null, prev_rev_yoy: 200, prev_op_yoy: null, prev_fiscal: "2026Q1" };
     expect(buyReasons({ idea: { ...idea, growth: g, industry: null }, consensus: [] })).toEqual(["① 실적: 매출 +159% (2026Q2, 전년 대비) ← 직전 2026Q1 +200%"]);

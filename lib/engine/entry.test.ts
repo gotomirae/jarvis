@@ -158,6 +158,10 @@ describe("표시 (entry-view)", () => {
     expect(m1Text({ price_state: "SW", range_20d: 9 })).toBe("20일 가격 범위 9.0%");
     expect(m1Text({ price_state: "SW" })).toBe("");
     expect(m1Text({ rev_yoy: [1] })).toBe("");
+    // 원 프로젝트가 영업이익 턴어라운드로 통과시킨 경우(D68)
+    expect(m1Text({ earnings_path: "turnaround", rev_yoy: [14.2, -3], op_yoy: [null, null], price_state: "SW", range_20d_pct: 8 })).toBe("영업이익 흑자 전환(턴어라운드) · 매출 전년 대비 +14.2% · 20일 가격 범위 8.0%");
+    expect(m1Text({ earnings_path: "turnaround", rev_yoy: [6.5, null], profit_basis: "eps" })).toBe("주당순이익 흑자 전환(턴어라운드) · 매출 전년 대비 +6.5%");
+    expect(m1Text({ earnings_path: "turnaround" })).toBe("영업이익 흑자 전환(턴어라운드)");
   });
   it("M2·M5 줄", () => {
     expect(m2Text(null)).toBe("");
@@ -177,7 +181,7 @@ describe("표시 (entry-view)", () => {
     const c: Conds = { m1: { pass: true, reason: null }, m2: { pass: false, reason: "MACD 교차 직전 아님" }, m3: { pass: true, reason: null }, m4: { pass: true, reason: null }, m5: { pass: false, reason: null } };
     const l = condLines(c, { m1: { rev_yoy: [20, 10] }, m2: null, m5: null, m3_lines: ["①실적 반도체 +24%"], m4_events: [{ when: "11/20", title: "NVDA 실적", source: "HermesCall" }] });
     expect(l).toEqual([
-      "✅ ① 실적 증가·가속, 주가 미반영 — 매출 전년 대비 +10.0→+20.0%",
+      "✅ ① 실적 가속 또는 영익 턴어라운드, 주가 미반영 — 매출 전년 대비 +10.0→+20.0%",
       "❌ ② MACD 상향 교차 직전 — MACD 교차 직전 아님",
       "✅ ③ 산업 고성장 — ①실적 반도체 +24%",
       "✅ ④ 6개월 내 상승 이벤트 — 11/20 NVDA 실적 (HermesCall)",

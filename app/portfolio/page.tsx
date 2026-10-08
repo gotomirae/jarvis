@@ -79,7 +79,7 @@ export default async function Portfolio() {
             <li>🔥 <b className="text-gold">과열 점수</b> — SnowBall 계산 0~100, 76 이상이면 익절 검토</li>
             <li>📣 <b className="text-gold">산업 · 종목 이야기</b> — FlyWheel 산업 흐름 · 위키 언급, Sage 멘토 합의</li>
             <li>⚡ <b className="text-gold">실적 촉매</b> — HermesCall 미국 실적 수혜 7 이상 · 가이던스 · 서프라이즈</li>
-            <li>📊 <b className="text-gold">실적 숫자</b> — Heimdallr 게이트 통과 + 점수 75 이상 (미국: 성장 가속 · 이익률 개선)</li>
+            <li>📊 <b className="text-gold">실적 숫자</b> — Heimdallr 게이트 통과 + 점수 75 이상 (미국: 성장 가속 · 이익률 개선) <b className="text-good">또는</b> 영업이익 흑자 전환 + 매출 증가(턴어라운드)</li>
             <li>🎚️ <b className="text-gold">주가 반영도</b> — 0~100, 낮을수록 실적이 주가에 덜 반영 (40 미만 덜 · 65 이상 많이)</li>
           </ul>
         </details>

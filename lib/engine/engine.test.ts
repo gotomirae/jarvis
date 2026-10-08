@@ -157,6 +157,29 @@ describe("axes · queues · regime", () => {
     expect(computeAxes({ ...us, usFilters: null, priUsLite: undefined }, [], A, now)).toMatchObject({ c: false, f: false, p: null });
   });
 
+  it("F 두 번째 경로: 영업이익 턴어라운드 (D68)", () => {
+    const turn = { pass: true, quarter: "2026Q2", basis: "op" as const, rev_yoy: 12, why: null };
+    const off = { ...kr, screen: { gate_passed: false, score_final: 60, pri: 20, grade: null } };
+    expect(computeAxes(off, [], A, now).f).toBe(false);
+    const t = computeAxes({ ...off, turnaround: turn }, [], A, now);
+    expect(t).toMatchObject({ f: true, families: ["heimdallr"] });
+    expect(t.evidence.F).toEqual({ gate_passed: false, score: 60, grade: null, path: "turnaround", turnaround: { quarter: "2026Q2", basis: "op", rev_yoy: 12 } });
+    // 증가·가속이 이미 통과면 path 는 growth_accel
+    expect((computeAxes({ ...kr, turnaround: turn }, [], A, now).evidence.F as { path: string }).path).toBe("growth_accel");
+    // 턴어라운드 미통과는 근거만 남기고 F 꺼짐
+    const fail = computeAxes({ ...off, turnaround: { ...turn, pass: false, why: "매출 감소" } }, [], A, now);
+    expect(fail.f).toBe(false);
+    expect((fail.evidence.F as { path: unknown }).path).toBeNull();
+    // 규칙에서 끄면 쓰지 않는다
+    expect(computeAxes({ ...off, turnaround: turn }, [], { ...A, F: { ...A.F, turnaround: false } }, now).f).toBe(false);
+    // 미국 · 스크린 없는 국내
+    const us: EntityCtx = { id: "US:X", market: "US", l1_codes: [], usFilters: ["F2"], turnaround: { ...turn, basis: "eps" } };
+    expect(computeAxes(us, [], A, now)).toMatchObject({ f: true, families: ["hermescall"] });
+    expect(computeAxes({ ...kr, screen: null, turnaround: turn }, [], A, now).evidence.F).toMatchObject({ path: "turnaround" });
+    // rules.yaml 에서 켜져 있다
+    expect(A.F.turnaround).toBe(true);
+  });
+
   it("범위가 정해진 L2 흐름(음식료)은 그 L2 종목에만 붙는다", () => {
     const food: Signal = { source: "flywheel", source_ref: "p", kind: "industry_narrative", entity_id: null, l1_codes: ["2d"], direction: 1, strength: 10, observed_at: "2026-09-30T00:00:00Z", market_date: null, expires_at: null, evidence: { l2: "음식료" }, dedupe_key: "fw:narr:p" };
     const bag: EntityCtx = { id: "KR:194370", market: "KR", l1_codes: ["2d"], l2Scope: { scoped: ["음식료"], member: [] } };
@@ -421,6 +444,12 @@ describe("explain — 결론·근거 문장", () => {
     expect(us.conclusion).toBe("실적 발표 30일 전 선행 관찰 — 이야기·촉매는 켜졌고 실적 숫자는 아직 확인 전");
     expect(us.reasons).toEqual(["실적 숫자: 가이던스 상향 · X9", "실적 촉매: 수혜 강도 7/10"]);
     expect(explain({ queue: "radar", market: "US", p: null, evidence: { F: { us_filters: ["F3", "F4"] } } }).reasons[0]).toBe("실적 숫자: 성장 가속 · 영업이익률 개선");
+    // 영업이익 턴어라운드 경로(D68)
+    expect(explain({ queue: "buy", market: "KR", p: 20, evidence: { F: { gate_passed: false, score: 50, grade: null, path: "turnaround", turnaround: { quarter: "2026Q2", basis: "op", rev_yoy: 12.4 } } } }).reasons[0])
+      .toBe("실적 숫자: 영업이익 흑자 전환 · 매출 +12% (2026Q2, 전년 대비) — 턴어라운드");
+    expect(explain({ queue: "buy", market: "US", p: 20, evidence: { F: { us_filters: [], path: "turnaround", turnaround: { quarter: null, basis: "eps", rev_yoy: null } } } }).reasons[0])
+      .toBe("실적 숫자: 주당순이익 흑자 전환 — 턴어라운드");
+    expect(explain({ queue: "buy", market: "KR", p: 20, evidence: { F: { gate_passed: true, score: 80, grade: "★", path: "growth_accel" } } }).reasons[0]).toBe("실적 숫자: Heimdallr ★ · 점수 80 · 게이트 통과");
     expect(explain({ queue: "radar", market: "US", p: null, evidence: {} }).conclusion).toContain("? 일 전".replace(" ", ""));
     expect(explain({ queue: "take_profit", market: "KR", p: 80, heat: 78, evidence: {} }).conclusion).toBe("익절 검토 — 과열 78점, 주가 반영도 80로 높음 (SnowBall 익절 사다리 확인)");
     expect(explain({ queue: "take_profit", market: "KR", p: null, evidence: {} }).conclusion).toContain("과열 -점, 주가 반영도 -");

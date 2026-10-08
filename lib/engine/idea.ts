@@ -11,7 +11,7 @@ import { brokerKo } from "@/lib/labels";
 
 export type IdeaEvidence = {
   thesis: { text: string; source: string; as_of: string | null } | null;
-  growth: { fiscal: string; rev_yoy: number | null; op_yoy: number | null; prev_fiscal: string | null; prev_rev_yoy: number | null; prev_op_yoy: number | null; op_label: string; source: string } | null;
+  growth: { fiscal: string; rev_yoy: number | null; op_yoy: number | null; turnaround?: boolean; prev_fiscal: string | null; prev_rev_yoy: number | null; prev_op_yoy: number | null; op_label: string; source: string } | null;
   industry: { name: string; pass: boolean; realized_median: number | null; brokers: { broker: string; value: number }[]; outlook: { source: string; cagr: number }[] } | null;
   events: { when: string; title: string; source: string }[];
   risk: { text: string; watch: string | null; source: string } | null;
@@ -55,7 +55,7 @@ export function cleanThesis(s: string, max = 220): string {
 
 const sign = (x: number) => `${x > 0 ? "+" : ""}${Math.round(x)}%`;
 
-/** 🏢 좋은 기업인가 — ① 실적 ② 산업 ③ 신호 합의 (주가·가격·수급은 ⏱️ timing.ts) */
+/** 🏢 좋은 기업인가 — ① 실적(증가·가속 또는 영업이익 턴어라운드, D68) ② 산업 ③ 신호 합의 (주가·가격·수급은 ⏱️ timing.ts) */
 export function buyReasons(x: { idea: IdeaEvidence; consensus: string[]; grade?: string | null; score?: number | null }): string[] {
   const out: string[] = [];
   const g = x.idea.growth;
@@ -66,7 +66,8 @@ export function buyReasons(x: { idea: IdeaEvidence; consensus: string[]; grade?:
     const prev = g.prev_fiscal && (g.prev_rev_yoy !== null || g.prev_op_yoy !== null)
       ? ` ← 직전 ${g.prev_fiscal} ${[g.prev_rev_yoy !== null && sign(g.prev_rev_yoy), g.prev_op_yoy !== null && sign(g.prev_op_yoy)].filter(Boolean).join(" · ")}` : "";
     const grade = x.grade ? ` · Heimdallr ${x.grade}${x.score !== null && x.score !== undefined ? ` ${Math.round(x.score)}점` : ""}` : "";
-    out.push(`① 실적${accel ? " 가속" : ""}: ${now} (${g.fiscal}, 전년 대비)${prev}${grade}`);
+    if (g.turnaround) out.push(`① 영업이익 턴어라운드: ${[g.rev_yoy !== null && `매출 ${sign(g.rev_yoy)}`, `${g.op_label} 흑자 전환`].filter(Boolean).join(" · ")} (${g.fiscal}, 전년 대비)${grade}`);
+    else out.push(`① 실적${accel ? " 가속" : ""}: ${now} (${g.fiscal}, 전년 대비)${prev}${grade}`);
   } else if (x.grade) {
     out.push(`① 실적: Heimdallr ${x.grade}${x.score !== null && x.score !== undefined ? ` ${Math.round(x.score)}점` : ""}`);
   }

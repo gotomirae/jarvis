@@ -6,6 +6,7 @@
 import { dbDelete, dbInsert, dbSelect, dbSelectAll, dbUpsertBatched } from "@/lib/db";
 import { taxonomyConfig } from "@/lib/config/load";
 import { computeAxes, type Axes, type EntityCtx } from "@/lib/engine/axes";
+import { turnaroundOf, type QuarterRow, type Turnaround } from "@/lib/engine/earnings";
 import { l2Members } from "@/lib/entities";
 import { assignQueue, type Queue } from "@/lib/engine/queues";
 import { regime } from "@/lib/engine/regime";
@@ -17,7 +18,7 @@ import { read as hermes } from "@/lib/ingest/hermescall";
 import { chart } from "@/lib/ingest/market";
 import { exportMacro, submitIdea } from "@/lib/ingest/snowball";
 import { kstDate } from "@/lib/time";
-import { activeSignals, latestHoldings, loadEntities, rules, type EntityIndex } from "./context";
+import { activeSignals, latestHoldings, loadEntities, rules, type EntityIndex, type EntityRow } from "./context";
 import { ideaEvidence } from "./idea";
 import { latestScreens } from "./ingest";
 import { priUsLiteMap } from "./pri-us";
@@ -58,7 +59,7 @@ export async function runPipeline(now = new Date(), opts: { submit?: boolean } =
     hermes<{ symbol: string; expected_at: string }>("earnings_events", { select: "symbol,expected_at", filters: { expected_at: `gte.${now.toISOString()}` } }),
     dbSelectAll<{ entity_id: string | null }>("notifications", `select=entity_id&kind=eq.holding_alert&created_at=gte.${new Date(now.getTime() - 7 * 86400_000).toISOString()}`),
     currentRegime(),
-    heimdallr<{ code: string; sector: string | null; industry: string | null }>("krx_universe", { select: "code,sector,industry" }),
+    heimdallr<{ code: string; sector: string | null; industry: string | null; is_excluded: boolean | null }>("krx_universe", { select: "code,sector,industry,is_excluded" }),
   ]);
   const scopes = taxonomyConfig().narrative_l2_scope ?? [];
   const krxBy = new Map((krx.ok ? krx.data : []).map((k) => [`KR:${k.code}`, k]));
@@ -84,19 +85,31 @@ export async function runPipeline(now = new Date(), opts: { submit?: boolean } =
   const axesRows: Record<string, unknown>[] = [];
   const queueRows: { entity_id: string; queue: Queue; reason: Record<string, unknown> }[] = [];
   const axesById = new Map<string, Axes>();
+  const ctxs: EntityCtx[] = [];
   for (const id of targets) {
     const e = ents.byId.get(id);
     if (!e || (e.asset_class && e.asset_class !== "stock")) continue;
     const h = heldById.get(id);
     const scr = screens.get(id);
-    const ctx: EntityCtx = {
+    ctxs.push({
       id, market: e.market, l1_codes: e.l1_codes,
       screen: scr ? { gate_passed: scr.gate_passed, score_final: scr.score_final, pri: scr.pri, grade: scr.grade } : null,
       usFilters: usFilters.get(id) ?? null, priUsLite: e.market === "US" ? priUs.get(e.symbol.toUpperCase()) ?? null : null,
       holding: h ? { weight: h.weight, allowed_weight: h.allowed_weight, heat_score: h.heat_score } : null,
       l2Scope: { scoped: scopes.map((s) => s.l2), member: l2Members({ snowballSector: h?.sector, heimdallrSector: krxBy.get(id)?.sector, krxIndustry: krxBy.get(id)?.industry }, scopes) },
-    };
-    const a = computeAxes(ctx, signals, R.axes, now);
+    });
+  }
+  // F 두 번째 경로 = 영업이익 턴어라운드(D68). 결과가 달라질 수 있는 종목(F 꺼짐 ∧ 이야기·촉매 켜짐)만 분기 실적을 읽는다. 관리종목·스팩 등 제외 종목은 대상 아님
+  const first = new Map(ctxs.map((c) => [c.id, computeAxes(c, signals, R.axes, now)]));
+  const turns = R.axes.F.turnaround
+    ? await turnarounds(ctxs.filter((c) => { const a = first.get(c.id)!; return !a.f && (a.n || a.c) && krxBy.get(c.id)?.is_excluded !== true; }).map((c) => ents.byId.get(c.id)!), now)
+    : new Map<string, Turnaround>();
+  for (const ctx of ctxs) {
+    const id = ctx.id;
+    const e = ents.byId.get(id)!;
+    const h = heldById.get(id);
+    ctx.turnaround = turns.get(id) ?? null;
+    const a = ctx.turnaround ? computeAxes(ctx, signals, R.axes, now) : first.get(id)!;
     axesById.set(id, a);
     axesRows.push({ date, entity_id: id, n_on: a.n, c_on: a.c, f_on: a.f, p_value: a.p, h_held: a.h, evidence: { ...a.evidence, families: a.families } });
     const q = assignQueue({ axes: a, heat: h?.heat_score ?? null, holdingAlert: alerted.has(id), daysToEarnings: e.market === "US" ? nextUs.get(id) ?? null : krDays }, R.queues, R.axes.P);
@@ -133,6 +146,28 @@ export async function runPipeline(now = new Date(), opts: { submit?: boolean } =
   const submitted = opts.submit === false ? [] : await submitNewIdeas(qRows.filter((q) => !prevMap.has(`${q.entity_id}|${q.queue}`)), ents, signals, axesById, now);
   const counts = qRows.reduce<Record<string, number>>((m, q) => ((m[q.queue] = (m[q.queue] ?? 0) + 1), m), {});
   return { date, evaluated: axesRows.length, queues: counts, removed: stale.data, submitted, regime: reg };
+}
+
+/** 영업이익 턴어라운드 판정 — 국내 Heimdallr quarterly_fundamentals · 미국 HermesCall quarterly_metrics(최근 2년). 읽기 실패 시장은 비운다(불변 규칙 6) */
+async function turnarounds(list: EntityRow[], now: Date): Promise<Map<string, Turnaround>> {
+  const out = new Map<string, Turnaround>();
+  const kr = list.filter((e) => e.market === "KR").map((e) => e.symbol);
+  const us = list.filter((e) => e.market === "US").map((e) => e.symbol);
+  const fy = `gte.${now.getUTCFullYear() - 2}`;
+  const [qf, qm] = await Promise.all([
+    kr.length ? heimdallr<QuarterRow & { code: string }>("quarterly_fundamentals", { select: "code,fiscal_year,fiscal_quarter,revenue_yoy,op,op_status_label,is_estimate", filters: { code: `in.(${kr.join(",")})`, fiscal_year: fy } }) : null,
+    us.length ? hermes<QuarterRow & { symbol: string }>("quarterly_metrics", { select: "symbol,fiscal_year,fiscal_quarter,revenue,revenue_yoy,op,eps,unit", filters: { symbol: `in.(${us.join(",")})`, fiscal_year: fy } }) : null,
+  ]);
+  const rows = new Map<string, QuarterRow[]>();
+  const add = (k: string, r: QuarterRow) => rows.set(k, [...(rows.get(k) ?? []), r]);
+  for (const r of qf?.ok ? qf.data : []) add(`KR:${r.code}`, r);
+  for (const r of qm?.ok ? qm.data : []) add(`US:${r.symbol.toUpperCase()}`, r);
+  const T = rules().entry_core.M1_earnings_up_price_not.turnaround;
+  for (const e of list) {
+    const xs = rows.get(`${e.market}:${e.market === "US" ? e.symbol.toUpperCase() : e.symbol}`);
+    if (xs?.length) out.set(e.id, turnaroundOf(xs, T));
+  }
+  return out;
 }
 
 /** 🎯·🔭 첫 진입 → SnowBall jarvis_submit_idea (draft). 하루 max_per_day, 같은 종목 dedupe_days 안에 재제출 안 함 */

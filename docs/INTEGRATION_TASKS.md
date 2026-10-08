@@ -347,3 +347,37 @@
 - [ ] 다음 `slot` 실행(07:00·16:00) 뒤 JARVIS 🦾 포트폴리오의 "허용 비중"이 새 상한으로 바뀌었는지 확인
 - [ ] (선택) 기본 base 10% 에서는 글로벌 20위도 계수 최대 ≈ 20.6% — 25% 까지 쓰려면 전략 탭 › 동적 리스크 규칙의 base 를 올린다
 - [ ] 글로벌 20위 목록(`GLOBAL_TOP20`, 기준일 2026-10-08)은 분기마다 갱신
+
+---
+
+## L. Heimdallr · HermesCall — 🟢 M1 실적 조건에 영업이익 턴어라운드 추가 (D68, 2026-10-08 사용자 지정)
+
+> 사용자 요청으로 **이 세션에서 Heimdallr·HermesCall 저장소를 직접 수정·push** 했다(2026-10-08) — Heimdallr `a408561`(ADR 38) · HermesCall `4f46ff7`. 이 절은 기록용.
+
+**목적**: M1 의 실적 부분을 **"실적 증가·가속" 또는 "영업이익 턴어라운드(매출 증가)"** 로 넓힌다. 주가 미반영(PB·SW, 반영도 < 50) 부분은 그대로다. JARVIS 는 `m1_pass` 를 그대로 쓰므로(D13) 원 프로젝트가 계산해야 🟢 에 반영된다. JARVIS 🎯 F축은 이미 반영했다.
+
+**턴어라운드 정의**(JARVIS `rules.yaml > entry_core.M1_earnings_up_price_not.turnaround` 와 같은 값 — 상수로 둔다)
+- 최근 확정 분기 영업이익 > 0
+- 전년 동기(t−4) 영업이익 ≤ 0 (국내는 `op_status_label = '흑전'` 도 인정). **적자축소는 제외**(아직 적자)
+- 최근 분기 매출 YoY > 0.0%
+- 미국은 영업이익이 없으면 EPS 로 같은 판정(`profit_basis='eps'`)
+
+### L-1. Heimdallr (`src/screener/entry_checks.py`, `src/config/constants.py`)
+1. 상수: `ENTRY_M1_TURNAROUND_ENABLED = True`, `ENTRY_M1_TURNAROUND_OP_YEAR_AGO_MAX = 0`, `ENTRY_M1_TURNAROUND_REVENUE_YOY_MIN_PCT = 0.0`
+2. `m1_fundamental`: 기존 `checks`(증가·가속) 결과를 `growth_pass` 로 두고, 턴어라운드 `turnaround_checks = {op_positive, op_turned(흑전 또는 t−4 ≤ 0), revenue_yoy_up}` 를 추가 계산. `pass = growth_pass or turnaround_pass` (둘 다 None 이면 None — 판정 불가 유지)
+3. `m1_detail` 에 `earnings_path: 'growth_accel' | 'turnaround' | null` 과 `turnaround_checks` 를 저장한다(증가·가속이 통과면 'growth_accel' 우선)
+4. **계산 순서 주의**: "DB 만으로 M1 재무 조건을 거른다 → 통과 종목만 M5·M2·가격" 단계에서 턴어라운드 통과 종목도 다음 단계로 넘겨야 한다(지금은 부호 전환이라 1단계에서 탈락)
+5. `base_effect_warning` 은 증가·가속 경로에만 적용한다(흑전은 적자 기저라 기저효과 경고가 뜻이 없다). 연간 컨센서스 조건도 증가·가속 경로에만
+6. 테스트: 흑전+매출 증가 → pass·path='turnaround' / 적자축소 → 탈락 / 흑전+매출 감소 → 탈락 / 증가·가속과 턴어라운드 동시 → 'growth_accel' / 기존 경계값 회귀 그대로
+
+### L-2. HermesCall (`src/screener/entry_checks.py`)
+1. `m1_fundamentals`: 기존 `checks` → `growth_pass`. 턴어라운드 = `value(t, basis) > 0` ∧ `value(t−4, basis) ≤ 0` ∧ `rev_yoy[0] > 0` ∧ `units_ok`. `pass = growth_pass or turnaround_pass`
+2. `detail.earnings_path`, `detail.turnaround_checks` 추가(키는 늘 같은 모양 — 값 None 허용)
+3. 테스트: 위 L-1 6번과 같은 경우 + EPS 대체
+
+### L-3. 확인 (JARVIS 쪽)
+- [x] JARVIS 🎯 F축 턴어라운드 경로 · 🏢 카드 · 🟢 M1 줄 "흑자 전환(턴어라운드)" 표시(`m1_detail.earnings_path`) — 2026-10-08
+- [x] Heimdallr L-1 적용·push(`a408561`): 단위 테스트 43 + JARVIS rules.yaml 대조 통과. 읽기 전용 dry-run(10/8) — 1단계 재무 통과 194 = 증가·가속 101 + 턴어라운드 93 · PRI<50 72 + 24. 전체 회귀 1354 통과, 1 실패는 다른 세션의 커밋 전 DART 발췌 작업(`test_excerpt_period`, entry_checks 무관)
+- [x] HermesCall L-2 적용·push(`4f46ff7`): 단위 테스트 52 통과, 전체 304 통과(1 실패 = 실시간 LLM 테스트 `test_deep` NVDA, 무관). dry-run(10/8) — 99종목 중 턴어라운드 AMD 1(가격 조건 미충족으로 M1 false)
+- [ ] 다음 정시 실행(Heimdallr 17:37/18:17/19:07 · HermesCall 06:40) 뒤 `entry_checks.m1_detail.earnings_path='turnaround'` 행이 /entry 에 "① 실적 가속 또는 영익 턴어라운드 — 영업이익 흑자 전환(턴어라운드)" 로 보이는지
+

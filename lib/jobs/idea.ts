@@ -8,6 +8,7 @@
  */
 import { taxonomyConfig } from "@/lib/config/load";
 import { dbSelectAll } from "@/lib/db";
+import { turnaroundOf, type QuarterRow } from "@/lib/engine/earnings";
 import { hasText, type IdeaEvidence } from "@/lib/engine/idea";
 import { chartRef, type ChartRef } from "@/lib/engine/technicals";
 import type { FlowRef } from "@/lib/engine/timing";
@@ -20,7 +21,7 @@ import { rules, type EntityIndex } from "./context";
 
 type HdRisk = { risk?: string; impact?: string; likelihood?: string; watch_metric?: string };
 type HdAnalysis = { code: string; fiscal_year: number; fiscal_quarter: number; payload: { one_line_thesis?: string; risks?: HdRisk[] } | null; created_at: string };
-type Qf = { code?: string; symbol?: string; fiscal_year: number; fiscal_quarter: number; revenue_yoy: number | null; op_yoy: number | null; eps_yoy?: number | null; is_estimate?: boolean | null };
+type Qf = QuarterRow & { code?: string; symbol?: string; fiscal_year: number; fiscal_quarter: number; revenue_yoy: number | null; op_yoy: number | null; eps_yoy?: number | null; is_estimate?: boolean | null };
 type Benef = { source_symbol: string; beneficiary_symbol: string; strength: number | null; investment_idea: string | null; created_at?: string };
 type Heat = { l1: string; m3_pass: boolean | null; m3_median_rev_yoy_q0: number | null; m3_basis: { us_major_broker?: { detail?: { broker: string; value: number }[] }; outlook?: { source: string; cagr: number }[] } | null };
 
@@ -37,6 +38,7 @@ export async function ideaEvidence(ids: string[], ents: EntityIndex, now = new D
   const kr = list.filter((e) => e.market === "KR").map((e) => e.symbol);
   const us = list.filter((e) => e.market === "US").map((e) => e.symbol);
   const today = kstDate(now);
+  const R = rules();
   const fySince = String(now.getUTCFullYear() - 2);
 
   // 국내 거래소 구분(.KS/.KQ)은 Heimdallr krx_universe 에서 — 코스닥 종목을 .KS 로 조회하면 하루 늦은 시세가 온다(실측)
@@ -46,8 +48,8 @@ export async function ideaEvidence(ids: string[], ents: EntityIndex, now = new D
     flowRefs(kr, us, now),
     chartRefs(list.map((e) => ({ id: e.id, market: e.market, symbols: e.market === "US" ? [e.symbol] : yahoo.has(e.symbol) ? [yahoo.get(e.symbol)!] : [`${e.symbol}.KQ`, `${e.symbol}.KS`] }))),
     kr.length ? heimdallr<HdAnalysis>("analyses", { select: "code,fiscal_year,fiscal_quarter,payload,created_at", filters: { code: `in.(${kr.join(",")})` }, order: "created_at.desc" }) : null,
-    kr.length ? heimdallr<Qf>("quarterly_fundamentals", { select: "code,fiscal_year,fiscal_quarter,revenue_yoy,op_yoy,is_estimate", filters: { code: `in.(${kr.join(",")})`, fiscal_year: `gte.${fySince}` } }) : null,
-    us.length ? hermes<Qf>("quarterly_metrics", { select: "symbol,fiscal_year,fiscal_quarter,revenue_yoy,op_yoy,eps_yoy", filters: { symbol: `in.(${us.join(",")})`, fiscal_year: `gte.${fySince}` } }) : null,
+    kr.length ? heimdallr<Qf>("quarterly_fundamentals", { select: "code,fiscal_year,fiscal_quarter,revenue_yoy,op_yoy,op,op_status_label,is_estimate", filters: { code: `in.(${kr.join(",")})`, fiscal_year: `gte.${fySince}` } }) : null,
+    us.length ? hermes<Qf>("quarterly_metrics", { select: "symbol,fiscal_year,fiscal_quarter,revenue,revenue_yoy,op,op_yoy,eps,eps_yoy,unit", filters: { symbol: `in.(${us.join(",")})`, fiscal_year: `gte.${fySince}` } }) : null,
     hermes<Benef>("beneficiaries", { select: "source_symbol,beneficiary_symbol,strength,investment_idea", filters: { beneficiary_symbol: `in.(${[...kr.flatMap((c) => [`${c}.KS`, `${c}.KQ`]), ...us].join(",")})` } }),
     dbSelectAll<Heat & { date: string }>("industry_heat", `select=date,l1,m3_pass,m3_median_rev_yoy_q0,m3_basis&date=gte.${kstDate(new Date(now.getTime() - 3 * 86400_000))}&order=date.desc`),
     dbSelectAll<{ entity_id: string; title: string; date: string | null; window_end: string | null; source: string }>("catalyst_events", `select=entity_id,title,date,window_end,source&entity_id=${inList(list.map((e) => e.id))}&or=(date.gte.${today},window_end.gte.${today})`),
@@ -90,10 +92,11 @@ export async function ideaEvidence(ids: string[], ents: EntityIndex, now = new D
     const [q0, q1] = qs;
     const useEps = e.market === "US" && q0 && q0.op_yoy === null && q0.eps_yoy !== null && q0.eps_yoy !== undefined;
     const op = (r: Qf | undefined) => (r ? (useEps ? r.eps_yoy ?? null : r.op_yoy) : null);
+    const turn = q0 ? turnaroundOf(qs, R.entry_core.M1_earnings_up_price_not.turnaround) : null;
     const growth = q0 ? {
-      fiscal: q(q0.fiscal_year, q0.fiscal_quarter), rev_yoy: q0.revenue_yoy, op_yoy: op(q0),
+      fiscal: q(q0.fiscal_year, q0.fiscal_quarter), rev_yoy: q0.revenue_yoy, op_yoy: op(q0), turnaround: turn?.pass === true,
       prev_fiscal: q1 ? q(q1.fiscal_year, q1.fiscal_quarter) : null, prev_rev_yoy: q1?.revenue_yoy ?? null, prev_op_yoy: op(q1),
-      op_label: useEps ? "주당순이익" : "영업이익", source: e.market === "KR" ? "Heimdallr 분기 실적" : "HermesCall 분기 실적",
+      op_label: (turn?.pass ? turn.basis === "eps" : useEps) ? "주당순이익" : "영업이익", source: e.market === "KR" ? "Heimdallr 분기 실적" : "HermesCall 분기 실적",
     } : null;
 
     const heats = e.l1_codes.map((c) => heatBy.get(c)).filter((h): h is Heat => !!h)

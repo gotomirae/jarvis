@@ -16,7 +16,7 @@ normalize:
 axes:
   N: {industry_narrative_min: 8, company_mention_min: 6, mentor_consensus_min: 6}
   C: {earnings_catalyst_min: 7, us_filters_any: ["F1", "F2"]}
-  F: {kr_score_min: 75, kr_gate_required: true, us_filters_all: ["F3", "F4"]}
+  F: {kr_score_min: 75, kr_gate_required: true, us_filters_all: ["F3", "F4"], turnaround: true}   # turnaround: 실적 증가·가속이 아니어도 영업이익 턴어라운드면 F ON (D68 — 정의는 entry_core.M1 turnaround)
   P: {buy_max: 40, pullback_min: 65, take_profit_min: 75}
 
 regime:
@@ -50,7 +50,12 @@ queues:
 # 계산 위치: 국내 M1·M2·M5 = Heimdallr / 미국 M1·M2·M5 = HermesCall / M3·M4·게이트 = JARVIS
 # ─────────────────────────────────────────────────────────────
 entry_core:
-  M1_earnings_up_price_not:          # 실적 지속 증가 + 성장 가속 + 주가 미반영(조정·횡보)
+  M1_earnings_up_price_not:          # (실적 지속 증가 + 성장 가속  또는  영업이익 턴어라운드) + 주가 미반영(조정·횡보)
+    earnings_pass_if_any: ["growth_accel", "turnaround"]   # 사용자 지정 2026-10-08(D68): 실적 조건 = 아래 quarterly·annual(증가·가속) 또는 turnaround
+    turnaround:                                 # 영업이익 턴어라운드(매출 증가) — 🎯 F축(JARVIS)과 🟢 M1(원 프로젝트)이 같은 정의를 쓴다
+      op_now_positive: true                     # 최근 확정 분기 영업이익 흑자 (미국은 영업이익이 없으면 주당순이익)
+      op_year_ago_max: 0                        # 전년 동기 영업이익 ≤ 0 → 흑자 전환(국내 Heimdallr 라벨 "흑전"). 적자 축소는 아직 적자라 제외
+      revenue_yoy_min_pct: 0.0                  # 최근 분기 매출 YoY > 0 (매출 증가)
     quarterly:
       consecutive_quarters_yoy_positive: 2      # 매출·영업이익 YoY 모두 > 0, 최근 2개 분기 연속
       op_must_be_positive: true                 # 영업이익 흑자 (부호 전환 구간 제외)

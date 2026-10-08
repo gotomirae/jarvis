@@ -74,7 +74,7 @@ export default async function StockPage({ params, searchParams }: { params: Prom
             <tbody>
               <tr><td className="pr-4 text-sub">산업·종목 이야기</td><td>{yesNo(a.n_on)} <span className="text-xs text-sub">FlyWheel 산업 흐름·위키 언급, Sage 멘토 합의</span></td></tr>
               <tr><td className="pr-4 text-sub">실적 촉매</td><td>{yesNo(a.c_on)} <span className="text-xs text-sub">HermesCall 미국 실적 수혜·가이던스</span></td></tr>
-              <tr><td className="pr-4 text-sub">실적 숫자</td><td>{yesNo(a.f_on)} <span className="text-xs text-sub">Heimdallr 게이트·점수(미국은 성장 가속·이익률 개선)</span></td></tr>
+              <tr><td className="pr-4 text-sub">실적 숫자</td><td>{yesNo(a.f_on)} <span className="text-xs text-sub">Heimdallr 게이트·점수(미국은 성장 가속·이익률 개선) 또는 영업이익 턴어라운드(흑자 전환 + 매출 증가)</span></td></tr>
               <tr><td className="pr-4 text-sub">주가 반영도</td><td>{a.p_value !== null ? `${Math.round(a.p_value)}/100 (${pLevel(a.p_value)})` : "계산 전"}</td></tr>
               <tr><td className="pr-4 text-sub">보유</td><td>{a.h_held ? "보유 중" : "보유 안 함"}</td></tr>
             </tbody>

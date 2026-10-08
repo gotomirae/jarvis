@@ -29,7 +29,8 @@ export type TechRef = { source: string; as_of: string | null; rsi: number | null
 export type AxesEvidence = {
   N?: { kind: string; strength: number; detail?: string }[];
   C?: { catalyst: { strength: number; detail?: string } | null; us_filters: string[] };
-  F?: { gate_passed?: boolean | null; score?: number | null; grade?: string | null; us_filters?: string[] };
+  F?: { gate_passed?: boolean | null; score?: number | null; grade?: string | null; us_filters?: string[];
+    path?: "growth_accel" | "turnaround" | null; turnaround?: { quarter: string | null; basis: "op" | "eps" | null; rev_yoy: number | null } };
   P?: { value: number | null; basis: string };
   families?: string[];
   tech?: TechRef | null;       // 파이프라인이 저장한 기술적 참고(판정 미사용)
@@ -62,8 +63,11 @@ export function explain(x: ExplainInput): { conclusion: string; reasons: string[
   const p = x.p === null ? null : Math.round(x.p);
   const fam = (e.families ?? []).map((f) => PROJECT_NAME[f] ?? f);
 
-  // 실적 숫자
-  if (x.market === "KR" && e.F && (e.F.grade || e.F.score !== undefined)) {
+  // 실적 숫자 — 증가·가속(원 프로젝트) 또는 영업이익 턴어라운드(D68)
+  const t = e.F?.path === "turnaround" ? e.F.turnaround : undefined;
+  if (t) {
+    reasons.push(`실적 숫자: ${t.basis === "eps" ? "주당순이익" : "영업이익"} 흑자 전환${t.rev_yoy !== null ? ` · 매출 ${t.rev_yoy > 0 ? "+" : ""}${Math.round(t.rev_yoy)}%` : ""}${t.quarter ? ` (${t.quarter}, 전년 대비)` : ""} — 턴어라운드`);
+  } else if (x.market === "KR" && e.F && (e.F.grade || e.F.score !== undefined)) {
     const sc = e.F.score === null || e.F.score === undefined ? "-" : String(Math.round(e.F.score));
     reasons.push(`실적 숫자: Heimdallr ${e.F.grade ?? "등급 없음"} · 점수 ${sc}${e.F.gate_passed ? " · 게이트 통과" : e.F.gate_passed === false ? " · 게이트 미통과" : ""}`);
   } else if (x.market === "US" && (e.F?.us_filters ?? e.C?.us_filters)?.length) {

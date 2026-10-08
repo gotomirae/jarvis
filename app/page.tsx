@@ -1,6 +1,6 @@
-import { MarketPanel } from "@/app/_components/charts";
+import { MarketPanel, PickChart } from "@/app/_components/charts";
 import { Bad, Card, Empty, Footer, Good, Guide, Hi, LinkRow, MarkLine, Nav, Page, Pct, Section, Stat } from "@/app/_components/ui";
-import { dashboardConfig, marketCharts } from "@/lib/dashboard/data";
+import { dashboardConfig, marketCharts, pickCharts } from "@/lib/dashboard/data";
 import { linksConfig, taxonomyConfig } from "@/lib/config/load";
 import { explain, type AxesEvidence } from "@/lib/engine/explain";
 import type { PerfStat } from "@/lib/engine/feedback";
@@ -11,8 +11,9 @@ import { issues, VERDICT_SHORT } from "@/lib/engine/timing";
 import { env } from "@/lib/env";
 import { rules } from "@/lib/jobs/context";
 import { stockLinks, type LinkEntity } from "@/lib/links";
-import { recHistory, recLine, type BriefNote, type RecHist } from "@/lib/outcomes/rec-history";
+import { priceStr, recHistory, recLine, recReturn, type BriefNote, type RecHist } from "@/lib/outcomes/rec-history";
 import { supabaseServer } from "@/lib/supabase/server";
+import type { Bar, PickPoint } from "@/lib/engine/series";
 import { kstDate, kstString } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +28,7 @@ const SECTIONS: { queue: Queue; title: string; about: string[] }[] = [
   { queue: "pullback_wait", title: "⏳ 눌림 대기", about: ["실적은 좋지만 주가가 이미 많이 반영됨", "👉 반영도가 50 아래로 내려오면 다시 보기"] },
 ];
 
-/** 오늘 (PRD §8): 요약 타일 → 시장 국면 → 보유 경고 → 🎯 지금 사기 좋은 종목 → 대기 → 익절 → 선행 관찰 → 눌림 대기 */
+/** 오늘 (PRD §8): 요약 타일 → 시장 국면(+공포·탐욕) → 주요 지표 → 🎯 지금 사기 좋은 종목(그래프·추천 후 수익률) → 대기 → 익절 → 선행 관찰 → 눌림 대기. 보유 경고는 🦾 포트폴리오 탭(10/8) */
 export default async function Today() {
   const sb = await supabaseServer();
   const R = rules();
@@ -46,6 +47,7 @@ export default async function Today() {
   const mc = await marketCharts();
   const DC = dashboardConfig();
   const fgNow = mc.fg[mc.fg.length - 1], vixNow = mc.vix[mc.vix.length - 1];
+  const fgWeek = fgNow ? [...mc.fg].reverse().find((x) => x.date <= new Date(Date.parse(`${fgNow.date}T00:00:00Z`) - 7 * 86400_000).toISOString().slice(0, 10)) : undefined;
   const evalDates = [lastKR.data?.date, lastUS.data?.date].filter((d): d is string => !!d);
   const [items, axes, st, ee] = await Promise.all([
     sb.from("queue_items").select("date,entity_id,queue,reason,first_seen").eq("date", date).range(0, 499),
@@ -55,7 +57,7 @@ export default async function Today() {
   ]);
   const q = (items.data ?? []) as QItem[];
   const evBy = new Map(((axes.data ?? []) as { entity_id: string; evidence: AxesEvidence }[]).map((a) => [a.entity_id, a.evidence]));
-  const ids = [...new Set([...q.map((x) => x.entity_id), ...(alerts.data ?? []).map((a) => a.entity_id).filter(Boolean)])] as string[];
+  const ids = [...new Set(q.map((x) => x.entity_id))];
   const ents = ids.length ? await sb.from("entities").select("id,market,symbol,name,primary_l1,l1_codes,snowball_asset_id,hermes_analysis_id,naver_us_code").in("id", ids) : { data: [] };
   const byId = new Map(((ents.data ?? []) as Ent[]).map((e) => [e.id, e]));
   const ctx = { links: linksConfig(), taxonomy: taxonomyConfig(), jarvisUrl: env().JARVIS_URL };
@@ -76,15 +78,10 @@ export default async function Today() {
   const good = cands.filter((c) => c.a.admit.ok);
   const top = [...rankBuy(good.filter((c) => c.e.market === "KR"), good.length), ...rankBuy(good.filter((c) => c.e.market === "US"), good.length)];
   const waiting = cands.filter((c) => !c.a.admit.ok).sort((x, y) => y.a.timing.score - x.a.timing.score);
+  const charts = await pickCharts(top.map((c) => c.entity_id));
 
-  // 보유 경고: 종목별로 묶어서
-  const alertBy = new Map<string, { name: string; lines: { summary: string; source: string; when: string }[] }>();
-  for (const a of alerts.data ?? []) {
-    const p = a.payload as { name?: string; summary?: string; source?: string; bootstrap?: boolean; asset_id?: string };
-    const k = a.entity_id ?? p.asset_id ?? p.name ?? "-";
-    const cur = alertBy.get(k) ?? alertBy.set(k, { name: p.name ?? k, lines: [] }).get(k)!;
-    cur.lines.push({ summary: p.summary ?? "", source: p.source ?? "", when: a.sent_at ? `알림 ${kstString(new Date(a.sent_at))}` : p.bootstrap ? "처음 실행 때 기록(알림 안 보냄)" : "미발송" });
-  }
+  // 보유 경고 개수 (자세한 내용은 🦾 포트폴리오 탭, 10/8)
+  const alertBy = new Set(((alerts.data ?? []) as { entity_id: string | null; payload: { name?: string; asset_id?: string } }[]).map((a) => a.entity_id ?? a.payload?.asset_id ?? a.payload?.name ?? "-"));
   const o = policy?.overall;
 
   return (
@@ -92,8 +89,8 @@ export default async function Today() {
       <Nav />
 
       <div className="flex flex-wrap gap-3">
-        <Stat icon={r?.risk_off ? "🔴" : "🟢"} label="시장 국면" value={r ? (r.risk_off ? "위험 회피" : "정상") : "계산 전"} tone={r?.risk_off ? "hot" : "good"} sub={`변동성지수 ${r?.vix?.toFixed(1) ?? "-"}`} />
-        <Stat icon="⚠️" label="보유 경고 (7일)" value={alertBy.size} tone={alertBy.size ? "hot" : "good"} />
+        <Stat icon={r?.risk_off ? "🔴" : "🟢"} label="시장 국면" value={r ? (r.risk_off ? "위험 회피" : "정상") : "계산 전"} tone={r?.risk_off ? "hot" : "good"} sub={`변동성지수 ${r?.vix?.toFixed(1) ?? "-"}${fgNow ? ` · 공포·탐욕 ${Math.round(fgNow.value)}` : ""}`} />
+        <Stat icon="⚠️" label="보유 경고 (7일)" value={alertBy.size} tone={alertBy.size ? "hot" : "good"} sub={<a className="link" href="/portfolio">🦾 포트폴리오에서 보기 →</a>} />
         <Stat icon="🎯" label="지금 사기 좋은 종목" value={`${good.length} / ${cands.length}`} sub="추천 자격 / 매수 검토 후보" />
         <Stat icon="🚦" label="진입 · 관찰" value={`${entryRows.filter((x) => x.level === "green").length} · ${entryRows.filter((x) => x.level === "yellow").length}`} tone="arc" sub={<a className="link" href="/entry">진입 보드 →</a>} />
         <Stat icon="✅" label={`추천 승률 (${policy?.horizon ?? R.feedback.primary_horizon}거래일)`} value={o?.hit_rate == null ? "측정 중" : `${Math.round(o.hit_rate * 100)}%`} tone="good" sub={<a className="link" href="/verify">사후 검증 {o?.n ?? 0}건 →</a>} />
@@ -105,16 +102,18 @@ export default async function Today() {
           {r.risk_off ? <>이유: <Hi>{(r.reasons ?? []).join(", ")}</Hi> → 진입 신호의 1차 비중을 <Hi>절반</Hi>으로 줄입니다.<br /></> : null}
           📉 변동성지수(VIX) <b className="text-white">{r.vix?.toFixed(1) ?? "-"}</b> · SnowBall 국면 값 <b className="text-white">{r.snowball ?? "-"}</b> (−1이면 위험 회피)
         </p>}
+        {fgNow && <FearGreed v={fgNow.value} rating={fgNow.rating} bands={DC.fear_greed.bands} color={DC.fear_greed.color} prev={fgWeek?.value ?? null} />}
       </div>
 
-      <Section title={`📊 주요 지표 (최근 ${DC.lookback_months}개월)`}>
+      <Section title="📊 주요 지표">
         <div className="table-wrap">
           <table className="text-sm">
-            <thead><tr><th>지수</th><th>현재</th><th>이번 달</th><th>최근 {DC.lookback_months}개월</th></tr></thead>
+            <thead><tr><th>지수</th><th>현재</th><th>이번 주</th><th>이번 달</th><th>최근 {DC.lookback_months}개월</th></tr></thead>
             <tbody>{mc.lines.map((l) => (
               <tr key={l.key} className="border-t border-line/50">
                 <td className="font-semibold whitespace-nowrap"><span style={{ color: l.color }}>●</span> {l.label}</td>
                 <td className="tabular-nums whitespace-nowrap">{l.last === null ? "-" : l.last.toLocaleString("en-US", { maximumFractionDigits: 2 })} <span className="text-xs text-sub">{l.last_date ? `${l.last_date.slice(5).replace("-", "/")} 종가` : ""}</span></td>
+                <td className="whitespace-nowrap"><Pct v={l.wtd} />{l.week && <span className="block text-xs text-sub">{l.week.start.slice(5).replace("-", "/")}~{l.week.end.slice(5).replace("-", "/")}</span>}</td>
                 <td className="whitespace-nowrap"><Pct v={l.mtd} /></td>
                 <td className="whitespace-nowrap"><Pct v={l.ret} /></td>
               </tr>
@@ -131,17 +130,6 @@ export default async function Today() {
         </div>
       </Section>
 
-      <Section title="⚠️ 보유 경고 (최근 7일)" count={alertBy.size}>
-        <Guide items={[<>📉 고점 대비 <b className="text-hot">−20% 이하 하락</b></>, <>⚖️ <b className="text-hot">허용 비중 초과</b></>, "💔 투자 논지를 깨는 이벤트 · 등급 하락"]}>보유 종목의 위험 신호를 종목별로 묶었습니다.</Guide>
-        {alertBy.size === 0 ? <Empty text="없음 — 보유 종목에 새 위험 신호가 없습니다." /> : [...alertBy.entries()].map(([k, v]) => (
-          <Card key={k} tone="warn">
-            <p className="text-base font-bold">{byId.has(k) ? <a href={`/stock/${encodeURIComponent(k)}`} className="link">{v.name}</a> : v.name}</p>
-            <ul className="space-y-1">{v.lines.map((l, i) => <li key={i}>🔸 <Bad>{l.summary}</Bad> <span className="text-xs text-sub">— {l.source} · {l.when}</span></li>)}</ul>
-            <p className="text-sm">👉 할 일: <Hi>투자 논지 다시 보기 → SnowBall에 결정 기록</Hi></p>
-          </Card>
-        ))}
-      </Section>
-
       <Section title="🎯 지금 사기 좋은 종목" count={top.length}>
         <Guide items={[
           <>🏢 <b className="text-white">좋은 기업</b> = 실적 · 산업 · 신호 합의 (매수 검토 후보)</>,
@@ -152,7 +140,7 @@ export default async function Today() {
         {policy?.exclude.length ? <p className="text-sm">📐 사후 검증으로 빠진 기준: {policy.exclude.map((x) => <span key={x.title} className="mr-2 rounded-full border border-hot/50 bg-hot/10 px-2 py-0.5 text-hot">{x.title}</span>)}</p> : null}
         {top.length === 0 ? <Empty text={cands.length ? `오늘은 지금 사기 좋은 종목이 없습니다 — 후보 ${cands.length}개 모두 타이밍 대기.` : "매수 검토 후보가 없습니다."} /> : top.map((c) => {
           const rank = (c.e.market === "KR" ? top.filter((x) => x.e.market === "KR") : top.filter((x) => x.e.market === "US")).indexOf(c) + 1;
-          return <IdeaView key={c.entity_id} c={c} rank={rank} hist={hist.get(c.entity_id)} ctx={ctx} telegram={rank <= R.pick_policy.top_max} />;
+          return <IdeaView key={c.entity_id} c={c} rank={rank} hist={hist.get(c.entity_id)} ctx={ctx} telegram={rank <= R.pick_policy.top_max} chart={charts.get(c.entity_id)} chartCfg={{ ma: DC.pick_chart.ma, overbought: DC.entry_chart.rsi_overbought, oversold: DC.entry_chart.rsi_oversold }} />;
         })}
       </Section>
 
@@ -184,7 +172,10 @@ export default async function Today() {
 type Cand = { entity_id: string; e: Ent; ev: AxesEvidence; a: Assessed; p: number | null };
 
 /** 🎯 카드 — 이름 → 추천 이력 → 지금 매수 매력 → 아이디어 → 🏢 | ⏱️ → 이벤트·리스크 → 링크 */
-function IdeaView({ c, rank, hist, ctx, telegram }: { c: Cand; rank: number; hist: RecHist | undefined; ctx: Ctx; telegram: boolean }) {
+type ChartCfg = { ma: [number, number]; overbought: number; oversold: number };
+function IdeaView({ c, rank, hist, ctx, telegram, chart, chartCfg }: { c: Cand; rank: number; hist: RecHist | undefined; ctx: Ctx; telegram: boolean; chart: { points: PickPoint[]; bars: Bar[] } | undefined; chartCfg: ChartCfg }) {
+  const cur = c.e.market === "KR" ? "KRW" : "USD";
+  const rr = recReturn(hist, chart?.bars ?? []);
   const idea = c.ev.idea ?? EMPTY_IDEA;
   const card = ideaCard(rank, { name: c.e.name, symbol: c.e.symbol, market: c.e.market, industry: idea.industry?.name ?? "" }, idea,
     buyReasons({ idea, consensus: consensusOf(c.ev), grade: c.ev.F?.grade ?? null, score: c.ev.F?.score ?? null }), c.ev.tech, "", null,
@@ -200,11 +191,12 @@ function IdeaView({ c, rank, hist, ctx, telegram }: { c: Cand; rank: number; his
             <a href={`/stock/${encodeURIComponent(c.entity_id)}`} className="hover:text-arc">{card.flag} {card.name}</a>
             <span className="ml-2 text-sm font-normal text-sub">{card.code}{card.industry ? ` · ${card.industry}` : ""}</span>
           </p>
-          {card.history && <p className="text-sm text-arc mt-0.5">{card.history}{hist ? " (최근 추천가 기준)" : ""}</p>}
+          <RecBadge rr={rr} currency={cur} />
           {telegram && <p className="text-xs text-good mt-0.5">📨 텔레그램 추천 대상 (시장별 상위)</p>}
         </div>
         <span className={`rounded-full border px-3 py-1 text-sm font-bold ${vc}`}>{card.verdict}</span>
       </div>
+      {chart?.points.length ? <PickChart id={c.entity_id} data={chart.points} ma={chartCfg.ma} overbought={chartCfg.overbought} oversold={chartCfg.oversold} currency={cur} rec={rr ? { date: rr.first_date, price: rr.first_price } : null} /> : <Empty text="주가 자료를 불러오지 못했습니다." />}
       {card.thesis && <p className="rounded-lg bg-panel2/70 px-3 py-2">💡 <b className="text-gold">투자 아이디어</b><br />{card.thesis}</p>}
       <div className="grid gap-3 md:grid-cols-2">
         <div>
@@ -253,5 +245,36 @@ function QueueSection({ queue, title, about, q, byId, evBy, ctx }: {
         );
       })}
     </Section>
+  );
+}
+
+/** 🎯 추천 후 수익률 — 첫 추천 기준가 → 최근 종가 (10/8 사용자 요청) */
+function RecBadge({ rr, currency }: { rr: ReturnType<typeof recReturn>; currency: "KRW" | "USD" }) {
+  if (!rr) return <p className="text-sm mt-1"><span className="rounded-full border border-arc/60 bg-arc/10 px-2.5 py-0.5 text-arc font-bold">🆕 첫 추천</span> <span className="text-sub">수익률은 다음 브리핑부터 계산</span></p>;
+  const up = rr.ret > 0, c = up ? "border-hot/60 bg-hot/15 text-hot" : rr.ret < 0 ? "border-cool/60 bg-cool/15 text-cool" : "border-line text-white";
+  const md = (d: string) => d.slice(5).replace("-", "/");
+  return (
+    <p className="text-sm mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span className={`rounded-full border px-2.5 py-0.5 font-extrabold tabular-nums ${c}`}>{up ? "📈" : rr.ret < 0 ? "📉" : "➖"} 추천 후 {up ? "+" : ""}{rr.ret.toFixed(1)}%</span>
+      <span className="text-sub">{rr.nth > 1 ? `🔁 ${rr.nth}번째 추천 · ` : "🆕 첫 추천 · "}{md(rr.first_date)} {priceStr(rr.first_price, currency)}{rr.estimated ? "(추정)" : ""} → {md(rr.cur_date)} <b className="text-white">{priceStr(rr.cur_price, currency)}</b></span>
+    </p>
+  );
+}
+
+/** 😱 공포·탐욕 — 막대 위 현재 위치 + 일주일 전 대비 (10/8 사용자 요청) */
+function FearGreed({ v, rating, bands, color, prev }: { v: number; rating: string; bands: { extreme_fear: number; fear: number; greed: number; extreme_greed: number }; color: string; prev: number | null }) {
+  const kr = v < bands.extreme_fear ? "극단적 공포" : v < bands.fear ? "공포" : v <= bands.greed ? "중립" : v <= bands.extreme_greed ? "탐욕" : "극단적 탐욕";
+  const tone = v < bands.fear ? "text-cool" : v > bands.greed ? "text-hot" : "text-gold";
+  const d = prev === null ? null : v - prev;
+  return (
+    <div className="mt-2 space-y-1">
+      <p className="text-sm">😱 공포·탐욕 지수 <b className="text-lg" style={{ color }}>{Math.round(v)}</b> <b className={tone}>{kr}</b>{rating && rating !== kr ? <span className="text-xs text-sub"> ({rating})</span> : null}
+        {d !== null && <span className="ml-2 text-xs">1주 전 대비 <b className={d > 0 ? "text-hot" : d < 0 ? "text-cool" : "text-white"}>{d > 0 ? "▲ +" : d < 0 ? "▼ " : ""}{d.toFixed(0)}</b></span>}
+      </p>
+      <div className="relative h-2.5 rounded-full" style={{ background: "linear-gradient(90deg,#60a5fa 0%,#60a5fa 25%,#fcd34d 50%,#ff6b6b 75%,#ff6b6b 100%)" }}>
+        <span className="absolute -top-1 h-4.5 w-1.5 rounded bg-white shadow-[0_0_6px_#fff]" style={{ left: `calc(${Math.min(100, Math.max(0, v))}% - 3px)` }} />
+      </div>
+      <p className="flex justify-between text-[11px] text-sub"><span>0 극단적 공포</span><span>50 중립</span><span>100 극단적 탐욕</span></p>
+    </div>
   );
 }

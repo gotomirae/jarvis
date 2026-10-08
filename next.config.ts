@@ -4,7 +4,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  outputFileTracingIncludes: { "/api/**": ["./config/**/*"] },
+  outputFileTracingIncludes: { "/api/**": ["./config/**/*"], "/strategy": ["./content/strategy/**/*", "./config/**/*"] },
   async headers() {
     return [
       {

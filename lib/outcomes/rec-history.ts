@@ -47,3 +47,21 @@ export function recLine(x: { nth: number; first_at: string | null; first_price: 
   if (r === null) return `🔁 ${x.nth}번째 추천 · ${from}${cur ? ` · 현재 ${cur}` : ""}`;
   return `🔁 ${x.nth}번째 추천 · ${from} ${priceStr(x.first_price as number, x.currency)} → ${cur} ${signed(r)} ${r > 0 ? "📈" : r < 0 ? "📉" : "➖"}`;
 }
+
+/**
+ * 🎯 추천 후 수익률 — 첫 추천 기준가 → 최근 종가 (10/8 사용자 요청). 기준가가 없는 옛 브리핑은 발송 시각에 확정돼 있던 마지막 종가로 추정한다
+ * (KST 16시 전 발송 = 전날 종가, 16시 이후 = 그날 종가).
+ */
+export function recReturn(h: RecHist | undefined, bars: { date: string; close: number }[]): { nth: number; first_at: string; first_price: number; first_date: string; cur_price: number; cur_date: string; ret: number; estimated: boolean } | null {
+  const last = bars[bars.length - 1];
+  if (!h || !last) return null;
+  let first_price = h.first_price, first_date = h.first_price_date, estimated = false;
+  if (first_price === null) {
+    const k = new Date(new Date(h.first_at).getTime() + 9 * 3600_000).toISOString();
+    const day = k.slice(0, 10), after = Number(k.slice(11, 13)) >= 16;
+    const b = [...bars].reverse().find((x) => (after ? x.date <= day : x.date < day));
+    if (!b) return null;
+    first_price = b.close; first_date = b.date; estimated = true;
+  }
+  return { nth: h.count, first_at: h.first_at, first_price, first_date: first_date ?? h.first_at.slice(0, 10), cur_price: last.close, cur_date: last.date, ret: (last.close / first_price - 1) * 100, estimated };
+}

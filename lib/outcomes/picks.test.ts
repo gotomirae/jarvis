@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { featuresOf } from "@/lib/engine/feedback";
 import { ledgerFromPicks, type PickNote } from "./ledger";
-import { picksOf, recHistory, recLine, retPct } from "./rec-history";
+import { picksOf, recHistory, recLine, recReturn, retPct } from "./rec-history";
 
 const f = featuresOf({ p: 20, market: "KR", timing: { score: 5, verdict: "high", checks: { p: "pass" } } });
 const idOf = (c: string) => (c === "005930" ? "KR:005930" : c === "AAPL" ? "US:AAPL" : null);
@@ -70,5 +70,18 @@ describe("추천 이력 — 몇 번째 추천 · 첫 추천 이후 수익률 (D5
     expect(retPct(100, 110)).toBeCloseTo(10);
     expect(retPct(null, 110)).toBeNull();
     expect(retPct(100, undefined)).toBeNull();
+  });
+  it("recReturn: 첫 기준가 → 최근 종가, 기준가 없으면 발송 시각 기준 종가로 추정", () => {
+    const bars = [{ date: "2026-09-25", close: 100 }, { date: "2026-09-28", close: 110 }, { date: "2026-10-07", close: 121 }];
+    const h = { count: 2, first_at: "2026-09-27T22:10:00Z", first_price: 100, first_price_date: "2026-09-25", last_at: "x", last_price: null, last_price_date: null };
+    expect(recReturn(h, bars)).toEqual({ nth: 2, first_at: h.first_at, first_price: 100, first_date: "2026-09-25", cur_price: 121, cur_date: "2026-10-07", ret: expect.closeTo(21), estimated: false });
+    expect(recReturn({ ...h, first_price_date: null }, bars)?.first_date).toBe("2026-09-27");
+    // 09-28 07:10 KST(아침) → 전날까지 확정 종가 = 09-25
+    expect(recReturn({ ...h, first_price: null }, bars)).toMatchObject({ first_price: 100, first_date: "2026-09-25", estimated: true });
+    // 09-28 17:20 KST(저녁) → 그날 종가
+    expect(recReturn({ ...h, first_price: null, first_at: "2026-09-28T08:20:00Z" }, bars)).toMatchObject({ first_price: 110, first_date: "2026-09-28", estimated: true });
+    expect(recReturn({ ...h, first_price: null, first_at: "2026-09-20T08:20:00Z" }, bars)).toBeNull();
+    expect(recReturn(undefined, bars)).toBeNull();
+    expect(recReturn(h, [])).toBeNull();
   });
 });

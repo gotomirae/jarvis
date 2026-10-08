@@ -1,4 +1,4 @@
-import { Empty, Footer, Guide, Nav, Section } from "@/app/_components/ui";
+import { Bad, Card, Empty, Footer, Guide, Hi, Nav, Section } from "@/app/_components/ui";
 import { taxonomyConfig } from "@/lib/config/load";
 import { pLevel } from "@/lib/engine/explain";
 import { fmtWeight } from "@/lib/format";
@@ -12,7 +12,7 @@ type Pos = { asset_id: string; ticker: string; name: string; market: string; ent
 type Axis = { entity_id: string; n_on: boolean; c_on: boolean; f_on: boolean; p_value: number | null; evidence: { F?: { grade?: string | null } } };
 const CLASS: Record<string, string> = { stock: "주식", etf: "ETF", fund: "펀드" };
 
-/** 🦾 아이언맨의 포트폴리오 × 신호 (PRD §8, 10/5 이름 변경) — SnowBall 보유를 읽기만 한다. 수량·원가는 표시하지 않는다(D26). */
+/** 🦾 아이언맨의 포트폴리오 × 신호 (PRD §8, 10/5 이름 변경) — 맨 위에 ⚠️ 보유 경고(10/8 오늘 탭에서 이동) — SnowBall 보유를 읽기만 한다. 수량·원가는 표시하지 않는다(D26). */
 export default async function Portfolio() {
   const sb = await supabaseServer();
   const [hc, lastAxes, heatDate] = await Promise.all([
@@ -26,12 +26,22 @@ export default async function Portfolio() {
     lastAxes.data ? sb.from("axes_daily").select("entity_id,n_on,c_on,f_on,p_value,evidence").eq("date", lastAxes.data.date).in("entity_id", ids) : Promise.resolve({ data: [] }),
     ids.length ? sb.from("entities").select("id,l1_codes,primary_l1").in("id", ids) : Promise.resolve({ data: [] }),
     heatDate.data ? sb.from("industry_heat").select("l1,m3_pass").eq("date", heatDate.data.date) : Promise.resolve({ data: [] }),
-    sb.from("notifications").select("entity_id").eq("kind", "holding_alert").gte("created_at", new Date(Date.now() - 7 * 86400_000).toISOString()).range(0, 999),
+    sb.from("notifications").select("entity_id,payload,sent_at,created_at").eq("kind", "holding_alert").gte("created_at", new Date(Date.now() - 7 * 86400_000).toISOString()).order("created_at", { ascending: false }).range(0, 999),
   ]);
   const ax = new Map(((axes.data ?? []) as Axis[]).map((a) => [a.entity_id, a]));
   const el = new Map(((ents.data ?? []) as { id: string; l1_codes: string[] }[]).map((e) => [e.id, e]));
   const m3 = new Map(((heat.data ?? []) as { l1: string; m3_pass: boolean }[]).map((h) => [h.l1, h.m3_pass]));
-  const alerted = new Set(((alerts.data ?? []) as { entity_id: string | null }[]).map((a) => a.entity_id));
+  type Alert = { entity_id: string | null; payload: { name?: string; summary?: string; source?: string; bootstrap?: boolean; asset_id?: string }; sent_at: string | null };
+  const alertRows = (alerts.data ?? []) as Alert[];
+  const alerted = new Set(alertRows.map((a) => a.entity_id));
+  // 보유 경고: 종목별로 묶어서 (🏠 오늘 탭에서 이동, 10/8)
+  const alertBy = new Map<string, { name: string; entity_id: string | null; lines: { summary: string; source: string; when: string }[] }>();
+  for (const a of alertRows) {
+    const p = a.payload ?? {};
+    const k = a.entity_id ?? p.asset_id ?? p.name ?? "-";
+    const cur = alertBy.get(k) ?? alertBy.set(k, { name: p.name ?? k, entity_id: a.entity_id, lines: [] }).get(k)!;
+    cur.lines.push({ summary: p.summary ?? "", source: p.source ?? "", when: a.sent_at ? `알림 ${kstString(new Date(a.sent_at))}` : p.bootstrap ? "처음 실행 때 기록(알림 안 보냄)" : "미발송" });
+  }
   const tx = taxonomyConfig();
   const name = (c: string) => tx.l1.find((r) => r.code === c)?.name ?? c;
   const th = "py-1 pr-2 font-normal";
@@ -39,6 +49,16 @@ export default async function Portfolio() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-4 space-y-8">
       <Nav />
+      <Section title="⚠️ 보유 경고 (최근 7일)" count={alertBy.size}>
+        <Guide items={[<>📉 고점 대비 <b className="text-hot">−20% 이하 하락</b></>, <>⚖️ <b className="text-hot">허용 비중 초과</b></>, "💔 투자 논지를 깨는 이벤트 · 등급 하락"]}>보유 종목의 위험 신호를 종목별로 묶었습니다.</Guide>
+        {alertBy.size === 0 ? <Empty text="없음 — 보유 종목에 새 위험 신호가 없습니다." /> : [...alertBy.entries()].map(([k, v]) => (
+          <Card key={k} tone="warn">
+            <p className="text-base font-bold">{v.entity_id ? <a href={`/stock/${encodeURIComponent(v.entity_id)}`} className="link">{v.name}</a> : v.name}</p>
+            <ul className="space-y-1">{v.lines.map((l, i) => <li key={i}>🔸 <Bad>{l.summary}</Bad> <span className="text-xs text-sub">— {l.source} · {l.when}</span></li>)}</ul>
+            <p className="text-sm">👉 할 일: <Hi>투자 논지 다시 보기 → SnowBall에 결정 기록</Hi></p>
+          </Card>
+        ))}
+      </Section>
       <Section title="🦾 아이언맨의 포트폴리오" count={positions.length}>
         <Guide items={["❄️ SnowBall 장부를 읽어서 표시 (편집 · 매매 입력은 SnowBall)", <>🔴 비중이 <b className="text-hot">허용 비중을 넘으면 빨간색</b></>, "⚠️ 최근 7일 보유 경고가 있으면 맨 오른쪽 표시"]} />
         <details className="glass rounded-lg px-3 py-2 text-sm">

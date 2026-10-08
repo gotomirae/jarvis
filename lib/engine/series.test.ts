@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cycleOf, phaseOf } from "./cycle";
-import { addColumns, attachQuarterly, indicatorSeries, monthReturn, monthsAgo, periodReturn, quarterEnd, quartersAgoStart, rebaseMerge, weekStart, weekWindow } from "./series";
+import { addColumns, alignPaths, attachQuarterly, pickSeries, indicatorSeries, monthReturn, monthsAgo, periodReturn, quarterEnd, quartersAgoStart, rebaseMerge, weekStart, weekWindow } from "./series";
 
 const bar = (date: string, close: number) => ({ date, close });
 
@@ -81,5 +81,24 @@ describe("🔄 섹터 주기", () => {
     expect([0, 89, 90, 179, 180, 269, 270, 359].map(phaseOf)).toEqual(["recovery", "recovery", "expansion", "expansion", "slowdown", "slowdown", "contraction", "contraction"]);
     expect(cycleOf([1, 2, 3], R)).toBeNull();
     expect(cycleOf(Array(60).fill(100), R)).toMatchObject({ angle: 0, phase: "recovery", level: 0, momentum: 0 });
+  });
+  it("alignPaths: 시작일 이후 첫 거래일 = 100, 경과 거래일로 정렬, 짧은 시계열은 null (D63)", () => {
+    const rows = alignPaths({
+      a: { start: "2018-10-01", bars: [bar("2018-09-28", 90), bar("2018-10-01", 100), bar("2018-10-02", 95), bar("2018-10-03", 110)] },
+      b: { start: "2026-06-22", bars: [bar("2026-06-22", 200), bar("2026-06-23", 150)] },
+    }, 2);
+    expect(rows).toEqual([
+      { date: "0", a: 100, b: 100 },
+      { date: "1", a: 95, b: 75 },
+      { date: "2", a: 110, b: null },
+    ]);
+  });
+  it("pickSeries: 이동평균 2개를 전체로 계산해 from 이후만, 예열 전은 null", () => {
+    const xs = [10, 12, 14, 16, 18, 20].map((c, i) => bar(`2026-01-0${i + 1}`, c));
+    const ps = pickSeries(xs, "2026-01-02", [2, 3, 2], 2, [2, 4]);
+    expect(ps.map((p) => p.date)).toEqual(["2026-01-02", "2026-01-03", "2026-01-04", "2026-01-05", "2026-01-06"]);
+    expect(ps.map((p) => p.ma_fast)).toEqual([11, 13, 15, 17, 19]);
+    expect(ps.map((p) => p.ma_slow)).toEqual([null, null, 13, 15, 17]);
+    expect(ps[4].close).toBe(20);
   });
 });

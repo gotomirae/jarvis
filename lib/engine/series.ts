@@ -4,7 +4,7 @@
  *  · 이번 주(월요일 시작) 구간과 주간 등락률
  *  · 주가 + MACD + RSI 일별 시계열, 분기 영업이익 증가율을 분기말 다음 첫 거래일에 붙이기
  */
-import { ema, rsiSeries } from "./technicals";
+import { ema, rsiSeries, sma } from "./technicals";
 
 export type Bar = { date: string; close: number };
 export type Point = Record<string, number | string | null> & { date: string };
@@ -118,4 +118,25 @@ export function addColumns(points: Point[], cols: Record<string, { date: string;
   const all = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
   const colKeys = Object.keys(cols);
   return all.map((p) => ({ ...Object.fromEntries(colKeys.map((k) => [k, null])), ...p }) as Point);
+}
+
+/** 📅 월간 전략 과거 사례 — 각 시계열을 시작일 이후 첫 거래일 = 100, x = 경과 거래일(0..days)로 맞춰 겹친다 (D63, 표시 전용) */
+export function alignPaths(series: Record<string, { bars: Bar[]; start: string }>, days: number): Point[] {
+  const rows: Point[] = Array.from({ length: days + 1 }, (_, i) => ({ date: String(i), ...Object.fromEntries(Object.keys(series).map((k) => [k, null])) }) as Point);
+  for (const [k, { bars, start }] of Object.entries(series)) {
+    const xs = bars.filter((b) => b.date >= start).slice(0, days + 1);
+    xs.forEach((b, i) => { rows[i][k] = Math.round((b.close / xs[0].close) * 10000) / 100; });
+  }
+  return rows;
+}
+
+export type PickPoint = IndicatorPoint & { ma_fast: number | null; ma_slow: number | null };
+
+/** 🎯 추천 종목 그래프 — 주가 + 이동평균 2개(예: 5·20일선) + MACD + RSI. 전체로 계산한 뒤 from 이후만 (표시 전용, 10/8 사용자 요청) */
+export function pickSeries(bars: Bar[], from: string, macd: [number, number, number], rsiPeriod: number, ma: [number, number]): PickPoint[] {
+  const xs = bars.map((b) => b.close);
+  const f = sma(xs, ma[0]), sl = sma(xs, ma[1]);
+  const r2 = (x: number | null) => (x === null ? null : Math.round(x * 100) / 100);
+  const byDate = new Map(bars.map((b, i) => [b.date, { ma_fast: r2(f[i]), ma_slow: r2(sl[i]) }]));
+  return indicatorSeries(bars, from, macd, rsiPeriod).map((p) => ({ ...p, ...byDate.get(p.date)! }));
 }

@@ -36,7 +36,7 @@ Next.js 15 App Router · React 19 · TypeScript · Tailwind v4 · recharts · Su
 
 ## 디렉터리
 ```
-app/                    / · /entry · /verify(사후 검증) · /portfolio(아이언맨의 포트폴리오) · /radar(산업 레이더 + 성장 근거) · /weekly · /scorecard · /taxonomy · /stock/[id] · /health(탭 없음) · /growth(→ /radar)
+app/                    / · /entry · /verify(사후 검증) · /portfolio(아이언맨의 포트폴리오) · /radar(산업 레이더 + 성장 근거) · /strategy(월간 투자 전략, D63) · /weekly · /scorecard · /taxonomy · /stock/[id] · /health(탭 없음) · /growth(→ /radar)
 app/api/telegram/       webhook
 app/api/public/         taxonomy · holdings-lite · industry-heat · catalyst-watch (토큰)
 lib/taxonomy/           match.ts (참조 구현과 동일 결과, 커버리지 100%)
@@ -47,10 +47,11 @@ lib/outcomes/           ledger · returns · scorecard · attribution · review 
 lib/memo/               fact-table · prompt · grounding
 lib/telegram/           send · templates · commands · keyboards
 lib/llm/                router
-lib/dashboard/          data (그래프 시계열 — 서버 캐시, D56)
+lib/dashboard/          data (그래프 시계열 — 서버 캐시, D56) · strategy (월간 전략 로더·과거 사례 그래프, D63)
 scripts/                배치 진입점 (npm run job -- <name>)
 supabase/migrations/    jarvis 스키마 + pg_cron dispatch
 config/                 위 표
+content/strategy/       월간 투자 전략 YYYY-MM.yaml (표시 전용, 판정 미사용 — D63)
 docs/                   START_HERE.md(사용자 체크리스트) · INTEGRATION_TASKS.md · DECISIONS.md · SNOWBALL_SETUP_GUIDE.md · snowball/ · reference/
 ```
 

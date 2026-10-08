@@ -41,6 +41,21 @@ export async function chart(symbol: string, range = "5d", f: typeof fetch = fetc
   }
 }
 
+/** 기간 일봉 (YYYY-MM-DD ~ YYYY-MM-DD) — 📅 월간 전략 과거 사례 그래프용 (D63) */
+export async function history(symbol: string, from: string, to: string, f: typeof fetch = fetch): Promise<Result<Bar[]>> {
+  const ts = (d: string) => Math.floor(Date.parse(`${d}T00:00:00Z`) / 1000);
+  try {
+    const res = await f(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${ts(from)}&period2=${ts(to)}&interval=1d`, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; JARVIS-research)" }, signal: AbortSignal.timeout(15_000),
+    });
+    if (res.status !== 200) return fail(`${symbol}: HTTP ${res.status}`, res.status);
+    const q = parseChart(symbol, await res.json());
+    return q ? ok(q.closes, 200) : fail(`${symbol}: 데이터 없음`);
+  } catch (e) {
+    return fail(`${symbol}: ${safeReason(e)}`);
+  }
+}
+
 export async function charts(symbols: string[], range = "5d"): Promise<Record<string, Quote>> {
   const out: Record<string, Quote> = {};
   const rs = await Promise.all(symbols.map((s) => chart(s, range)));

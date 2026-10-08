@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseLinkedRow } from "./flywheel";
-import { naverDaily, naverInvestorTrend, naverStockFlow, parseNaverDaily, parseNaverStockTrend, parseNaverTrend } from "./market";
+import { history, naverDaily, naverInvestorTrend, naverStockFlow, parseNaverDaily, parseNaverStockTrend, parseNaverTrend } from "./market";
 import { notionId } from "./notion";
 import { probeTable, rpc, selectAll } from "./rest";
 import { safeReason } from "./types";
@@ -105,6 +105,19 @@ describe("market.naverDaily (국내 공식 종가)", () => {
     expect(await naverDaily("005930", 2, f(500, ""))).toMatchObject({ ok: false, status: 500 });
     expect(await naverDaily("005930", 2, f(200, "<x/>"))).toMatchObject({ ok: false });
     expect(await naverDaily("005930", 2, (async () => { throw new Error("boom"); }) as unknown as typeof fetch)).toMatchObject({ ok: false });
+  });
+});
+
+describe("market.history (기간 일봉, D63)", () => {
+  it("period1·period2 로 요청하고 HTTP 오류·빈 응답·예외는 Result 실패", async () => {
+    let url = "";
+    const body = JSON.stringify({ chart: { result: [{ meta: { exchangeTimezoneName: "America/New_York" }, timestamp: [1538400600, 1538487000], indicators: { quote: [{ close: [2924.59, null] }] } }] } });
+    const f = (status: number, b: string) => (async (u: string) => { url = u; return new Response(b, { status }); }) as unknown as typeof fetch;
+    expect(await history("^GSPC", "2018-10-01", "2018-10-03", f(200, body))).toEqual({ ok: true, status: 200, data: [{ date: "2018-10-01", close: 2924.59 }] });
+    expect(url).toContain("period1=1538352000&period2=1538524800");
+    expect(await history("^GSPC", "2018-10-01", "2018-10-03", f(404, ""))).toMatchObject({ ok: false, status: 404 });
+    expect(await history("^GSPC", "2018-10-01", "2018-10-03", f(200, "{}"))).toMatchObject({ ok: false });
+    expect(await history("^GSPC", "2018-10-01", "2018-10-03", (async () => { throw new Error("boom"); }) as unknown as typeof fetch)).toMatchObject({ ok: false });
   });
 });
 

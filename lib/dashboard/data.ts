@@ -5,7 +5,7 @@
 import { unstable_cache } from "next/cache";
 import { loadYaml, taxonomyConfig } from "@/lib/config/load";
 import { cycleOf, type Cycle, type CycleRules } from "@/lib/engine/cycle";
-import { addColumns, attachQuarterly, indicatorSeries, monthReturn, monthsAgo, periodReturn, quartersAgoStart, rebaseMerge, weekWindow, type Bar, type IndicatorPoint, type Point } from "@/lib/engine/series";
+import { addColumns, attachQuarterly, indicatorSeries, monthReturn, monthsAgo, periodReturn, pickSeries, quartersAgoStart, rebaseMerge, weekWindow, type Bar, type IndicatorPoint, type PickPoint, type Point } from "@/lib/engine/series";
 import { fearGreed, type FgPoint } from "@/lib/ingest/feargreed";
 import { read as heimdallr } from "@/lib/ingest/heimdallr";
 import { read as hermes } from "@/lib/ingest/hermescall";
@@ -22,6 +22,7 @@ export type DashboardConfig = {
   sector_proxies: Record<string, { sym: string; source: Src; name: string }>;
   cycle: CycleRules;
   entry_chart: { quarters: number; rsi_overbought: number; rsi_oversold: number };
+  pick_chart: { months: number; ma: [number, number] };
 };
 export const dashboardConfig = () => loadYaml<DashboardConfig>("dashboard.yaml");
 const TTL = () => dashboardConfig().cache_minutes * 60;
@@ -37,7 +38,7 @@ const bars = (sym: string, source: Src, days: number) => unstable_cache(rawBars,
 export type MarketCharts = {
   from: string;
   indices: Point[];   // 지수(첫날 = 100) + fg(공포·탐욕) + vix(변동성지수) — 날짜 합집합 하나로, 세 그래프가 같은 x축을 쓴다
-  lines: { key: string; label: string; color: string; ret: number | null; mtd: number | null; last: number | null; last_date: string | null }[];
+  lines: { key: string; label: string; color: string; ret: number | null; mtd: number | null; wtd: number | null; week: { start: string; end: string } | null; last: number | null; last_date: string | null }[];
   vix: { date: string; value: number }[]; fg: FgPoint[];
 };
 
@@ -54,7 +55,8 @@ export async function marketCharts(): Promise<MarketCharts> {
     indices: addColumns(rebaseMerge(keyed, from), { fg: fgs, vix: vx }, from),
     lines: C.indices.map((i, k) => {
       const last = series[k][series[k].length - 1];
-      return { key: `s${k}`, label: i.label, color: i.color, ret: periodReturn(series[k], from), mtd: monthReturn(series[k]), last: last?.close ?? null, last_date: last?.date ?? null };
+      const w = weekWindow(series[k]);
+      return { key: `s${k}`, label: i.label, color: i.color, ret: periodReturn(series[k], from), mtd: monthReturn(series[k]), wtd: w?.change_pct ?? null, week: w ? { start: w.start, end: w.end } : null, last: last?.close ?? null, last_date: last?.date ?? null };
     }),
     vix: vx, fg: fgs,
   };
@@ -108,6 +110,20 @@ export async function stockCharts(ids: string[]): Promise<Map<string, { points: 
     const useEps = m === "US" && quarters.length > 0 && quarters.every((q) => q.op_yoy === null);
     const pts = indicatorSeries(xs, from, R.entry_core.M2_macd_pre_cross.params, R.tech_display.rsi_period);
     out.set(id, { points: attachQuarterly(pts, quarters.map((q) => ({ fy: q.fiscal_year, fq: q.fiscal_quarter, op_yoy: useEps ? q.eps_yoy ?? null : q.op_yoy }))), op_label: useEps ? "주당순이익 증가율" : "영업이익 증가율" });
+  }));
+  return out;
+}
+
+/** 🎯 지금 사기 좋은 종목 그래프 — 최근 N개월 주가 + 이동평균 2개 + MACD + RSI, 그리고 추천 후 수익률 계산용 일봉 (국내 네이버 공식 종가 · 미국 야후) */
+export async function pickCharts(ids: string[]): Promise<Map<string, { points: PickPoint[]; bars: Bar[] }>> {
+  const C = dashboardConfig();
+  const R = rules();
+  const from = monthsAgo(kstDate(), C.pick_chart.months);
+  const out = new Map<string, { points: PickPoint[]; bars: Bar[] }>();
+  await Promise.all(ids.map(async (id) => {
+    const [m, sym] = id.split(":");
+    const xs = await bars(m === "US" ? sym.replace(/\./g, "-") : sym, m === "US" ? "yahoo" : "naver", 400);
+    if (xs.length) out.set(id, { points: pickSeries(xs, from, R.entry_core.M2_macd_pre_cross.params, R.tech_display.rsi_period, C.pick_chart.ma), bars: xs.filter((b) => b.date >= from) });
   }));
   return out;
 }

@@ -6,26 +6,28 @@
 import { fail, ok, safeReason, type Result } from "./types";
 
 export type Bar = { date: string; close: number };
-export type Quote = { symbol: string; last: number | null; prev: number | null; change_pct: number | null; date: string | null; closes: Bar[] };
+export type Quote = { symbol: string; last: number | null; prev: number | null; change_pct: number | null; date: string | null; closes: Bar[]; volumes?: (number | null)[] };   // volumes = closes 와 같은 순서(📡 미국 섹터 수급 대용, D69)
 
 /** 순수 함수: chart JSON → Quote (결측 종가 제외, 거래소 날짜는 exchangeTimezone 기준) */
 export function parseChart(symbol: string, json: unknown): Quote | null {
   const r = (json as { chart?: { result?: unknown[] } })?.chart?.result?.[0] as
-    | { meta?: { exchangeTimezoneName?: string }; timestamp?: number[]; indicators?: { quote?: { close?: (number | null)[] }[] } }
+    | { meta?: { exchangeTimezoneName?: string }; timestamp?: number[]; indicators?: { quote?: { close?: (number | null)[]; volume?: (number | null)[] }[] } }
     | undefined;
   if (!r?.timestamp || !r.indicators?.quote?.[0]?.close) return null;
   const tz = r.meta?.exchangeTimezoneName ?? "UTC";
   const closes: Bar[] = [];
+  const volumes: (number | null)[] = [];
   r.timestamp.forEach((t, i) => {
     const c = r.indicators!.quote![0].close![i];
     if (c === null || c === undefined) return;
     const date = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(t * 1000));
     closes.push({ date, close: c });
+    volumes.push(r.indicators!.quote![0].volume?.[i] ?? null);
   });
   if (!closes.length) return null;
   const last = closes[closes.length - 1];
   const prev = closes.length > 1 ? closes[closes.length - 2].close : null;
-  return { symbol, last: last.close, prev, change_pct: prev ? ((last.close - prev) / prev) * 100 : null, date: last.date, closes };
+  return { symbol, last: last.close, prev, change_pct: prev ? ((last.close - prev) / prev) * 100 : null, date: last.date, closes, volumes };
 }
 
 export async function chart(symbol: string, range = "5d", f: typeof fetch = fetch): Promise<Result<Quote>> {
@@ -111,7 +113,7 @@ export async function naverInvestorTrend(index: "KOSPI" | "KOSDAQ", ymd: string,
   }
 }
 
-export type StockFlow = { date: string; foreign: number; institution: number; individual: number };
+export type StockFlow = { date: string; foreign: number; institution: number; individual: number; close?: number };   // close = 그날 종가(순매수 금액 환산용)
 
 /** 순수 함수: 네이버 종목 투자자 동향 JSON([{bizdate, foreignerPureBuyQuant:"-350,942", organPureBuyQuant, individualPureBuyQuant}], 단위 주) → 날짜 오름차순 */
 export function parseNaverStockTrend(json: unknown): StockFlow[] {
@@ -121,19 +123,37 @@ export function parseNaverStockTrend(json: unknown): StockFlow[] {
   for (const r of json as Record<string, unknown>[]) {
     const d = typeof r?.bizdate === "string" && /^\d{8}$/.test(r.bizdate) ? r.bizdate : null;
     const f = { foreign: n(r?.foreignerPureBuyQuant), institution: n(r?.organPureBuyQuant), individual: n(r?.individualPureBuyQuant) };
-    if (d && Number.isFinite(f.foreign) && Number.isFinite(f.institution)) out.push({ date: `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`, ...f, individual: Number.isFinite(f.individual) ? f.individual : 0 });
+    const close = n(r?.closePrice);
+    if (d && Number.isFinite(f.foreign) && Number.isFinite(f.institution)) out.push({ date: `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`, ...f, individual: Number.isFinite(f.individual) ? f.individual : 0, ...(Number.isFinite(close) ? { close } : {}) });
   }
   return out.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-/** 네이버 국내 종목 일별 외국인·기관·개인 순매수(주) — 최근 pageSize 거래일 */
-export async function naverStockFlow(code: string, pageSize = 10, f: typeof fetch = fetch): Promise<Result<StockFlow[]>> {
+/** 네이버 국내 종목(ETF 포함) 일별 외국인·기관·개인 순매수(주) — 최근 pageSize(≤60) 거래일, before(YYYYMMDD)를 주면 그 날짜 이전으로 거슬러 간다 */
+export async function naverStockFlow(code: string, pageSize = 10, f: typeof fetch = fetch, before?: string): Promise<Result<StockFlow[]>> {
   try {
-    const res = await f(`https://m.stock.naver.com/api/stock/${encodeURIComponent(code)}/trend?pageSize=${pageSize}`, { headers: { "User-Agent": "Mozilla/5.0 (compatible; JARVIS-research)" }, signal: AbortSignal.timeout(15_000) });
+    const res = await f(`https://m.stock.naver.com/api/stock/${encodeURIComponent(code)}/trend?pageSize=${pageSize}${before ? `&bizdate=${before}` : ""}`, { headers: { "User-Agent": "Mozilla/5.0 (compatible; JARVIS-research)" }, signal: AbortSignal.timeout(15_000) });
     if (res.status !== 200) return fail(`naver flow ${code}: HTTP ${res.status}`, res.status);
     const rows = parseNaverStockTrend(await res.json());
     return rows.length ? ok(rows, 200) : fail(`naver flow ${code}: 데이터 없음`);
   } catch (e) {
     return fail(`naver flow ${code}: ${safeReason(e)}`);
   }
+}
+
+/** 네이버 종목 투자자 동향을 pages × 60거래일만큼 거슬러 읽는다 (📡 섹터 ETF 수급 추세, D69). 한 쪽이라도 읽으면 성공 */
+export async function naverStockFlowLong(code: string, pages: number, f: typeof fetch = fetch): Promise<Result<StockFlow[]>> {
+  const out: StockFlow[] = [];
+  let before: string | undefined;
+  for (let i = 0; i < pages; i++) {
+    const r = await naverStockFlow(code, 60, f, before);
+    if (!r.ok) { if (out.length) break; return r; }
+    out.unshift(...r.data.filter((x) => !out.some((y) => y.date === x.date)));
+    const first = r.data[0].date;
+    const d = new Date(`${first}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    before = d.toISOString().slice(0, 10).replace(/-/g, "");
+    if (r.data.length < 60) break;
+  }
+  return ok(out.sort((a, b) => a.date.localeCompare(b.date)), 200);
 }

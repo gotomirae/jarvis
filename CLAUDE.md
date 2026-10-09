@@ -15,7 +15,7 @@ Next.js 15 App Router · React 19 · TypeScript · Tailwind v4 · recharts · Su
 | `config/links.yaml` | 텔레그램·대시보드 공용 링크 규칙 |
 | `config/industry_growth.yaml` | M3 ② 미국 메이저 증권사 목록·무료 검색 소스·출처 등급·추출 패턴, ③ 전망 근거(출처·기준일 필수) |
 | `config/catalyst_calendar.yaml` | M4 수동 이벤트 |
-| `config/dashboard.yaml` | 대시보드 그래프(지수·공포탐욕·변동성·섹터 대표 ETF·주기·진입 보드 차트) — 표시 전용 |
+| `config/dashboard.yaml` | 대시보드 그래프(지수·공포탐욕·변동성·섹터 대표 ETF·섹터 핵심 지표·주기 세 렌즈·진입 보드 차트) — 표시 전용 |
 
 ## 불변 규칙
 1. **보유·거래·원가를 쓰지 않는다.** 원장은 SnowBall Heritage. SnowBall 쓰기는 `jarvis_submit_idea` RPC 하나.

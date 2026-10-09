@@ -3,7 +3,7 @@ import { featuresOf, type FeedbackRules } from "@/lib/engine/feedback";
 import { attribute, type Sample, type StatRow } from "./attribution";
 import { reviewProposals } from "./review";
 
-const cfg: FeedbackRules = { primary_horizon: 20, min_samples: 3, shrinkage_k: 30, dimensions: ["families", "sources", "p_bucket", "market", "l1"], p_buckets: [20, 30, 40], timing_score_buckets: [1, 4], review: { min_gap_pctp: 2 } };
+const cfg: FeedbackRules = { basis: "excess", report_horizons: [10, 20], primary_horizon: 20, min_samples: 3, shrinkage_k: 30, dimensions: ["families", "sources", "p_bucket", "market", "l1"], p_buckets: [20, 30, 40], timing_score_buckets: [1, 4], review: { min_gap_pctp: 2 } };
 const fKR = featuresOf({ families: ["heimdallr", "sage"], p: 35, market: "KR", l1: "1b" });
 
 describe("attribute", () => {
@@ -24,6 +24,10 @@ describe("attribute", () => {
     expect(s.find((x) => x.scope === "holding_alert" && x.horizon_days === 5)).toMatchObject({ median_excess: null, mean_excess: null, hit_rate: null });
     expect(s[0].scope).toBe("buy");
     expect(s[s.length - 1]).toMatchObject({ scope: "holding_alert", horizon_days: 20 });
+    // 절대 수익률 채점(D69): 승률 = 수익률 > 0 비율 (초과수익이 없어도 채점), 매도 쪽은 수익률 < 0
+    const a = attribute(samples, { ...cfg, basis: "absolute" });
+    expect(a.find((x) => x.scope === "buy" && x.dimension === "all")).toMatchObject({ hit_rate: 0.67, median_excess: 1 });
+    expect(a.find((x) => x.scope === "holding_alert" && x.horizon_days === 5)).toMatchObject({ hit_rate: 0 });
   });
 });
 

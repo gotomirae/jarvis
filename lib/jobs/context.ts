@@ -19,7 +19,7 @@ import type { AdoptionRules } from "@/lib/engine/outlook/adopt";
 import type { MacdRules, TechDisplayRules } from "@/lib/engine/technicals";
 import type { TurnaroundRules } from "@/lib/engine/earnings";
 import type { PRules, QueueRules } from "@/lib/engine/queues";
-import type { RegimeRules } from "@/lib/engine/regime";
+import type { PhaseRules, RegimeRules } from "@/lib/engine/regime";
 import type { Signal } from "@/lib/engine/types";
 import { classify, normalize as normLabel } from "@/lib/taxonomy/match";
 import { confirmedOverrides } from "@/lib/taxonomy-store";
@@ -27,7 +27,7 @@ import { confirmedOverrides } from "@/lib/taxonomy-store";
 export type Rules = {
   normalize: NormalizeRules;
   axes: AxesRules & { P: PRules };
-  regime: RegimeRules & { risk_off_effects: { weight_multiplier: number; buy_requires: { kr_grade: string; us_filters_all: string[] } } };
+  regime: RegimeRules & { phase: PhaseRules & { index: { KR: string; US: string } }; risk_off_effects: { weight_multiplier: number; buy_requires: { kr_grade: string; us_filters_all: string[] } } };
   entry_gate: { risk_off_weight_multiplier: number; pri_hard_max: number; weight_capacity_required: boolean; first_tranche: number };
   gate: { daily_green_max: Record<"KR" | "US", number>; resend_block_trading_days: number };
   breakout_watch: { K1_kr: { arm_days: number }; H1_us: { arm_days: number } };

@@ -23,3 +23,23 @@ export function regime(inp: RegimeInput, rules: RegimeRules): Regime {
   }
   return { risk_off: reasons.length > 0, reasons, kospi_ma: ma };
 }
+
+/**
+ * 시장 국면 (D69, 사후 검증 학습 단위) — 지수 종가 기준 결정론 규칙. 순수 함수.
+ *  📈 상승장 = 종가 > 장기선 ∧ 단기선이 slope_days 전보다 높음 · 📉 하락장 = 종가 < 장기선 ∧ 단기선이 낮아짐 · ↔️ 횡보장 = 그 외
+ * 추천 기준은 국면마다 성과가 다르다 → 국면별 표본이 충분하면 그 국면의 성과로 배운 기준을 쓴다(pick-policy).
+ */
+export type MarketPhase = "up" | "down" | "side";
+export type PhaseRules = { ma_long: number; ma_short: number; slope_days: number };
+export const MARKET_PHASE_NAME: Record<MarketPhase, string> = { up: "📈 상승장", down: "📉 하락장", side: "↔️ 횡보장" };
+
+export function marketPhase(closes: number[], r: PhaseRules): MarketPhase | null {
+  const long = movingAverage(closes, r.ma_long);
+  const short = movingAverage(closes, r.ma_short);
+  const before = movingAverage(closes.slice(0, closes.length - r.slope_days), r.ma_short);
+  if (long === null || short === null || before === null) return null;
+  const last = closes[closes.length - 1];
+  if (last > long && short > before) return "up";
+  if (last < long && short < before) return "down";
+  return "side";
+}

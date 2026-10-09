@@ -1,6 +1,7 @@
 /**
  * ⚠️ 보유 경고 판정 (PRD §6.4 · §7.5) — 순수 함수. 보유 종목에 대해 다음 원인을 찾는다.
- *  · SnowBall 경보: 규칙·심각도 필터(동적 비중 critical, 드로다운 ≤ −20%), 종목·규칙별 7일 1회
+ *  · SnowBall 경보: 규칙·심각도 필터(동적 비중 critical, 드로다운 ≤ −10%), 종목·규칙별 7일 1회
+ *  · 주가 위치(D69, 셋 중 하나): 고점 대비 −10% · 5일선이 10일선 하향 돌파 · 5일선이 20일선 하향 돌파 — SnowBall 경보(thesis_breach payload.kind)를 읽는다
  *  · 훼손조건 매칭 트리거(thesis_link=훼손, negative): 새로 생기거나 imminent 로 바뀔 때
  *  · Heimdallr 등급 하락 또는 score_delta ≤ −5 (국내)
  *  · 강세→약세 전환 멘토 ≥ 2 (Sage, 14일)
@@ -14,7 +15,7 @@ export type HoldingRules = {
   mentor_flip_min: number;
   mentor_flip_window_days: number;
   setup_invalidation_window_days?: number;
-  snowball_risk: { rule_types: Record<string, string[]>; drawdown_max_pct: number; drawdown_step_pct: number; dedupe_days: number };
+  snowball_risk: { rule_types: Record<string, string[]>; drawdown_max_pct: number; drawdown_step_pct: number; dedupe_days: number; price_kinds?: Record<string, string> };
   thesis_break_trigger: { thesis_link: string; direction: string; alert_on: string[] };
 };
 
@@ -23,7 +24,7 @@ export type TriggerRow = { trigger_id: string; asset_id: string; direction: stri
 export type ScreenPair = { code: string; prev_grade: string | null; grade: string | null; score_delta: number | null; fiscal: string };
 export type MentorStance = { mentor_id: string; entity_id: string; stance: string; published_at: string };
 
-export type AlertCause = "snowball_risk" | "thesis_trigger" | "grade_down" | "mentor_flip";
+export type AlertCause = "snowball_risk" | "price_signal" | "thesis_trigger" | "grade_down" | "mentor_flip";
 export type HoldingAlert = {
   asset_id: string; entity_id: string | null; name: string; cause: AlertCause; summary: string; source: string;
   fired_at: string; dedupe_key: string; detail: Record<string, unknown>;
@@ -61,6 +62,18 @@ export function holdingAlerts(
     if (!h || !sev?.includes(a.severity)) continue;
     let summary = a.title;
     let key = `hold:risk:${h.asset_id}:${a.rule_type}:${bucket(a.fired_at)}`;
+    if (a.rule_type === "thesis_breach") {
+      // 이동평균 하향 돌파(D69)만 — 뉴스 훼손은 트리거 경로(thesis_trigger)가 맡는다. 같은 봉은 한 번만. SnowBall D-76: 한 경보에 kinds 여러 개(10·20일선 동시)
+      const kinds = Array.isArray(a.payload?.kinds) ? (a.payload.kinds as unknown[]).map(String) : [String(a.payload?.kind ?? "")];
+      const bar = String(a.payload?.bar_date ?? a.fired_at.slice(0, 10));
+      for (const kind of kinds) {
+        const label = r.snowball_risk.price_kinds?.[kind];
+        if (!label) continue;
+        out.push({ asset_id: h.asset_id, entity_id: h.entity_id, name: h.name, cause: "price_signal", summary: `📉 ${label}(${bar.slice(5).replace("-", "/")}) — 단기 추세 이탈, 재검토`, source: "SnowBall 시세",
+          fired_at: a.fired_at, dedupe_key: `hold:ma:${h.asset_id}:${kind}:${bar}`, detail: { alert_id: a.alert_id, rule_type: a.rule_type, payload: a.payload ?? {} } });
+      }
+      continue;
+    }
     if (a.rule_type === "drawdown") {
       const dd = pct(a.payload?.drawdown);
       if (dd === null || dd > r.snowball_risk.drawdown_max_pct) continue;

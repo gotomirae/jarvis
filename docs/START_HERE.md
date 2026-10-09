@@ -106,6 +106,7 @@
 - [ ] Heimdallr Codex 세션에 `docs/INTEGRATION_TASKS.md` **G절**을 붙여 넣어 RPC·미국 종목·드라이브 자동 생성·🎤 실행기를 만든다
 - [ ] 이 PC: Claude Code 로그인 유지, PowerPoint 설치(발표자료 PDF 변환), Codex 앱·Google Drive 앱 실행
 - [ ] (D60) JARVIS SQL Editor에서 `supabase/migrations/0010_claude_analysis.sql` 실행 · Heimdallr Codex 세션에 **H절** 붙여 넣기
+- [ ] (D69) JARVIS SQL Editor에서 `supabase/migrations/0011_outcomes_d10.sql` 실행 — 사후 검증 10거래일 결과 저장(실행 전에도 집계는 됨)
 - 그 전까지 버튼을 누르면 "Heimdallr 요청 실패 — 연동 준비 전" 안내만 나온다(아무것도 실행되지 않음).
 
 ---

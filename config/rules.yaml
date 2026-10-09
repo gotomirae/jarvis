@@ -22,6 +22,7 @@ axes:
 regime:
   risk_off_if: {snowball_regime: -1, or_all: {vix_min: 25, kospi_below_ma: 60}}
   risk_off_effects: {weight_multiplier: 0.5, buy_requires: {kr_grade: "★", us_filters_all: ["F1", "F3", "F4"]}}
+  phase: {ma_long: 60, ma_short: 20, slope_days: 5, index: {KR: "^KS11", US: "^GSPC"}}   # 시장 국면(상승·하락·횡보장) — 사후 검증을 국면별로 따로 학습(D69)
 
 queues:
   order: ["holding_alert", "take_profit", "buy", "radar", "pullback_wait"]
@@ -33,9 +34,11 @@ queues:
     setup_invalidation_window_days: 20
     # P2 실측(9/28): SnowBall risk_alerts 7일 250건(drawdown/warn 215·dynamic_weight/critical 22) → 규칙·심각도 필터 + 종목·규칙별 묶음
     snowball_risk:
-      rule_types: {dynamic_weight: ["critical"], drawdown: ["warn", "critical"]}   # allocation_drift·volume_anomaly(info)는 경고 아님
-      drawdown_max_pct: -20.0          # PRD §7.5 "드로다운 −20%(SnowBall 규칙) → 재검토"
-      drawdown_step_pct: 5.0           # 드로다운은 5%p 더 깊어질 때만 다시 알림(−20 → −25 → −30). P2 실측: 2일 창에 후보 48건 → 주 1회 반복은 과다
+      rule_types: {dynamic_weight: ["critical"], drawdown: ["warn", "critical"], thesis_breach: ["warn"]}   # allocation_drift·volume_anomaly(info)는 경고 아님
+      # ⚠️ 주가 위치 경고 = 셋 중 하나 (사용자 지정 10/9, D69 — SnowBall 과 같은 규칙): ① 고점 대비 −10% ② 5일선이 10일선 하향 돌파 ③ 5일선이 20일선 하향 돌파
+      drawdown_max_pct: -10.0          # ① 고점(52주 종가) 대비 −10% 이하 (옛 −20%, PRD §7.5)
+      drawdown_step_pct: 5.0           # 드로다운은 5%p 더 깊어질 때만 다시 알림(−10 → −15 → −20). P2 실측: 2일 창에 후보 48건 → 주 1회 반복은 과다
+      price_kinds: {ma5_ma10_dead_cross: "5일선이 10일선 하향 돌파", ma5_ma20_dead_cross: "5일선이 20일선 하향 돌파"}   # ②③ SnowBall thesis_breach payload.kind (그 외 thesis_breach 는 트리거 경로가 맡음)
       dedupe_days: 7                   # 그 외 규칙은 같은 종목·규칙 7일에 1번
     thesis_break_trigger: {thesis_link: "훼손", direction: "negative", alert_on: ["new", "imminent"]}   # 훼손조건 매칭 트리거
   take_profit: {heat_min: 76, pri_min: 75}
@@ -128,13 +131,14 @@ entry_gate:
 
 tech_display:                        # 🎯 추천 카드의 가격·기술 지표 ⑤~⑧ (표시 전용 — 판정 조건 아님). MACD "직전" 기준은 entry_core.M2_macd_pre_cross 를 그대로 쓴다
   source: "yahoo_chart_1y"             # lib/ingest/market.ts 일봉 종가 (국내 .KS/.KQ, 미국 티커)
-  ma: [5, 20]                          # 5일선 · 20일선
-  ma_near_gap_pct_max: 1.0             # 5일선이 20일선 아래 1.0% 이내 …
+  ma: [5, 10]                          # 5일선 · 10일선 (사용자 지정 10/9 D69 — 5·20 → 5·10)
+  ma_near_gap_pct_max: 1.0             # 5일선이 10일선 아래 1.0% 이내 …
   ma_narrowing_days_min: 2             # … 이고 격차가 2일 연속 좁혀지면 "상향 통과 직전"
   rsi_period: 14                       # Wilder RSI
   rsi_direction_days: 3                # 방향 = 오늘 vs 3거래일 전
   rsi_flat_band: 1.0                   # ±1.0 이내 변화는 보합
   high_lookback_days: 250              # 고점 대비 하락률 = 최근 250거래일(≈52주) 최고 종가 대비
+  base_range_max_pct: 8.0              # 횡보 = 최근 N거래일 종가 폭(최고 ÷ 최저 − 1) ≤ 8% (Heimdallr 조정 후 횡보 10일 폭 8% 와 같은 값, D69)
 
 setup_tags:                          # 🟢 신호의 맥락 표시 (판정 조건 아님, 성과 귀속 단위)
   PB: "눌림 (M1 조정)"
@@ -183,17 +187,19 @@ inbox:
 
 outcomes:                            # 성과 원장 (PRD §12, D47) — lib/outcomes · outcomes_update 20:00
   entry_price: "next_trading_day_close"
-  horizons_days: [5, 20, 40, 60]     # D47: 사용자 지정(D+40 추가). 거래일 기준
+  horizons_days: [5, 10, 20, 40, 60] # D47: 사용자 지정(D+40 추가) · D69: D+10 추가(기준별 승률 10·20거래일). 거래일 기준
   benchmarks: {KOSPI: "KOSPI", KOSDAQ: "KOSDAQ", US: "SPX"}
   # 시세: 국내 = 네이버 일봉(거래소 공식 종가 — 야후 국내 종가는 동시호가 전 값, D47), 미국 = 야후
   benchmark_symbols: {KOSPI: {source: naver, sym: "KOSPI"}, KOSDAQ: {source: naver, sym: "KOSDAQ"}, SPX: {source: yahoo, sym: "^GSPC"}}
   min_samples_for_calibration: 30
 
 feedback:                            # 성과 피드백 (PRD §7.3 게이트 6 · §12, D49) — lib/engine/feedback.ts · lib/outcomes/attribution.ts · review.ts
+  basis: "absolute"                  # 채점 = 추천일 기준 절대 수익률(사용자 지정 10/9, D69). "excess" = 시장 대비 초과수익(D49 옛 기준)
   primary_horizon: 20                # 순위·카드·보정 기준 기간(거래일) — SC5 와 같은 D+20
+  report_horizons: [10, 20]          # /verify 기준별 승률 기간 (사용자 지정 10/9 — 10거래일 · 20거래일 뒤)
   min_samples: 30                    # 이 표본 미만 구간은 순위·보정에 쓰지 않음(T12 과최적화 방지)
-  shrinkage_k: 30                    # 표본 수 가중 축소: 기대 초과수익 = n/(n+k) × 구간 중앙값
-  dimensions: [families, sources, p_bucket, grade, market, l1, timing_verdict, timing_check, timing_score]   # timing_* 는 브리핑 후보 원장(pick)에만 있다(D54)
+  shrinkage_k: 30                    # 표본 수 가중 축소: 기대 수익률 = n/(n+k) × 구간 중앙값
+  dimensions: [families, sources, p_bucket, grade, market, l1, timing_verdict, timing_check, timing_score, setup_path, market_phase]   # timing_*·setup_path 는 브리핑 후보 원장(pick)에만(D54). setup_path = 주가 위치 A·B, market_phase = 상승·하락·횡보장(D69)
   p_buckets: [20, 30, 40]            # 주가 반영도 구간 <20 · 20~30 · 30~40 · ≥40 (40 = axes.P.buy_max 와 맞춤)
   timing_score_buckets: [1, 4, 6]    # ⏱️ 매수 매력 점수 구간 <1 · 1~4 · 4~6 · ≥6
   review:                            # 분기 보정 제안 — 제안만, 자동 적용 금지(PRD §12)
@@ -207,9 +213,11 @@ feedback:                            # 성과 피드백 (PRD §7.3 게이트 6 �
 buy_timing:
   p: {great_max: 25, good_max: 40}                     # 주가 반영도 <25 크게 덜 반영 · <40 덜 반영 · 그 외 이미 반영
   p_weight: 0.5                                        # 주가 반영도 점수 배율 — 보정 중이라 작게(사용자 지정 10/8, 향후 상향 예정)
-  setup:                                               # 🎯 필수 조건 (사용자 지정 10/8 — 상승 초기에 투자): 하나라도 아니면 TOP 추천 제외
-    require: true                                      #   ① 고점 대비 눌림(position 사이 구간) ② 5·20일선 ③ MACD 시그널 — 상향 돌파 직전 · 오늘 · 직후
+  setup:                                               # 🎯 필수 조건 (상승 초기에 투자 — 10/8 D65, 10/9 D69 사용자 지정): 아니면 TOP 추천 제외
+    require: true                                      #   MACD 시그널 상향 돌파 직전·오늘·직후  그리고  주가 위치 A 또는 B (모든 프로젝트 공통)
     just_after_days: 3                                 #   "바로 직후" = 상향 돌파 후 3거래일 이내 (돌파 당일 = 1일째)
+    # A = 5일선이 10일선 상향 돌파 직전·직후(3거래일 이내) + 고점 대비 눌림(position 사이 구간 — 신고가 추격 방지)
+    base: {drawdown_min_pct: -20.0, drawdown_max_pct: -10.0, days_min: 10}   # B = 52주 고점 대비 10~20% 조정 후 10거래일 이상 횡보(tech_display.base_range_max_pct)
   position: {chase_above_pct: -5.0, deep_below_pct: -40.0}   # 52주 고점 대비 −5% 위 = 추격 주의, −40% 아래 = 하락 추세 의심, 사이 = 눌림
   rsi: {overheat_min: 70, near_hot_min: 65, rebound_max: 45}   # RSI ≥70 과열(감점) · 65~70 과열 근접(표시만) · ≤45 에서 상승 전환 = 반등 시작
   flow_days: 2                                         # 외국인 또는 기관 N일 연속 순매수 (사용자 지정 매수 근거)
@@ -224,6 +232,7 @@ buy_timing:
     rsi_hot: -2
     rsi_rebound: 1
     cross: 1                                           # MACD·5일선 상향 돌파 직전·당일·직후 (각각)
+    base: 1                                            # 조정 후 횡보 (B)
     trend_down: -1                                     # 아래로 벌어지는 중 (각각)
     flow_buy: 2                                        # 외국인 또는 기관 연속 순매수
     flow_proxy: 1                                      # 미국 매집일 대용(D15)
@@ -238,7 +247,7 @@ buy_timing:
 pick_policy:
   auto_apply: true
   min_samples: 30
-  target_hit_rate: 0.55            # 목표 승률(20거래일 뒤 시장 대비 초과수익 > 0 비율)
+  target_hit_rate: 0.55            # 목표 승률(20거래일 뒤 추천일 기준 절대 수익률 > 0 비율 — D69, feedback.basis)
   min_gap_pctp: 2.0                # 후보 전체보다 이만큼 나쁠(좋을) 때만 제외(우수)로 본다
   base_exclude_verdicts: ["wait"]  # 기본 기준: ⏸️ 지금은 대기 종목은 TOP 추천에 올리지 않음
   scope: "pick_all"                # 학습 표본 = 추천 여부와 무관한 후보 전체(선택 편향 방지)
@@ -251,6 +260,8 @@ portfolio_policy:
   tier_caps: {global_top20: 0.25, us: 0.10, kr: 0.10}   # 종목당 동적 허용 상한(주식 포트폴리오 대비)
   overseas_band: {low: 0.50, high: 0.60, target: 0.55}  # 해외 투자 비중
   domestic_markets: ["KOSPI", "KOSDAQ", "KONEX"]
+  # 글로벌 시총 20위 — SnowBall GLOBAL_TOP20(position-tiers.ts)과 같은 목록(companiesmarketcap.com 2026-10-08). 표시용(등급 상한 라벨) — 계산은 SnowBall
+  global_top20_tickers: [NVDA, AAPL, GOOG, GOOGL, MSFT, AMZN, TSM, "2330", SPCX, META, AVGO, "2222", TSLA, "005930", "005935", MU, BRK.B, BRK.A, LLY, AMD, "000660", JPM, WMT, V]
 
 weekly:                              # 🏛️ 주간 투자위원회 (PRD §10, P4) — lib/jobs/weekly.ts
   market:                            # Ⅰ-1 시장 요약 (야후 chart; KOSPI·KOSDAQ 은 네이버 공식 종가)

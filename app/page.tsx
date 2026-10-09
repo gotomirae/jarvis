@@ -5,9 +5,10 @@ import { linksConfig, taxonomyConfig } from "@/lib/config/load";
 import { explain, type AxesEvidence } from "@/lib/engine/explain";
 import type { PerfStat } from "@/lib/engine/feedback";
 import { buyReasons, consensusOf, EMPTY_IDEA, ideaCard, rankBuy } from "@/lib/engine/idea";
-import { assess, candidatePool, type Assessed, type Policy } from "@/lib/engine/pick-policy";
+import { assess, candidatePool, policyFor, type Assessed, type Policy, type PolicySet } from "@/lib/engine/pick-policy";
 import type { Queue } from "@/lib/engine/queues";
 import { issues, setupLine, VERDICT_SHORT } from "@/lib/engine/timing";
+import type { MarketPhase } from "@/lib/engine/regime";
 import { env } from "@/lib/env";
 import { rules } from "@/lib/jobs/context";
 import { stockLinks, type LinkEntity } from "@/lib/links";
@@ -25,7 +26,7 @@ type Ctx = Parameters<typeof stockLinks>[1];
 const SECTIONS: { queue: Queue; title: string; about: string[] }[] = [
   { queue: "take_profit", title: "💰 익절 검토", about: ["보유 종목 중 과열 점수 · 주가 반영도가 모두 높음", "👉 일부 이익 실현 검토"] },
   { queue: "radar", title: "🔭 선행 관찰", about: ["산업 이야기 · 실적 촉매는 켜짐, 실적 숫자는 확인 전", "실적 발표 45일 이내 → 발표 뒤 🎯 로 올라올 수 있음"] },
-  { queue: "pullback_wait", title: "⏳ 눌림 대기", about: ["실적은 좋지만 주가가 이미 많이 반영됨", "🚀 상승 초기 조건(눌림 + 5·20일선 · MACD 돌파 직전 · 직후)을 만족하면 위 🎯 후보로 승격"] },
+  { queue: "pullback_wait", title: "⏳ 눌림 대기", about: ["실적은 좋지만 주가가 이미 많이 반영됨", "🚀 상승 초기 조건(MACD 돌파 직전 · 직후 + Ⓐ 5·10일선 돌파 또는 Ⓑ 조정 후 횡보)을 만족하면 위 🎯 후보로 승격"] },
 ];
 
 /** 오늘 (PRD §8): 요약 타일 → 시장 국면(+공포·탐욕) → 주요 지표 → 🎯 지금 사기 좋은 종목(그래프·추천 후 수익률) → 대기 → 익절 → 선행 관찰 → 눌림 대기. 보유 경고는 🦾 포트폴리오 탭(10/8) */
@@ -33,7 +34,7 @@ export default async function Today() {
   const sb = await supabaseServer();
   const R = rules();
   const since7 = new Date(Date.now() - 7 * 86400_000).toISOString();
-  const [lastDate, reg, alerts, pol, lastStats, notes, lastKR, lastUS] = await Promise.all([
+  const [lastDate, reg, alerts, pol, lastStats, notes, lastKR, lastUS, hc] = await Promise.all([
     sb.from("queue_items").select("date").order("date", { ascending: false }).limit(1).maybeSingle(),
     sb.from("bot_state").select("value").eq("key", "regime").maybeSingle(),
     sb.from("notifications").select("entity_id,payload,sent_at,created_at").eq("kind", "holding_alert").gte("created_at", since7).order("created_at", { ascending: false }).range(0, 99),
@@ -42,7 +43,10 @@ export default async function Today() {
     sb.from("notifications").select("sent_at,payload").in("kind", ["brief_morning", "brief_evening"]).not("sent_at", "is", null).order("sent_at", { ascending: true }).range(0, 1999),
     sb.from("entry_eval").select("date").eq("market", "KR").order("date", { ascending: false }).limit(1).maybeSingle(),
     sb.from("entry_eval").select("date").eq("market", "US").order("date", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("holdings_cache").select("payload").order("snapshot_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
+  // 보유 종목 비중 한도(D69) — SnowBall 동적 허용 비중에 닿은 보유 종목은 TOP 추천에서 뺀다
+  const heldBy = new Map((((hc.data?.payload as { positions?: { entity_id: string | null; weight: number | null; allowed_weight: number | null }[] } | undefined)?.positions) ?? []).filter((h) => h.entity_id).map((h) => [h.entity_id as string, { weight: h.weight, allowed_weight: h.allowed_weight }]));
   const date = (lastDate.data?.date as string | undefined) ?? kstDate();
   const mc = await marketCharts();
   const DC = dashboardConfig();
@@ -52,7 +56,7 @@ export default async function Today() {
   const [items, axes, st, ee] = await Promise.all([
     sb.from("queue_items").select("date,entity_id,queue,reason,first_seen").eq("date", date).range(0, 499),
     sb.from("axes_daily").select("entity_id,evidence").eq("date", date).range(0, 1999),
-    lastStats.data ? sb.from("perf_stats").select("scope,dimension,bucket,horizon_days,n,median_excess,hit_rate").eq("as_of", lastStats.data.as_of).eq("horizon_days", R.feedback.primary_horizon).in("scope", ["buy", R.pick_policy.scope]).range(0, 4999) : Promise.resolve({ data: [] }),
+    lastStats.data ? sb.from("perf_stats").select("scope,dimension,bucket,horizon_days,n,median_excess,hit_rate,median_ret").eq("as_of", lastStats.data.as_of).eq("horizon_days", R.feedback.primary_horizon).or(`scope.eq.buy,scope.eq.${R.pick_policy.scope},scope.like.${R.pick_policy.scope}@*`).range(0, 4999) : Promise.resolve({ data: [] }),
     evalDates.length ? sb.from("entry_eval").select("date,market,level").in("date", evalDates).in("level", ["green", "yellow"]).range(0, 999) : Promise.resolve({ data: [] }),
   ]);
   const q = (items.data ?? []) as QItem[];
@@ -61,8 +65,10 @@ export default async function Today() {
   const ents = ids.length ? await sb.from("entities").select("id,market,symbol,name,primary_l1,l1_codes,snowball_asset_id,hermes_analysis_id,naver_us_code").in("id", ids) : { data: [] };
   const byId = new Map(((ents.data ?? []) as Ent[]).map((e) => [e.id, e]));
   const ctx = { links: linksConfig(), taxonomy: taxonomyConfig(), jarvisUrl: env().JARVIS_URL };
-  const r = reg.data?.value as { risk_off?: boolean; reasons?: string[]; vix?: number | null; snowball?: number | null; at?: string } | undefined;
-  const policy = ((pol.data?.value as { policy?: Policy } | undefined)?.policy) ?? null;
+  const r = reg.data?.value as { risk_off?: boolean; reasons?: string[]; vix?: number | null; snowball?: number | null; at?: string; phase?: Partial<Record<"KR" | "US", MarketPhase | null>> } | undefined;
+  const pv = pol.data?.value as { policy?: Policy; by_phase?: PolicySet["by_phase"] } | undefined;
+  const policySet: PolicySet = { overall: pv?.policy ?? null, by_phase: pv?.by_phase ?? {} };
+  const policy = policyFor(policySet, r?.phase?.KR ?? null);
   const entryRows = ((ee.data ?? []) as { date: string; market: string; level: string }[]).filter((x) => (x.market === "KR" ? x.date === lastKR.data?.date : x.date === lastUS.data?.date));
   const hist = recHistory((notes.data ?? []) as BriefNote[], (c) => (byId.has(`KR:${c}`) ? `KR:${c}` : byId.has(`US:${c}`) ? `US:${c}` : null));
 
@@ -72,7 +78,7 @@ export default async function Today() {
     const e = byId.get(x.entity_id)!;
     const ev = evBy.get(x.entity_id) ?? {};
     const p = (x.reason as { p?: number | null }).p ?? null;
-    const a = assess({ ev, p, market: e.market, l1: e.primary_l1 ?? null, riskOff: r?.risk_off === true, today }, R, policy, (st.data ?? []) as PerfStat[]);
+    const a = assess({ ev, p, market: e.market, l1: e.primary_l1 ?? null, riskOff: r?.risk_off === true, today, phase: r?.phase?.[e.market] ?? null, holding: heldBy.get(x.entity_id) }, R, policySet, (st.data ?? []) as PerfStat[]);
     return { ...x, e, ev, a, p, families: ev.families?.length ?? 0, industryGrowth: ev.idea?.industry?.realized_median ?? null, nextEvent: ev.next_event ?? null, perf: a.prior.score, timing: a.timing.score };
   }), R.pick_policy.promote_from);
   const promoted = new Set(cands.filter((c) => c.promoted).map((c) => c.entity_id));
@@ -137,7 +143,9 @@ export default async function Today() {
         <Guide items={[
           <>🏢 <b className="text-white">좋은 기업</b> = 실적 · 산업 · 신호 합의 (매수 검토 후보)</>,
           <>⏱️ <b className="text-gold">지금 사기 좋은가</b> = 가격 · 추세 · 수급 · 과열</>,
-          <>🚀 <b className="text-hot">필수: 상승 초기</b> = 고점 대비 눌림 + 5·20일선 · MACD 상향 돌파 <b className="text-white">직전 · 직후(3일 이내)</b></>,
+          <>🚀 <b className="text-hot">필수: 상승 초기</b> = MACD 상향 돌파 <b className="text-white">직전 · 직후(3일 이내)</b> + 주가 위치 둘 중 하나</>,
+          <>　Ⓐ 5일선이 10일선 상향 돌파 <b className="text-white">직전 · 직후(3일 이내)</b> + 고점 대비 눌림 · Ⓑ 고점 대비 <b className="text-white">10~20% 조정 후 10일 이상 횡보</b></>,
+          <>⚖️ 이미 보유 중이고 <b className="text-white">허용 비중(글로벌 20위 25% · 미국 10% · 국내 10%)에 닿으면</b> 제외</>,
           <>⏳ 눌림 대기 종목도 상승 초기 조건을 만족하면 <b className="text-hot">승격</b> (주가 반영도는 보정 중 → 비중 작게)</>,
           <>⏸️ 대기이거나 사후 검증에서 승률 낮은 기준에 걸리면 제외</>,
           <>📨 시장별 상위 {R.pick_policy.top_max}개가 텔레그램 추천</>,
@@ -150,7 +158,7 @@ export default async function Today() {
       </Section>
 
       <Section title="⏸️ 좋은 기업이지만 지금은 대기" count={waiting.length}>
-        <Guide items={["실적 · 산업은 좋지만 지금 가격 · 추세 · 수급이 별로", <>🚀 상승 초기 조건(눌림 + 5·20일선 · MACD 돌파 직전 · 직후)이 <b className="text-hot">안 맞아도</b> 여기</>, "조건이 맞으면 위 🎯 목록으로 올라옴"]} />
+        <Guide items={["실적 · 산업은 좋지만 지금 가격 · 추세 · 수급이 별로", <>🚀 상승 초기 조건(MACD 돌파 직전 · 직후 + Ⓐ 5·10일선 돌파 또는 Ⓑ 조정 후 횡보)이 <b className="text-hot">안 맞아도</b> 여기</>, "조건이 맞으면 위 🎯 목록으로 올라옴"]} />
         {waiting.length === 0 ? <Empty text="없음" /> : waiting.map((c) => (
           <Card key={c.entity_id} tone="muted">
             <p className="text-base font-bold">
@@ -179,10 +187,10 @@ export default async function Today() {
 type Cand = { entity_id: string; e: Ent; ev: AxesEvidence; a: Assessed; p: number | null; promoted: boolean };
 
 /** 🎯 카드 — 이름 → 추천 이력 → 지금 매수 매력 → 아이디어 → 🏢 | ⏱️ → 이벤트·리스크 → 링크 */
-type ChartCfg = { ma: [number, number]; overbought: number; oversold: number };
+type ChartCfg = { ma: number[]; overbought: number; oversold: number };
 type Charts = Map<string, { points: PickPoint[]; bars: Bar[] }>;
 
-/** 종목 그래프 — 🎯 카드와 같은 조건(12개월 주가 · 5·20일선 · MACD · RSI), 추천받은 적 있으면 첫 추천일 표시 */
+/** 종목 그래프 — 🎯 카드와 같은 조건(12개월 주가 · 5·10·20일선 · MACD · RSI), 추천받은 적 있으면 첫 추천일 표시 */
 function StockGraph({ id, market, chart, cfg, hist }: { id: string; market: "KR" | "US"; chart: { points: PickPoint[]; bars: Bar[] } | undefined; cfg: ChartCfg; hist: RecHist | undefined }) {
   if (!chart?.points.length) return <Empty text="주가 자료를 불러오지 못했습니다." />;
   const rr = recReturn(hist, chart.bars);

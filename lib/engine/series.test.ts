@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cycleOf, phaseOf } from "./cycle";
-import { addColumns, alignPaths, attachQuarterly, pickSeries, indicatorSeries, monthReturn, monthsAgo, periodReturn, quarterEnd, quartersAgoStart, rebaseMerge, weekStart, weekWindow } from "./series";
+import { addColumns, alignPaths, attachQuarterly, pickSeries, indicatorSeries, monthReturn, monthsAgo, periodReturn, quarterEnd, quartersAgoStart, rebaseMerge, weekStart, weekWindow , alignForward, correlation } from "./series";
+import { earlyRise, flowPhaseOf, industryPhaseOf } from "./cycle";
 
 const bar = (date: string, close: number) => ({ date, close });
 
@@ -100,5 +101,48 @@ describe("🔄 섹터 주기", () => {
     expect(ps.map((p) => p.ma_fast)).toEqual([11, 13, 15, 17, 19]);
     expect(ps.map((p) => p.ma_slow)).toEqual([null, null, 13, 15, 17]);
     expect(ps[4].close).toBe(20);
+  });
+});
+
+describe("🔄 세 렌즈 · 상승 초입 (D69)", () => {
+  const L = { industry: { high_pct: 15, tol_pctp: 1 }, flow: { short_days: 2, long_days: 4 }, early_rise: { price_angle_from: 300, price_angle_to: 90 } };
+  it("산업 사이클 — 성장률 높이 × 방향", () => {
+    expect(industryPhaseOf(20, 18, L.industry)).toBe("expansion");
+    expect(industryPhaseOf(20, 20.5, L.industry)).toBe("expansion");  // 1%p 이내 하락은 감속 아님
+    expect(industryPhaseOf(20, null, L.industry)).toBe("expansion");
+    expect(industryPhaseOf(8, 3, L.industry)).toBe("recovery");
+    expect(industryPhaseOf(-5, -9, L.industry)).toBe("recovery");     // 역성장 폭이 줄어드는 중
+    expect(industryPhaseOf(3.6, 3.4, L.industry)).toBe("slowdown");   // 낮은 성장률 정체 = 회복 아님
+    expect(industryPhaseOf(25, 40, L.industry)).toBe("slowdown");
+    expect(industryPhaseOf(-3, 2, L.industry)).toBe("contraction");
+    expect(industryPhaseOf(null, 3, L.industry)).toBeNull();
+  });
+  it("수급 추세 — 최근 합 × 추세 합", () => {
+    expect(flowPhaseOf([1, 1, 1, 1], L.flow)).toEqual({ phase: "expansion", short: 2, long: 4 });
+    expect(flowPhaseOf([-5, -5, 1, 1], L.flow)?.phase).toBe("recovery");
+    expect(flowPhaseOf([5, 5, -1, -1], L.flow)?.phase).toBe("slowdown");
+    expect(flowPhaseOf([-1, -1, -1, -1], L.flow)?.phase).toBe("contraction");
+    expect(flowPhaseOf([1, 1], L.flow)).toBeNull();
+  });
+  it("상승 초입 — 산업 회복·확장 ∧ 주가 바닥권~회복 초입", () => {
+    const c = (angle: number) => ({ angle, phase: phaseOf(angle), level: 0, momentum: 0 });
+    expect(earlyRise("expansion", c(30), L.early_rise)).toBe(true);
+    expect(earlyRise("recovery", c(320), L.early_rise)).toBe(true);
+    expect(earlyRise("recovery", c(150), L.early_rise)).toBe(false);
+    expect(earlyRise("slowdown", c(30), L.early_rise)).toBe(false);
+    expect(earlyRise("expansion", null, L.early_rise)).toBe(false);
+    expect(earlyRise(null, c(30), L.early_rise)).toBe(false);
+    const M = { ...L.early_rise, industry_min_growth_pct: 5 };
+    expect(earlyRise("recovery", c(30), M, 8)).toBe(true);
+    expect(earlyRise("recovery", c(30), M, 2.3)).toBe(false);
+    expect(earlyRise("recovery", c(30), M, null)).toBe(false);
+  });
+  it("alignForward · correlation", () => {
+    const base = [{ date: "2026-01-02", close: 1 }, { date: "2026-01-05", close: 2 }, { date: "2026-02-02", close: 3 }];
+    expect(alignForward(base, [{ date: "2026-01-03", close: 10 }, { date: "2026-02-01", close: 20 }])).toEqual([null, 10, 20]);
+    expect(correlation([1, 2, 3, 4], [2, 4, 6, 8])).toBe(1);
+    expect(correlation([1, 2, 3, 4], [8, 6, 4, null])).toBe(-1);
+    expect(correlation([1, 2], [1, 2])).toBeNull();
+    expect(correlation([1, 1, 1], [1, 2, 3])).toBeNull();
   });
 });

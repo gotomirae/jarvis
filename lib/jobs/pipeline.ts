@@ -9,7 +9,7 @@ import { computeAxes, type Axes, type EntityCtx } from "@/lib/engine/axes";
 import { turnaroundOf, type QuarterRow, type Turnaround } from "@/lib/engine/earnings";
 import { l2Members } from "@/lib/entities";
 import { assignQueue, type Queue } from "@/lib/engine/queues";
-import { regime } from "@/lib/engine/regime";
+import { marketPhase, regime, type MarketPhase } from "@/lib/engine/regime";
 import type { ScreenRow } from "@/lib/engine/normalize";
 import type { Signal } from "@/lib/engine/types";
 import { env } from "@/lib/env";
@@ -24,13 +24,16 @@ import { latestScreens } from "./ingest";
 import { priUsLiteMap } from "./pri-us";
 import { techRefs } from "./tech";
 
-export async function currentRegime(): Promise<{ risk_off: boolean; reasons: string[]; vix: number | null; snowball: number | null }> {
+export async function currentRegime(): Promise<{ risk_off: boolean; reasons: string[]; vix: number | null; snowball: number | null; phase: Record<"KR" | "US", MarketPhase | null> }> {
   const R = rules();
-  const [macro, vix, kospi] = await Promise.all([exportMacro(), chart(R.market.regime.vix, "5d"), chart(R.market.regime.kospi, "6mo")]);
+  const P = R.regime.phase;
+  const [macro, vix, kospi, us] = await Promise.all([exportMacro(), chart(R.market.regime.vix, "5d"), chart(P.index.KR, "6mo"), chart(P.index.US, "6mo")]);
   const sb = macro.ok ? macro.data.REGIME?.value ?? null : null;
   const v = vix.ok ? vix.data.last : null;
-  const r = regime({ snowballRegime: sb, vix: v, kospiCloses: kospi.ok ? kospi.data.closes.map((c) => c.close) : [] }, R.regime);
-  return { risk_off: r.risk_off, reasons: r.reasons, vix: v, snowball: sb };
+  const kc = kospi.ok ? kospi.data.closes.map((c) => c.close) : [];
+  const r = regime({ snowballRegime: sb, vix: v, kospiCloses: kc }, R.regime);
+  // 시장 국면(D69) — 사후 검증을 국면별로 따로 학습하고, 지금 국면에 맞는 배운 기준을 고른다
+  return { risk_off: r.risk_off, reasons: r.reasons, vix: v, snowball: sb, phase: { KR: marketPhase(kc, P), US: marketPhase(us.ok ? us.data.closes.map((c) => c.close) : [], P) } };
 }
 
 /** 국내 다음 실적 예상: 다가오는 분기 보고 기한(분기말+45일) */

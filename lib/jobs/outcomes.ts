@@ -1,5 +1,5 @@
 /**
- * outcomes_update (PRD §12·§14 20:00, D47) — 신호 원장 동기화 → 진입가 확정 → D+5·20·40·60 성과 기록.
+ * outcomes_update (PRD §12·§14 20:00, D47) — 신호 원장 동기화 → 진입가 확정 → D+5·10·20·40·60 성과 기록(D+10 은 D69).
  *  ① queue_items(큐 진입 구간)·SnowBall 제출 → signal_ledger (dedupe_key 로 멱등, 과거분도 자동 소급)
  *  ② 아직 측정이 끝나지 않은 원장 행만 일봉을 받아 진입가·기간별 수익률·벤치마크 대비 초과수익 계산
  *     시세: 국내 = 네이버 일봉(거래소 공식 종가), 미국 = 야후. 국내 벤치마크(KOSPI/KOSDAQ)는 거래소 구분으로 정한다
@@ -12,7 +12,7 @@
  * 시세 실패 종목은 건너뛰고 다음 실행에서 다시 시도한다(불변 규칙 6).
  */
 import { dbDelete, dbInsert, dbSelectAll, dbUpdate } from "@/lib/db";
-import { derivePolicy, type Policy } from "@/lib/engine/pick-policy";
+import { derivePolicies, type Policy, type PolicySet } from "@/lib/engine/pick-policy";
 import { featuresOf, type SignalFeatures } from "@/lib/engine/feedback";
 import type { AxesEvidence } from "@/lib/engine/explain";
 import { read as heimdallr } from "@/lib/ingest/heimdallr";
@@ -140,19 +140,25 @@ async function writePerfStats(asOf: string, samples: Sample[]) {
 }
 
 /** 사후 검증 → 배운 추천 기준(bot_state.pick_policy). 기준이 바뀐 날은 이력에 남긴다(최근 30개) */
-async function writePolicy(asOf: string, stats: Parameters<typeof derivePolicy>[0]) {
+async function writePolicy(asOf: string, stats: Parameters<typeof derivePolicies>[0]) {
   const R = rules();
-  const policy = derivePolicy(stats, R.pick_policy, R.feedback.primary_horizon, asOf);
+  // 전체 기준 + 시장 국면별 기준(D69) — 브리핑·대시보드가 지금 국면의 기준을 고른다(policyFor)
+  const set: PolicySet = derivePolicies(stats, R.pick_policy, R.feedback.primary_horizon, asOf, R.feedback.basis);
+  const policy = set.overall as Policy;
   const prev = await getState<{ policy?: Policy; history?: { as_of: string; added: string[]; removed: string[] }[] }>("pick_policy");
   const was = new Set((prev?.policy?.exclude ?? []).map((x) => x.title));
   const now = new Set(policy.exclude.map((x) => x.title));
   const added = [...now].filter((t) => !was.has(t)), removed = [...was].filter((t) => !now.has(t));
   const history = [...(added.length || removed.length ? [{ as_of: asOf, added, removed }] : []), ...(prev?.history ?? [])].slice(0, 30);
   const at = new Date().toISOString();
-  const w = await dbInsert("bot_state", [{ key: "pick_policy", value: { policy, history, at }, updated_at: at }], { upsertOn: "key" });
+  const w = await dbInsert("bot_state", [{ key: "pick_policy", value: { policy, by_phase: set.by_phase, history, at }, updated_at: at }], { upsertOn: "key" });
   if (!w.ok) throw new Error(w.reason);
-  return { exclude: policy.exclude.map((x) => x.title), prefer: policy.prefer.map((x) => x.title), added, removed, overall: policy.overall };
+  const phases = Object.fromEntries(Object.entries(set.by_phase).map(([k, v]) => [k, { n: v?.overall?.n ?? 0, exclude: (v?.exclude ?? []).map((x) => x.title) }]));
+  return { basis: R.feedback.basis, exclude: policy.exclude.map((x) => x.title), prefer: policy.prefer.map((x) => x.title), added, removed, overall: policy.overall, by_phase: phases };
 }
+
+/** 0011 마이그레이션 전 outcomes CHECK 가 허용하는 기간 */
+const LEGACY_HORIZONS = [5, 20, 40, 60];
 
 export async function updateOutcomes(now = new Date()) {
   const R = rules().outcomes;
@@ -179,6 +185,7 @@ export async function updateOutcomes(now = new Date()) {
 
   const cache = new Map<string, Series | null>();
   const failed: string[] = [];
+  let legacyOnly = false;            // 0011 전: outcomes CHECK 가 5·20·40·60 만 허용
   let entries = 0, inserted = 0;
   for (const l of pending) {
     const id = l.entity_id as string;
@@ -194,10 +201,17 @@ export async function updateOutcomes(now = new Date()) {
     }
     const rows = m.outcomes.filter((o) => !done.get(l.id)?.has(o.horizon_days)).map((o) => ({ ledger_id: l.id, ...o, measured_at: now.toISOString() }));
     if (rows.length) {
-      const w = await dbInsert("outcomes", rows, { upsertOn: "ledger_id,horizon_days", ignoreDuplicates: true });
+      // D+10(D69)은 0011 마이그레이션 전이면 CHECK 제약에 걸린다 → 저장 가능한 기간만 저장하고, D+10 은 이번 집계에만 쓴다(다음 날 다시 측정)
+      const storable = legacyOnly ? rows.filter((o) => LEGACY_HORIZONS.includes(o.horizon_days)) : rows;
+      let w = storable.length ? await dbInsert("outcomes", storable, { upsertOn: "ledger_id,horizon_days", ignoreDuplicates: true }) : { ok: true as const, data: [] };
+      if (!w.ok && !legacyOnly && /horizon_days_check|23514/.test(w.reason)) {
+        legacyOnly = true;
+        w = await dbInsert("outcomes", rows.filter((o) => LEGACY_HORIZONS.includes(o.horizon_days)), { upsertOn: "ledger_id,horizon_days", ignoreDuplicates: true });
+      }
       if (!w.ok) throw new Error(w.reason);
-      inserted += rows.length;
-      for (const o of rows) done.set(l.id, (done.get(l.id) ?? new Set()).add(o.horizon_days));
+      const saved = legacyOnly ? rows.filter((o) => LEGACY_HORIZONS.includes(o.horizon_days)) : rows;
+      inserted += saved.length;
+      for (const o of saved) done.set(l.id, (done.get(l.id) ?? new Set()).add(o.horizon_days));
       or.data.push(...rows.map((o) => ({ ledger_id: o.ledger_id, horizon_days: o.horizon_days, ret_pct: o.ret_pct, excess_pct: o.excess_pct })));
     }
   }
@@ -215,11 +229,12 @@ export async function updateOutcomes(now = new Date()) {
     const base = { level: l.level, horizon_days: o.horizon_days, ret_pct: ret, excess_pct: ex, features: (l.payload.features as SignalFeatures | undefined) ?? null };
     if (l.event_type === "pick") {
       samples.push({ ...base, scope: "pick_all" });
+      if (base.features?.phase) samples.push({ ...base, scope: `pick_all@${base.features.phase}` });   // 시장 국면별 학습(D69)
       if (l.payload.picked) samples.push({ ...base, scope: "pick" });
     } else if (l.event_type !== "snowball_submit") samples.push({ ...base, scope: l.event_type === "queue" ? l.tag : l.event_type });
   }
   return {
-    ledger, measured_targets: pending.length, entries_filled: entries, outcomes_inserted: inserted,
+    ledger, measured_targets: pending.length, entries_filled: entries, outcomes_inserted: inserted, ...(legacyOnly ? { d10_unsaved: "0011 마이그레이션 전 — D+10 은 집계에만 사용" } : {}),
     awaiting_full: lr.data.filter((l) => !done.get(l.id)?.has(maxH)).length,
     price_failed: [...new Set(failed)], benchmarks: [...benchBars.keys()],
     scorecard: scorecard(score, R.min_samples_for_calibration),

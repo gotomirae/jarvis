@@ -8,7 +8,8 @@ import { getState } from "./poll";
 import type { AxesEvidence } from "@/lib/engine/explain";
 import { perfLine, type PerfStat } from "@/lib/engine/feedback";
 import { buyReasons, consensusOf, EMPTY_IDEA, ideaCard, rankBuy } from "@/lib/engine/idea";
-import { assess, candidatePool, type Policy } from "@/lib/engine/pick-policy";
+import { assess, candidatePool, policyFor, type Policy, type PolicySet } from "@/lib/engine/pick-policy";
+import { MARKET_PHASE_NAME } from "@/lib/engine/regime";
 import { issues } from "@/lib/engine/timing";
 import { yahooCandidates } from "@/lib/outcomes/ledger";
 import { recHistory, recLine, type BriefNote } from "@/lib/outcomes/rec-history";
@@ -26,12 +27,12 @@ import { sendMessage } from "@/lib/telegram/send";
 import { sendAnalysisPrompt } from "./analysis";
 import { BRIEF_SPLIT, briefText, type BriefData } from "@/lib/telegram/templates";
 import { briefDate, kstDate, kstString } from "@/lib/time";
-import { loadEntities, rules } from "./context";
+import { latestHoldings, loadEntities, rules } from "./context";
 import { currentRegime } from "./pipeline";
 
 const OTHERS: Queue[] = ["radar", "pullback_wait", "take_profit"];
 
-export type PickLog = { picks: { id: string; rank: number; price: number | null; price_date: string | null }[]; candidates: unknown[]; policy_as_of: string | null };
+export type PickLog = { picks: { id: string; rank: number; price: number | null; price_date: string | null }[]; candidates: unknown[]; policy_as_of: string | null; phase?: Record<string, string | null> };
 
 export async function buildBrief(kind: "morning" | "evening", now = new Date()): Promise<BriefData & { pickLog: PickLog }> {
   const R = rules();
@@ -60,13 +61,14 @@ export async function buildBrief(kind: "morning" | "evening", now = new Date()):
   // 🎯 추천 (D53·D54): 후보마다 ⏱️ 지금 매수 매력을 판정 → TOP 자격(기본: ⏸️ 대기 제외 + 사후 검증으로 배운 기준) →
   //    (과거 성과 표본 30건 이상이면 기대 초과수익 →) 매수 매력 점수 → 신호 계열 수 → 주가 반영도(낮을수록) → 산업 실제 성장률 → 가까운 이벤트 순 최대 top_max 개.
   //    추천 시장(아침 미국 · 저녁 국내)을 먼저 채우고, 모자라면 다른 시장으로 채운다 (아침 07:30 은 국내 장 시작 전이라 국내 추천도 유효)
-  const [stats, policy, notes] = await Promise.all([latestPerfStats(), currentPolicy(), briefNotes()]);
+  const [stats, policy, notes, holdings] = await Promise.all([latestPerfStats(), currentPolicy(), briefNotes(), latestHoldings()]);
+  const heldBy = new Map(holdings.positions.filter((h) => h.entity_id).map((h) => [h.entity_id as string, { weight: h.weight, allowed_weight: h.allowed_weight }]));
   const today = kstDate(now);
   const scored = candidatePool(buys.map((b) => {
     const ev = evBy.get(b.entity_id) ?? {};
     const e = ents.byId.get(b.entity_id)!;
     const p = (b.reason as { p?: number | null }).p ?? null;
-    const a = assess({ ev, p, market: e.market, l1: e.primary_l1, riskOff: reg.risk_off, today }, R, policy, stats);
+    const a = assess({ ev, p, market: e.market, l1: e.primary_l1, riskOff: reg.risk_off, today, phase: reg.phase[e.market], holding: heldBy.get(b.entity_id) }, R, policy, stats);
     return { ...b, e, ev, a, families: ev.families?.length ?? 0, p, industryGrowth: ev.idea?.industry?.realized_median ?? null, nextEvent: ev.next_event ?? null, perf: a.prior.score, timing: a.timing.score };
   }), R.pick_policy.promote_from);
   const promoted = new Set(scored.filter((b) => b.promoted).map((b) => b.entity_id));
@@ -92,7 +94,8 @@ export async function buildBrief(kind: "morning" | "evening", now = new Date()):
   const pickLog = {
     picks: ranked.map((b) => ({ id: b.entity_id, rank: picked.get(b.entity_id) as number, price: prices.get(b.entity_id)?.price ?? null, price_date: prices.get(b.entity_id)?.date ?? null })),
     candidates: scored.map((b) => ({ id: b.entity_id, picked: picked.has(b.entity_id), rank: picked.get(b.entity_id) ?? null, features: b.a.features, from: b.queue })),
-    policy_as_of: policy?.as_of ?? null,
+    policy_as_of: policy?.overall?.as_of ?? null,
+    phase: reg.phase,
   };
   const others = OTHERS.map((q) => ({ icon: QUEUE_LABEL[q].split(" ")[0], label: QUEUE_LABEL[q].replace(/^\S+\s/, ""), names: mine.filter((x) => x.queue === q && !promoted.has(x.entity_id)).map((x) => ents.byId.get(x.entity_id)!.name) }));
 
@@ -130,7 +133,7 @@ export async function buildBrief(kind: "morning" | "evening", now = new Date()):
     regime: { risk_off: reg.risk_off, reasons: reg.reasons },
     counts: { ...entry.counts, alert: al.length }, entries: entry.lines,
     alertsPaused: (await getState<{ paused?: boolean }>("holding_alert_pause"))?.paused === true,
-    earnings, focus, ideas, buyTotal: buys.length, others, waiting, policy: policyNote(policy), pickLog,
+    earnings, focus, ideas, buyTotal: buys.length, others, waiting, policy: policyNote(policyFor(policy, reg.phase[focus]), reg.phase[focus]), pickLog,
     holding: al.slice(0, 8).map((a) => `⚠️ ${a.payload?.name ?? a.entity_id ?? "-"}: ${a.payload?.summary ?? ""}`),
     schedule: { ...schedule, lines: schedule.lines.slice(0, 10) },
     asOf: kstString(now),
@@ -163,19 +166,22 @@ async function latestPerfStats(): Promise<PerfStat[]> {
   const last = await dbSelect<{ as_of: string }>("perf_stats", "select=as_of&order=as_of.desc&limit=1");
   const asOf = last.ok ? last.data[0]?.as_of : undefined;
   if (!asOf) return [];
-  const r = await dbSelectAll<PerfStat>("perf_stats", `select=scope,dimension,bucket,horizon_days,n,median_excess,hit_rate&as_of=eq.${asOf}&scope=in.(buy,${rules().pick_policy.scope})&horizon_days=eq.${h}`);
+  const sc = rules().pick_policy.scope;
+  const r = await dbSelectAll<PerfStat>("perf_stats", `select=scope,dimension,bucket,horizon_days,n,median_excess,hit_rate,median_ret&as_of=eq.${asOf}&or=(scope.eq.buy,scope.eq.${sc},scope.like.${encodeURIComponent(`${sc}@*`)})&horizon_days=eq.${h}`);
   return r.ok ? r.data : [];
 }
 
-/** 사후 검증으로 배운 추천 기준 — outcomes_update 가 bot_state.pick_policy 에 매일 쓴다 */
-export async function currentPolicy(): Promise<Policy | null> {
-  return (await getState<{ policy?: Policy }>("pick_policy"))?.policy ?? null;
+/** 사후 검증으로 배운 추천 기준(전체 + 시장 국면별, D69) — outcomes_update 가 bot_state.pick_policy 에 매일 쓴다 */
+export async function currentPolicy(): Promise<PolicySet> {
+  const s = await getState<{ policy?: Policy; by_phase?: PolicySet["by_phase"] }>("pick_policy");
+  return { overall: s?.policy ?? null, by_phase: s?.by_phase ?? {} };
 }
 
-function policyNote(p: Policy | null): string | null {
+function policyNote(p: Policy | null, phase: Parameters<typeof policyFor>[1]): string | null {
   if (!p?.overall || !p.overall.n) return null;
   const o = p.overall;
-  const head = `사후 검증 ${o.n}건 · ${p.horizon}거래일 뒤 승률 ${o.hit_rate === null ? "-" : `${Math.round(o.hit_rate * 100)}%`}`;
+  const where = p.phase ? `${MARKET_PHASE_NAME[p.phase]} 기준` : phase ? `지금 ${MARKET_PHASE_NAME[phase]} — 국면 표본 부족, 전체 기준` : "전체 기준";
+  const head = `사후 검증 ${o.n}건(${where}) · ${p.horizon}거래일 뒤 승률 ${o.hit_rate === null ? "-" : `${Math.round(o.hit_rate * 100)}%`}`;
   if (!p.exclude.length) return `${head} — 아직 추가로 뺀 기준 없음`;
   return `${head} — ${p.applied ? "제외 적용 중" : "제외 제안(미적용)"}: ${p.exclude.slice(0, 3).map((x) => x.title).join(" · ")}`;
 }

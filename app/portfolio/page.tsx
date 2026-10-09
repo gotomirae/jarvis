@@ -1,7 +1,7 @@
 import { Bad, Card, Empty, Footer, Guide, Hi, Nav, Section } from "@/app/_components/ui";
 import { taxonomyConfig } from "@/lib/config/load";
 import { pLevel } from "@/lib/engine/explain";
-import { regionLine, regionMix } from "@/lib/engine/portfolio-policy";
+import { regionLine, regionMix, tierOf, TIER_NAME } from "@/lib/engine/portfolio-policy";
 import { rules } from "@/lib/jobs/context";
 import { fmtWeight } from "@/lib/format";
 import { yesNo } from "@/lib/labels";
@@ -56,7 +56,7 @@ export default async function Portfolio() {
     <main className="mx-auto max-w-6xl px-4 py-4 space-y-8">
       <Nav />
       <Section title="⚠️ 보유 경고 (최근 7일)" count={alertBy.size}>
-        <Guide items={[<>📉 고점 대비 <b className="text-hot">−20% 이하 하락</b></>, <>⚖️ <b className="text-hot">허용 비중 초과</b></>, "💔 투자 논지를 깨는 이벤트 · 등급 하락"]}>보유 종목의 위험 신호를 종목별로 묶었습니다.</Guide>
+        <Guide items={[<>📉 주가 위치 — 셋 중 하나: 고점 대비 <b className="text-hot">−10% 이하</b> · <b className="text-hot">5일선이 10일선 하향 돌파</b> · <b className="text-hot">5일선이 20일선 하향 돌파</b></>, <>⚖️ <b className="text-hot">허용 비중 초과</b></>, "💔 투자 논지를 깨는 이벤트 · 등급 하락"]}>보유 종목의 위험 신호를 종목별로 묶었습니다.</Guide>
         {alertBy.size === 0 ? <Empty text="없음 — 보유 종목에 새 위험 신호가 없습니다." /> : [...alertBy.entries()].map(([k, v]) => (
           <Card key={k} tone="warn">
             <p className="text-base font-bold">{v.entity_id ? <a href={`/stock/${encodeURIComponent(v.entity_id)}`} className="link">{v.name}</a> : v.name}</p>
@@ -87,7 +87,7 @@ export default async function Portfolio() {
           <div className="table-wrap">
             <table className="w-full text-sm">
               <thead className="text-xs text-sub text-left">
-                <tr><th className={th}>종목</th><th className={th}>산업 (고성장 ✓)</th><th className={th}>비중 / 허용 비중</th><th className={th}>과열 점수</th>
+                <tr><th className={th}>종목</th><th className={th}>산업 (고성장 ✓)</th><th className={th}>비중 / 허용 비중 (등급 상한)</th><th className={th}>과열 점수</th>
                   <th className={th}>산업 · 종목 이야기</th><th className={th}>실적 촉매</th><th className={th}>실적 숫자</th><th className={th}>주가 반영도</th><th className={th}>Heimdallr 등급</th><th className={th}>투자 논지</th><th className={th}>경고</th></tr>
               </thead>
               <tbody>
@@ -95,6 +95,7 @@ export default async function Portfolio() {
                   const a = p.entity_id ? ax.get(p.entity_id) : undefined;
                   const e = p.entity_id ? el.get(p.entity_id) : undefined;
                   const over = p.weight !== null && p.allowed_weight !== null && p.weight > p.allowed_weight;
+                  const tc = p.asset_class === "stock" ? tierOf(p, PP) : null;   // 등급 상한은 주식만(ETF·펀드는 SnowBall 기본 상한)
                   const pv = a?.p_value ?? null;
                   return (
                     <tr key={p.asset_id} className="border-t border-line/50 align-top">
@@ -103,7 +104,7 @@ export default async function Portfolio() {
                         <span className="block text-xs text-sub">{p.ticker}{p.asset_class !== "stock" ? ` · ${CLASS[p.asset_class] ?? p.asset_class}` : ""}</span>
                       </td>
                       <td className="pr-2">{e ? e.l1_codes.map((c) => `${name(c)}${m3.get(c) ? " ✓" : ""}`).join(" + ") : p.sector ?? "-"}</td>
-                      <td className={`pr-2 ${over ? "text-hot font-medium" : ""}`}>{fmtWeight(p.weight)} / {fmtWeight(p.allowed_weight)}</td>
+                      <td className={`pr-2 ${over ? "text-hot font-medium" : ""}`}>{fmtWeight(p.weight)} / {fmtWeight(p.allowed_weight)}{tc && <span className="block text-xs text-sub">{TIER_NAME[tc.tier]} 상한 {pc(tc.cap)}</span>}</td>
                       <td className="pr-2">{p.heat_score ?? "-"}</td>
                       <td className="pr-2">{a ? yesNo(a.n_on) : "-"}</td>
                       <td className="pr-2">{a ? yesNo(a.c_on) : "-"}</td>

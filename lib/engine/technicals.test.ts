@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { chartRef, ema, macdState, maState, rsiSeries, sma, type MacdRules, type TechDisplayRules } from "./technicals";
+import { baseOf, chartRef, ema, macdState, maState, rsiSeries, sma, type MacdRules, type TechDisplayRules } from "./technicals";
 
-const R: TechDisplayRules = { ma: [5, 20], ma_near_gap_pct_max: 1.0, ma_narrowing_days_min: 2, rsi_period: 14, rsi_direction_days: 3, rsi_flat_band: 1.0, high_lookback_days: 250 };
+const R: TechDisplayRules = { ma: [5, 20], ma_near_gap_pct_max: 1.0, ma_narrowing_days_min: 2, rsi_period: 14, rsi_direction_days: 3, rsi_flat_band: 1.0, high_lookback_days: 250, base_range_max_pct: 8 };
 const M: MacdRules = { params: [12, 26, 9], hist_rising_bars_min: 2, near_cross_gap_pct_of_close_max: 0.30, or_projected_bars_to_cross_max: 3 };
 const bars = (xs: number[]) => xs.map((close, i) => ({ date: `2026-${String(1 + Math.floor(i / 28)).padStart(2, "0")}-${String(1 + (i % 28)).padStart(2, "0")}`, close }));
+
+describe("조정 후 횡보 일수 (D69)", () => {
+  it("끝에서부터 폭 8% 안에 머문 연속 일수", () => {
+    expect(baseOf([100, 80, 84, 82, 85, 83], 8)).toEqual({ days: 5, range_pct: 6.25 });
+    expect(baseOf([100, 100], 8)).toEqual({ days: 2, range_pct: 0 });
+    expect(baseOf([], 8)).toEqual({ days: 0, range_pct: 0 });
+  });
+});
 
 describe("가격·기술 지표 (표시 전용)", () => {
   it("이동평균·지수이동평균·RSI", () => {

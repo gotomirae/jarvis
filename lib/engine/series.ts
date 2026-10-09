@@ -130,13 +130,34 @@ export function alignPaths(series: Record<string, { bars: Bar[]; start: string }
   return rows;
 }
 
-export type PickPoint = IndicatorPoint & { ma_fast: number | null; ma_slow: number | null };
+export type PickPoint = IndicatorPoint & { ma_fast: number | null; ma_slow: number | null; ma_mid?: number | null };
 
-/** 🎯 추천 종목 그래프 — 주가 + 이동평균 2개(예: 5·20일선) + MACD + RSI. 전체로 계산한 뒤 from 이후만 (표시 전용, 10/8 사용자 요청) */
-export function pickSeries(bars: Bar[], from: string, macd: [number, number, number], rsiPeriod: number, ma: [number, number]): PickPoint[] {
+/** 🎯 추천 종목 그래프 — 주가 + 이동평균 2~3개(예: 5·10·20일선) + MACD + RSI. 전체로 계산한 뒤 from 이후만 (표시 전용, 10/8 · 10/9 D69 5·10·20) */
+export function pickSeries(bars: Bar[], from: string, macd: [number, number, number], rsiPeriod: number, ma: number[]): PickPoint[] {
   const xs = bars.map((b) => b.close);
-  const f = sma(xs, ma[0]), sl = sma(xs, ma[1]);
+  const f = sma(xs, ma[0]), sl = sma(xs, ma[ma.length - 1]), mid = ma.length > 2 ? sma(xs, ma[1]) : null;
   const r2 = (x: number | null) => (x === null ? null : Math.round(x * 100) / 100);
-  const byDate = new Map(bars.map((b, i) => [b.date, { ma_fast: r2(f[i]), ma_slow: r2(sl[i]) }]));
+  const byDate = new Map(bars.map((b, i) => [b.date, { ma_fast: r2(f[i]), ma_slow: r2(sl[i]), ...(mid ? { ma_mid: r2(mid[i]) } : {}) }]));
   return indicatorSeries(bars, from, macd, rsiPeriod).map((p) => ({ ...p, ...byDate.get(p.date)! }));
+}
+
+/** 기준 일봉 날짜마다 다른 시계열의 그날(없으면 직전) 값 — 월간 지표도 일봉 위에 겹쳐 그린다 (📡 섹터 핵심 지표, D69) */
+export function alignForward(base: Bar[], other: Bar[]): (number | null)[] {
+  const o = [...other].sort((a, b) => a.date.localeCompare(b.date));
+  let j = -1;
+  return base.map((b) => {
+    while (j + 1 < o.length && o[j + 1].date <= b.date) j++;
+    return j >= 0 ? o[j].close : null;
+  });
+}
+
+/** 피어슨 상관계수 (둘 다 값이 있는 날만, 3개 미만·분산 0 이면 null) */
+export function correlation(a: (number | null)[], b: (number | null)[]): number | null {
+  const xs: number[] = [], ys: number[] = [];
+  a.forEach((x, i) => { const y = b[i]; if (x !== null && y !== null && y !== undefined) { xs.push(x); ys.push(y); } });
+  if (xs.length < 3) return null;
+  const mx = xs.reduce((s, v) => s + v, 0) / xs.length, my = ys.reduce((s, v) => s + v, 0) / ys.length;
+  let sxy = 0, sxx = 0, syy = 0;
+  xs.forEach((x, i) => { sxy += (x - mx) * (ys[i] - my); sxx += (x - mx) ** 2; syy += (ys[i] - my) ** 2; });
+  return sxx && syy ? Math.round((sxy / Math.sqrt(sxx * syy)) * 100) / 100 : null;
 }

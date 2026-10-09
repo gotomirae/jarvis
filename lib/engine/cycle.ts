@@ -40,3 +40,49 @@ export function cycleOf(closes: number[], r: CycleRules): Cycle | null {
   const angle = Math.round(deg + 360) % 360;
   return { angle, phase: phaseOf(angle), level: Math.round(level * 100) / 100, momentum: Math.round(momentum * 100) / 100 };
 }
+
+// ───────────── 세 가지 렌즈 (사용자 지정 10/9, D69) — 산업 사이클 · 주가 위치(위 cycleOf) · 수급 추세. 표시 전용 ─────────────
+
+export type LensRules = {
+  industry: { high_pct: number; tol_pctp: number };          // 매출 YoY 중앙값 high_pct 이상 = 고성장, 직전 분기보다 tol 이상 낮아지면 감속
+  flow: { short_days: number; long_days: number };           // 최근 short_days 순매수 합(방향 전환) · long_days 합(추세)
+  early_rise: { price_angle_from: number; price_angle_to: number; industry_min_growth_pct?: number };   // 주가 위치 각도가 from 이상 또는 to 미만 = 바닥권 ~ 상승 초입 · 산업 매출 증가율 하한
+};
+
+export const LENS_HINT = {
+  industry: { recovery: "성장률이 낮지만 다시 빨라지는 중", expansion: "고성장 유지·가속", slowdown: "성장률이 꺾이거나 낮은 채 정체", contraction: "역성장·감속" },
+  flow: { recovery: "길게는 매도였지만 최근 매수로 전환", expansion: "매수 우위 지속", slowdown: "매수 우위였지만 최근 매도로 전환", contraction: "매도 우위 지속" },
+} as const;
+
+/**
+ * 산업 사이클 — 소속 기업 매출 YoY 중앙값(최근 q0 · 직전 q1, M3 ① 과 같은 표본).
+ *   고성장(q0 ≥ high): 감속 아님 → 🚀 확장 · 감속 → 🌥️ 둔화
+ *   그 외: 가속(q0 − q1 > tol) → 🌱 회복 · 정체·감속이면 q0 > 0 → 🌥️ 둔화, q0 ≤ 0 → 🧊 침체   (직전 분기 없으면 정체로 본다)
+ *   10/9 실측: 낮은 성장률이 그대로인 산업(여행 3.4 → 3.6%)까지 '회복'으로 잡혀 회복은 '빨라질 때'로 좁힘
+ */
+export function industryPhaseOf(q0: number | null, q1: number | null, r: LensRules["industry"]): Phase | null {
+  if (q0 === null) return null;
+  const d = q1 === null ? 0 : q0 - q1;
+  if (q0 >= r.high_pct) return d < -r.tol_pctp ? "slowdown" : "expansion";
+  if (d > r.tol_pctp) return "recovery";
+  return q0 > 0 ? "slowdown" : "contraction";
+}
+
+/**
+ * 수급 추세 — 일별 순매수 금액(국내: 외국인 + 기관 순매수 × 종가, 미국: 종가 방향 × 거래량 × 종가 대용).
+ *   추세(long 합) > 0 ∧ 최근(short 합) > 0 → 🚀 확장 · 추세 ≤ 0 ∧ 최근 > 0 → 🌱 회복 · 추세 > 0 ∧ 최근 ≤ 0 → 🌥️ 둔화 · 둘 다 ≤ 0 → 🧊 침체
+ */
+export function flowPhaseOf(net: number[], r: LensRules["flow"]): { phase: Phase; short: number; long: number } | null {
+  if (net.length < r.long_days) return null;
+  const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+  const short = sum(net.slice(-r.short_days)), long = sum(net.slice(-r.long_days));
+  const phase: Phase = short > 0 ? (long > 0 ? "expansion" : "recovery") : long > 0 ? "slowdown" : "contraction";
+  return { phase, short, long };
+}
+
+/** 🚀 상승 초입 — 산업은 회복·확장(매출 증가율 ≥ 하한)인데 주가 위치는 아직 바닥권 ~ 상승 초입(각도 from 이상 또는 to 미만): 실적 개선을 주가가 덜 반영 */
+export function earlyRise(industry: Phase | null, price: Cycle | null, r: LensRules["early_rise"], growth: number | null = null): boolean {
+  if (!price || (industry !== "recovery" && industry !== "expansion")) return false;
+  if (r.industry_min_growth_pct !== undefined && (growth === null || growth < r.industry_min_growth_pct)) return false;
+  return price.angle >= r.price_angle_from || price.angle < r.price_angle_to;
+}

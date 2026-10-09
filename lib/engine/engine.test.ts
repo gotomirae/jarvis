@@ -10,7 +10,7 @@ import {
   type NormalizeRules,
 } from "./normalize";
 import { assignQueue, QUEUE_LABEL, type PRules, type QueueRules } from "./queues";
-import { movingAverage, regime, type RegimeRules } from "./regime";
+import { marketPhase, movingAverage, regime, type RegimeRules } from "./regime";
 import { addDays, clamp10, type Signal } from "./types";
 
 type Rules = {
@@ -218,6 +218,13 @@ describe("axes · queues · regime", () => {
     expect(regime({ snowballRegime: 0, vix: 30, kospiCloses: [...up, 2600] }, R.regime).risk_off).toBe(false);
     expect(regime({ snowballRegime: 1, vix: 18, kospiCloses: [...up, 2400] }, R.regime).risk_off).toBe(false);
   });
+  it("시장 국면 (D69) — 상승·하락·횡보장", () => {
+    const P = { ma_long: 6, ma_short: 3, slope_days: 2 };
+    expect(marketPhase([1, 2, 3, 4, 5, 6, 7, 8], P)).toBe("up");
+    expect(marketPhase([8, 7, 6, 5, 4, 3, 2, 1], P)).toBe("down");
+    expect(marketPhase([5, 5, 5, 5, 5, 5, 5, 5], P)).toBe("side");
+    expect(marketPhase([1, 2, 3], P)).toBeNull();
+  });
 });
 
 describe("보유 경고", () => {
@@ -237,6 +244,11 @@ describe("보유 경고", () => {
         { alert_id: "r5", rule_type: "dynamic_weight", asset_id: "a1", ticker: "000660", fired_at: iso("2026-09-27"), severity: "warn", title: "x" },
         { alert_id: "r6", rule_type: "volume_anomaly", asset_id: "a1", ticker: "000660", fired_at: iso("2026-09-27"), severity: "info", title: "x" },
         { alert_id: "r7", rule_type: "drawdown", asset_id: "zz", ticker: null, fired_at: iso("2026-09-27"), severity: "warn", title: "x", payload: { drawdown: -30 } },
+        { alert_id: "r8", rule_type: "drawdown", asset_id: "a1", ticker: "000660", fired_at: iso("2026-09-27"), severity: "warn", title: "t", payload: { drawdown: -0.08 } },
+        { alert_id: "r9", rule_type: "thesis_breach", asset_id: "a1", ticker: "000660", fired_at: iso("2026-09-27"), severity: "warn", title: "t", payload: { kind: "ma5_ma10_dead_cross", bar_date: "2026-09-26" } },
+        { alert_id: "r10", rule_type: "thesis_breach", asset_id: "a1", ticker: "000660", fired_at: iso("2026-09-27"), severity: "warn", title: "t", payload: { kind: "ma5_ma20_dead_cross" } },
+        { alert_id: "r12", rule_type: "thesis_breach", asset_id: "a1", ticker: "000660", fired_at: iso("2026-09-27"), severity: "warn", title: "t", payload: { kind: "ma5_ma10_dead_cross", kinds: ["ma5_ma10_dead_cross", "ma5_ma20_dead_cross"], bar_date: "2026-09-25" } },
+        { alert_id: "r11", rule_type: "thesis_breach", asset_id: "a1", ticker: "000660", fired_at: iso("2026-09-27"), severity: "warn", title: "뉴스 훼손", payload: { kind: "news" } },
       ],
       triggers: [
         { trigger_id: "t1", asset_id: "a1", direction: "negative", status: "waiting", thesis_link: "훼손", one_line: "CAPEX 둔화" },
@@ -264,13 +276,21 @@ describe("보유 경고", () => {
       ],
     }, H, now);
     const causes = out.map((a) => `${a.cause}:${a.dedupe_key.split(":").slice(2, 4).join(":")}`);
-    expect(out.filter((a) => a.cause === "snowball_risk")).toHaveLength(2);
+    // ⚠️ 주가 위치(D69): 고점 대비 −10% 이하(−8% 는 아님) · 5일선이 10일선/20일선 하향 돌파(같은 봉 1번), 그 외 thesis_breach 는 무시
+    expect(out.filter((a) => a.cause === "snowball_risk")).toHaveLength(3);
+    expect(out.find((a) => a.detail.alert_id === "r2")).toMatchObject({ dedupe_key: "hold:dd:a1:-15" });
+    expect(out.filter((a) => a.cause === "price_signal").map((a) => [a.dedupe_key, a.summary])).toEqual([
+      ["hold:ma:a1:ma5_ma10_dead_cross:2026-09-26", "📉 5일선이 10일선 하향 돌파(09/26) — 단기 추세 이탈, 재검토"],
+      [`hold:ma:a1:ma5_ma20_dead_cross:${iso("2026-09-27").slice(0, 10)}`, `📉 5일선이 20일선 하향 돌파(${iso("2026-09-27").slice(5, 10).replace("-", "/")}) — 단기 추세 이탈, 재검토`],
+      ["hold:ma:a1:ma5_ma10_dead_cross:2026-09-25", "📉 5일선이 10일선 하향 돌파(09/25) — 단기 추세 이탈, 재검토"],
+      ["hold:ma:a1:ma5_ma20_dead_cross:2026-09-25", "📉 5일선이 20일선 하향 돌파(09/25) — 단기 추세 이탈, 재검토"],
+    ]);
     expect(out.find((a) => a.detail.alert_id === "r1")).toMatchObject({ dedupe_key: "hold:dd:a1:-25" });
     expect(out.find((a) => a.detail.alert_id === "r1")?.summary).toContain("-23.0%");
     expect(out.filter((a) => a.cause === "thesis_trigger").map((a) => a.dedupe_key)).toEqual(["hold:trigger:t1:new", "hold:trigger:t2:imminent"]);
     expect(out.filter((a) => a.cause === "grade_down").map((a) => a.summary)).toEqual(["Heimdallr 등급 ★→○ (2026Q2)", "Heimdallr 점수 -6 (2026Q3)"]);
     expect(out.find((a) => a.cause === "mentor_flip")).toMatchObject({ summary: "강세→약세 전환 멘토 2명", dedupe_key: "hold:flip:KR:000660:m1,m2" });
-    expect(causes.length).toBe(7);
+    expect(causes.length).toBe(12);
   });
 
   it("멘토 1명 전환은 경고 아님, pct·등급표", () => {

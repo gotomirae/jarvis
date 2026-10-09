@@ -1,5 +1,5 @@
 /**
- * 가격·기술 지표 (표시 전용 — 🎯·🟢 판정에 쓰지 않는다). 일봉 종가 → 고점 대비 하락률 · 5일선/20일선 · MACD/Signal · RSI.
+ * 가격·기술 지표 (🟢 판정에는 쓰지 않는다 — 🎯 TOP 추천 필수 조건·⏱️ 점수 재료). 일봉 종가 → 고점 대비 하락률 · 5일선/10일선 · MACD/Signal · RSI · 횡보 일수.
  * "교차 직전" 기준은 rules.yaml 에서 읽는다: MACD 는 entry_core.M2_macd_pre_cross 와 같은 값(🟢 M2 는 P3 에서 원 프로젝트 값으로 판정),
  * 이동평균·RSI 는 tech_display. 순수 함수만 둔다.
  */
@@ -13,6 +13,7 @@ export type TechDisplayRules = {
   rsi_direction_days: number;           // 방향 = 오늘 vs N일 전
   rsi_flat_band: number;                // ±이 값 이내 변화는 "보합"
   high_lookback_days: number;           // 고점 탐색 기간(거래일, 52주 ≈ 250)
+  base_range_max_pct: number;           // 횡보 = 최근 N일 (최고 ÷ 최저 − 1) 이 이 % 이하 (D69 — 조정 후 횡보)
 };
 export type MacdRules = { params: [number, number, number]; hist_rising_bars_min: number; near_cross_gap_pct_of_close_max: number; or_projected_bars_to_cross_max: number };
 
@@ -23,6 +24,7 @@ export type ChartRef = {
   ma: { n: [number, number]; fast: number; slow: number; state: CrossState; gap_pct: number; streak: number } | null;          // streak: above=위에 있은 일수, near/below=격차가 좁혀진 일수
   macd: { state: CrossState; gap_pct: number; bars_to_cross: number | null; streak: number; improving: boolean } | null;
   rsi: { value: number; prev: number; days: number; dir: "up" | "down" | "flat" } | null;
+  base?: { days: number; range_pct: number } | null;   // 횡보 일수: 최근 종가들이 base_range_max_pct 폭 안에 머문 연속 거래일 수 (D69, 옛 근거엔 없음)
 };
 
 export function sma(xs: number[], n: number): (number | null)[] {
@@ -89,6 +91,18 @@ export function macdState(hist: number[], close: number, r: MacdRules): { state:
   return { state: near ? "near" : "below", gap_pct, bars_to_cross: bars, streak: rising, improving };
 }
 
+/** 끝에서부터 거꾸로, 종가 폭((최고 ÷ 최저) − 1)이 maxPct 이하로 유지된 가장 긴 구간의 일수와 그 폭 */
+export function baseOf(xs: number[], maxPct: number): { days: number; range_pct: number } {
+  let hi = -Infinity, lo = Infinity, days = 0, range = 0;
+  for (let i = xs.length - 1; i >= 0; i--) {
+    const h = Math.max(hi, xs[i]), l = Math.min(lo, xs[i]);
+    const r = (h / l - 1) * 100;
+    if (r > maxPct) break;
+    hi = h; lo = l; days++; range = r;
+  }
+  return { days, range_pct: Math.round(range * 100) / 100 };
+}
+
 export function chartRef(bars: Close[], currency: "KRW" | "USD", r: TechDisplayRules, m: MacdRules): ChartRef | null {
   if (bars.length < 2) return null;
   const xs = bars.map((b) => b.close);
@@ -119,5 +133,5 @@ export function chartRef(bars: Close[], currency: "KRW" | "USD", r: TechDisplayR
     return { value: rs[rs.length - 1], prev: rs[k], days: r.rsi_direction_days, dir: (d > r.rsi_flat_band ? "up" : d < -r.rsi_flat_band ? "down" : "flat") as "up" | "down" | "flat" };
   })() : null;
 
-  return { as_of: bars[t].date, close, currency, high, ma, macd, rsi };
+  return { as_of: bars[t].date, close, currency, high, ma, macd, rsi, base: baseOf(xs, r.base_range_max_pct) };
 }

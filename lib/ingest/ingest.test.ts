@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseLinkedRow } from "./flywheel";
-import { history, naverDaily, naverInvestorTrend, naverStockFlow, parseNaverDaily, parseNaverStockTrend, parseNaverTrend } from "./market";
+import { history, naverDaily, naverInvestorTrend, naverStockFlow, naverStockFlowLong, parseChart, parseNaverDaily, parseNaverStockTrend, parseNaverTrend } from "./market";
+import { fredSeries, parseFredCsv } from "./fred";
 import { notionId } from "./notion";
 import { probeTable, rpc, selectAll } from "./rest";
 import { safeReason } from "./types";
@@ -152,6 +153,37 @@ describe("market.naverStockFlow (종목 투자자 동향, 주)", () => {
     expect(await naverStockFlow("005930", 5, f(500, []))).toMatchObject({ ok: false, status: 500 });
     expect(await naverStockFlow("005930", 5, f(200, []))).toMatchObject({ ok: false });
     expect(await naverStockFlow("005930", 5, (async () => { throw new Error("x"); }) as unknown as typeof fetch)).toMatchObject({ ok: false });
+  });
+  it("종가 포함 · 여러 쪽 거슬러 읽기 (📡 섹터 ETF 수급, D69)", async () => {
+    expect(parseNaverStockTrend([{ ...row("20261002", "1", "2"), closePrice: "12,345" }])[0]).toMatchObject({ close: 12345 });
+    const ymd = (offset: number) => new Date(Date.UTC(2026, 9, 2) - offset * 86400_000).toISOString().slice(0, 10).replace(/-/g, "");
+    const page = (start: number, n: number) => Array.from({ length: n }, (_, i) => row(ymd(start + i), "1", "1"));
+    const urls: string[] = [];
+    const f = (async (u: string) => { urls.push(u); return new Response(JSON.stringify(urls.length === 1 ? page(0, 60) : page(60, 3)), { status: 200 }); }) as unknown as typeof fetch;
+    const r = await naverStockFlowLong("091160", 3, f);
+    expect(r.ok && r.data.length).toBe(63);
+    expect(urls[1]).toContain("bizdate=");
+    const fail1 = (async () => new Response("x", { status: 500 })) as unknown as typeof fetch;
+    expect(await naverStockFlowLong("091160", 2, fail1)).toMatchObject({ ok: false });
+    let k = 0;
+    const half = (async () => (k++ === 0 ? new Response(JSON.stringify(page(0, 60)), { status: 200 }) : new Response("x", { status: 500 }))) as unknown as typeof fetch;
+    const h = await naverStockFlowLong("091160", 3, half);
+    expect(h.ok && h.data.length).toBe(60);
+  });
+});
+
+describe("fred (FRED 공개 CSV, D69)", () => {
+  it("파싱 · Result", async () => {
+    expect(parseFredCsv(["observation_date,DFII10", "2026-10-08,.", "2026-10-07,2.92", "bad,1", "2026-10-06,x"].join("\n"))).toEqual([{ date: "2026-10-07", close: 2.92 }]);
+    const f = (status: number, body: string) => (async () => new Response(body, { status })) as unknown as typeof fetch;
+    expect((await fredSeries("DFII10", "2026-01-01", f(200, ["d,v", "2026-10-07,2.9"].join("\n")))).ok).toBe(true);
+    expect(await fredSeries("DFII10", "2026-01-01", f(404, ""))).toMatchObject({ ok: false, status: 404 });
+    expect(await fredSeries("DFII10", "2026-01-01", f(200, "d,v"))).toMatchObject({ ok: false });
+    expect(await fredSeries("DFII10", "2026-01-01", (async () => { throw new Error("x"); }) as unknown as typeof fetch)).toMatchObject({ ok: false });
+  });
+  it("야후 거래량 (미국 섹터 수급 대용)", () => {
+    const q = parseChart("X", { chart: { result: [{ meta: { exchangeTimezoneName: "America/New_York" }, timestamp: [1759500000, 1759586400], indicators: { quote: [{ close: [1, 2], volume: [100, null] }] } }] } });
+    expect(q?.volumes).toEqual([100, null]);
   });
 });
 

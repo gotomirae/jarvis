@@ -6,7 +6,18 @@ export type PortfolioPolicy = {
   tier_caps: { global_top20: number; us: number; kr: number };
   overseas_band: { low: number; high: number; target: number };
   domestic_markets: string[];
+  global_top20_tickers?: string[];
 };
+
+export type Tier = "global_top20" | "us" | "kr";
+export const TIER_NAME: Record<Tier, string> = { global_top20: "글로벌 20위", us: "미국", kr: "국내" };
+
+/** 종목 등급(표시용, SnowBall positionTier 와 같은 규칙) — 글로벌 20위가 국적보다 먼저. 국내 = domestic_markets, 그 외 해외 = 미국 상한 */
+export function tierOf(a: { ticker: string; market: string }, p: PortfolioPolicy): { tier: Tier; cap: number } {
+  const t = a.ticker.trim().toUpperCase().replace(/\.(KS|KQ)$/, "").replace("-", ".");
+  const tier: Tier = (p.global_top20_tickers ?? []).map(String).includes(t) ? "global_top20" : p.domestic_markets.includes(a.market) ? "kr" : "us";
+  return { tier, cap: p.tier_caps[tier] };
+}
 
 export type RegionMix = { overseas: number; domestic: number; status: "within" | "over" | "under" } | null;
 

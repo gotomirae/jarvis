@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { bucketsOf, featuresOf, pBucket, perfLine, perfPrior, type FeedbackRules, type PerfStat } from "./feedback";
+import { bucketsOf, featuresOf, metricOf, pBucket, perfLine, perfPrior, type FeedbackRules, type PerfStat } from "./feedback";
 import { rankBuy } from "./idea";
 
-const cfg: FeedbackRules = { primary_horizon: 20, min_samples: 30, shrinkage_k: 30, dimensions: ["families", "sources", "p_bucket", "grade", "market", "l1"], p_buckets: [40, 20, 30], timing_score_buckets: [1, 4], review: { min_gap_pctp: 2 } };
+const cfg: FeedbackRules = { basis: "excess", report_horizons: [10, 20], primary_horizon: 20, min_samples: 30, shrinkage_k: 30, dimensions: ["families", "sources", "p_bucket", "grade", "market", "l1"], p_buckets: [40, 20, 30], timing_score_buckets: [1, 4], review: { min_gap_pctp: 2 } };
 const f = featuresOf({ families: ["sage", "heimdallr"], p: 25, grade: "★", market: "KR", l1: "1b" });
 const st = (dimension: string, bucket: string, n: number, median_excess: number | null, extra: Partial<PerfStat> = {}): PerfStat => ({ scope: "buy", dimension, bucket, horizon_days: 20, n, median_excess, hit_rate: 0.6, ...extra });
 
@@ -39,6 +39,21 @@ describe("타이밍 차원 (D54) — 타이밍이 있는 특징(브리핑 후보
     ]);
     expect(bucketsOf(featuresOf({ p: 20, market: "KR" }), tc)).toEqual([{ dimension: "all", bucket: "all" }, { dimension: "market", bucket: "KR" }]);
   });
+  it("주가 위치 경로 · 시장 국면 (D69)", () => {
+    const pc = { ...cfg, dimensions: ["setup_path", "market_phase"] as FeedbackRules["dimensions"] };
+    const g = featuresOf({ p: 20, market: "KR", phase: "up", timing: { score: 5, verdict: "high", checks: {}, path: "base" } });
+    expect(g.phase).toBe("up");
+    expect(bucketsOf(g, pc)).toEqual([{ dimension: "all", bucket: "all" }, { dimension: "setup_path", bucket: "base" }, { dimension: "market_phase", bucket: "up" }]);
+    expect(bucketsOf(featuresOf({ p: 20, market: "KR", timing: { score: 1, verdict: "mid", checks: {} } }), pc)).toEqual([{ dimension: "all", bucket: "all" }, { dimension: "setup_path", bucket: "none" }]);
+    expect(metricOf({ median_excess: 1, median_ret: 3 }, "absolute")).toBe(3);
+    expect(metricOf({ median_excess: 1 }, "absolute")).toBeNull();
+    expect(metricOf({ median_excess: 1, median_ret: 3 }, "excess")).toBe(1);
+  });
+  it("절대 수익률 카드 줄", () => {
+    const ab = { ...cfg, basis: "absolute" as const };
+    const stats = [st("all", "all", 60, 1, { median_ret: 4 }), st("market", "KR", 40, 1, { median_ret: 6 })];
+    expect(perfLine(perfPrior(f, stats, "buy", ab), ab)).toBe("비슷한 신호의 기대 수익률 +3.4% — 순위 반영 (근거: 시장 KR +6.0%(40건)) · 같은 큐 20거래일 뒤 수익률 +4.0% · 승률 60% (60건)");
+  });
 });
 
 describe("perfPrior · perfLine · rankBuy 반영", () => {
@@ -51,7 +66,7 @@ describe("perfPrior · perfLine · rankBuy 반영", () => {
   it("표본 부족 구간만 → score null, 반영하지 않는다고 표시", () => {
     const p = perfPrior(f, [st("all", "all", 12, 1.5), st("market", "KR", 12, 1.5)], "buy", cfg);
     expect(p.score).toBeNull();
-    expect(perfLine(p, cfg)).toBe("같은 큐 20거래일 뒤 시장 대비 +1.5% · 이긴 비율 60% (12건) — 표본 30건 전이라 순위에는 아직 반영하지 않음");
+    expect(perfLine(p, cfg)).toBe("같은 큐 20거래일 뒤 시장 대비 +1.5% · 승률 60% (12건) — 표본 30건 전이라 순위에는 아직 반영하지 않음");
     expect(perfLine({ ...p, overall: { ...p.overall!, median_excess: null, hit_rate: null } }, cfg)).toContain("시장 대비 - (12건)");
   });
   it("충분한 구간만 축소 평균 — 다른 큐·기간·결측 중앙값은 무시", () => {
@@ -64,7 +79,7 @@ describe("perfPrior · perfLine · rankBuy 반영", () => {
     // KR: 30/60×4 = 2 · 계열2: 90/120×(−1) = −0.75 → 평균 0.625
     expect(p.score).toBe(0.63);
     expect(p.basis.map((b) => b.dimension)).toEqual(["families", "market"]);
-    expect(perfLine(p, cfg, (d, b) => (d === "market" ? "국내" : b))).toBe("비슷한 신호의 기대 초과수익 +0.6% — 순위 반영 (근거: 합의한 신호 계열 수 2 -1.0%(90건), 시장 국내 +4.0%(30건)) · 같은 큐 20거래일 뒤 시장 대비 +1.0% · 이긴 비율 60% (60건)");
+    expect(perfLine(p, cfg, (d, b) => (d === "market" ? "국내" : b))).toBe("비슷한 신호의 기대 초과수익 +0.6% — 순위 반영 (근거: 합의한 신호 계열 수 2 -1.0%(90건), 시장 국내 +4.0%(30건)) · 같은 큐 20거래일 뒤 시장 대비 +1.0% · 승률 60% (60건)");
     expect(perfLine({ ...p, basis: [{ dimension: "x", bucket: "y", n: 1, median_excess: 0 }] }, cfg)).toContain("x y 0.0%(1건)");
   });
   it("rankBuy: 성과가 있으면 첫 기준, 없는 후보는 뒤", () => {

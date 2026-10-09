@@ -18,32 +18,41 @@ fear_greed:                  # CNN 공포·탐욕 지수 (0~100). 25 미만 극�
   bands: {extreme_fear: 25, fear: 45, greed: 55, extreme_greed: 75}
 
 # 📡 산업 레이더 — 노션 산업(L1)별 대표 ETF (이름은 10/5 네이버·야후에서 확인)
+#   indicator = 섹터 주가에 가장 큰 영향을 주는 핵심 지표 1개 (사용자 지정 10/9, D69 — 무료·무키: 야후 · FRED). 표시 전용, 판정 미사용
+#   invert: true = 지표가 오르면 섹터에 부담(그래프 오른쪽 축을 뒤집어 같은 방향으로 보이게) · rate: true = 금리(1년 변화를 %p 로)
 sector_proxies:
-  1a: {sym: "AIQ", source: yahoo, name: "글로벌X 인공지능·기술 ETF"}
-  1b: {sym: "091160", source: naver, name: "KODEX 반도체"}
-  1c: {sym: "GRID", source: yahoo, name: "퍼스트트러스트 스마트그리드 인프라 ETF"}
-  1d: {sym: "244580", source: naver, name: "KODEX 바이오"}
-  1e: {sym: "228790", source: naver, name: "TIGER 화장품"}
-  1f: {sym: "266360", source: naver, name: "KODEX K콘텐츠"}
-  1g: {sym: "449450", source: naver, name: "PLUS K방산"}
-  1h: {sym: "466920", source: naver, name: "SOL 조선TOP3플러스"}
-  1i: {sym: "305720", source: naver, name: "KODEX 2차전지산업"}
-  1l: {sym: "091180", source: naver, name: "KODEX 자동차"}
-  2a: {sym: "BOTZ", source: yahoo, name: "글로벌X 로봇·인공지능 ETF"}
-  2b: {sym: "266370", source: naver, name: "KODEX IT"}
-  2c: {sym: "143860", source: naver, name: "TIGER 헬스케어"}
-  2d: {sym: "266410", source: naver, name: "KODEX 필수소비재"}
-  2e: {sym: "228800", source: naver, name: "TIGER 여행레저"}
-  2f: {sym: "091170", source: naver, name: "KODEX 은행"}
-  2g: {sym: "117700", source: naver, name: "KODEX 건설"}
-  3c: {sym: "QTUM", source: yahoo, name: "디파이언스 양자컴퓨팅 ETF"}
+  1a: {sym: "AIQ", source: yahoo, name: "글로벌X 인공지능·기술 ETF", indicator: {sym: "DFII10", source: fred, name: "미국 10년 실질금리", why: "장기 성장주 할인율 — 낮아질수록 AI 성장주 가치 상승", invert: true, rate: true}}
+  1b: {sym: "091160", source: naver, name: "KODEX 반도체", indicator: {sym: "MU", source: yahoo, name: "메모리 업황(마이크론 주가)", why: "D램·HBM 가격에 가장 먼저 반응 — 국내 메모리 실적 선행", invert: false}}
+  1c: {sym: "GRID", source: yahoo, name: "퍼스트트러스트 스마트그리드 인프라 ETF", indicator: {sym: "HG=F", source: yahoo, name: "구리 가격", why: "전력망·변압기·전선 투자 수요의 대표 지표", invert: false}}
+  1d: {sym: "244580", source: naver, name: "KODEX 바이오", indicator: {sym: "^TNX", source: yahoo, name: "미국 10년 국채금리", why: "적자·임상 단계 바이오의 자금 조달·할인율", invert: true, rate: true}}
+  1e: {sym: "228790", source: naver, name: "TIGER 화장품", indicator: {sym: "ELF", source: yahoo, name: "미국 인디 뷰티 수요(e.l.f. 주가)", why: "K-뷰티 성장의 중심이 미국 온라인 인디 뷰티 — 같은 수요를 탐", invert: false}}
+  1f: {sym: "266360", source: naver, name: "KODEX K콘텐츠", indicator: {sym: "^HSI", source: yahoo, name: "항셍지수(중국 소비 심리)", why: "중국 공연·콘텐츠 개방(한한령) 기대가 가장 큰 변수", invert: false}}
+  1g: {sym: "449450", source: naver, name: "PLUS K방산", indicator: {sym: "ITA", source: yahoo, name: "글로벌 방산 업황(미국 방산 ETF)", why: "각국 국방비 확대가 K방산 수출 수주를 이끔", invert: false}}
+  1h: {sym: "466920", source: naver, name: "SOL 조선TOP3플러스", indicator: {sym: "HII", source: yahoo, name: "미국 해군 조선(헌팅턴잉걸스 주가)", why: "미 해군 함정·MRO 발주와 한미 조선 협력(MASGA) 기대가 국내 조선 주가를 이끔", invert: false}}
+  1i: {sym: "305720", source: naver, name: "KODEX 2차전지산업", indicator: {sym: "ALB", source: yahoo, name: "리튬 가격(앨버말 주가)", why: "리튬 가격이 소재·셀 판가와 재고 평가를 좌우", invert: false}}
+  1l: {sym: "091180", source: naver, name: "KODEX 자동차", indicator: {sym: "KRW=X", source: yahoo, name: "원/달러 환율", why: "현대차·기아 등 수출 비중이 커 원화 약세가 이익을 키움", invert: false}}
+  2a: {sym: "BOTZ", source: yahoo, name: "글로벌X 로봇·인공지능 ETF", indicator: {sym: "NVDA", source: yahoo, name: "피지컬 AI 투자(엔비디아 주가)", why: "로봇·자동화 투자가 AI 반도체 투자 흐름을 따라감", invert: false}}
+  2b: {sym: "266370", source: naver, name: "KODEX IT", indicator: {sym: "^SOX", source: yahoo, name: "필라델피아 반도체지수", why: "구성 상위가 반도체 — 글로벌 반도체 업황을 그대로 반영", invert: false}}
+  2c: {sym: "143860", source: naver, name: "TIGER 헬스케어", indicator: {sym: "^TNX", source: yahoo, name: "미국 10년 국채금리", why: "헬스케어 성장주의 할인율", invert: true, rate: true}}
+  2d: {sym: "266410", source: naver, name: "KODEX 필수소비재", indicator: {sym: "ZW=F", source: yahoo, name: "밀 가격(곡물 원가)", why: "식품·음료 원재료 원가 — 오르면 이익률 압박", invert: true}}
+  2e: {sym: "228800", source: naver, name: "TIGER 여행레저", indicator: {sym: "^HSI", source: yahoo, name: "항셍지수(중국 소비 심리)", why: "중국인 방한·카지노·면세 수요가 여행레저 실적을 좌우", invert: false}}
+  2f: {sym: "091170", source: naver, name: "KODEX 은행", indicator: {sym: "IRLTLT01KRM156N", source: fred, name: "한국 10년 국채금리(월)", why: "금리 수준이 은행 예대마진(NIM)을 결정", invert: false, rate: true}}
+  2g: {sym: "117700", source: naver, name: "KODEX 건설", indicator: {sym: "CL=F", source: yahoo, name: "국제유가(WTI)", why: "유가가 오르면 중동 플랜트·해외 수주가 늘어남", invert: false}}
+  3c: {sym: "QTUM", source: yahoo, name: "디파이언스 양자컴퓨팅 ETF", indicator: {sym: "DFII10", source: fred, name: "미국 10년 실질금리", why: "적자 초기 기술주 — 실질금리에 가장 민감", invert: true, rate: true}}
 
 # 🔄 섹터 주기 — 추세 위치(종가 ÷ 이동평균 − 1)와 그 변화(모멘텀)를 1년 표준편차로 맞춰 각도로 바꾼다 (lib/engine/cycle.ts)
 #   0° 바닥 → 90° 회복 끝·상승 가속 → 180° 정점 → 270° 하락 가속 → 360° 바닥
 cycle: {ma_days: 120, momentum_days: 20, zscore_days: 250}
 
+# 🔄 섹터 주기 세 가지 렌즈 (사용자 지정 10/9, D69) — 표시 전용 (lib/engine/cycle.ts)
+#   산업 사이클 = 소속 기업 매출 YoY 중앙값(industry_heat q0·q1, M3 ① 표본) · 주가 위치 = 위 cycle · 수급 추세 = 대표 ETF 순매수(국내 외국인+기관, 미국 거래량 대용)
+lenses:
+  industry: {high_pct: 15.0, tol_pctp: 1.0}            # 15% 이상 = 고성장(M3 기준과 같음), 직전 분기보다 1%p 넘게 낮아지면 감속
+  flow: {short_days: 20, long_days: 60, pages: 2}      # 최근 20거래일 순매수 합 · 60거래일 합. 네이버 60일 × 2쪽
+  early_rise: {price_angle_from: 345, price_angle_to: 90, industry_min_growth_pct: 5.0}   # 🚀 상승 초입 = 산업 회복·확장(매출 증가율 5% 이상) ∧ 주가 위치 345°(바닥)~90°(회복 끝). 10/9 실측: 300° 부터면 18개 중 9개(하락 중 섹터까지) → 좁힘
+
 # 종목 그래프 RSI 과열·침체 선 (🎯·대기·선행 관찰·눌림 대기·🚦 진입 보드 공용). 기간·이동평균은 아래 pick_chart
 entry_chart: {rsi_overbought: 70, rsi_oversold: 30}
 
-# 종목별 그래프 (주가 + 이동평균 2개 · MACD · RSI, 10/8 사용자 요청) — 🎯·대기·선행 관찰·눌림 대기·🚦 진입 보드(+분기 영업이익) 같은 조건. MACD 기간은 rules.yaml M2 값, RSI 과열·침체 선은 entry_chart 값
-pick_chart: {months: 12, ma: [5, 20]}
+# 종목별 그래프 (주가 + 이동평균 2~3개 · MACD · RSI, 10/8 사용자 요청) — 🎯·대기·선행 관찰·눌림 대기·🚦 진입 보드(+분기 영업이익) 같은 조건. MACD 기간은 rules.yaml M2 값, RSI 과열·침체 선은 entry_chart 값
+pick_chart: {months: 12, ma: [5, 10, 20]}   # 10/9 D69: 🎯 필수 조건이 5·10일선 돌파로 바뀌어 10일선 추가(SnowBall 주가 그래프와 같은 5·10·20)

@@ -119,7 +119,7 @@ export default async function Entry() {
             ["〽️", "② MACD 상향 교차 직전", "하락 힘이 줄며 반등 준비"],
             ["🌱", "③ 산업 고성장", "실적 · 증권사 · 전망 중 15%↑"],
             ["📅", "④ 6개월 내 상승 이벤트", "출처 · 날짜 있는 이벤트"],
-            ["🤝", "⑤ 매수 수급 2일 연속", "외국인 또는 기관 순매수"],
+            ["🤝", "⑤ 매수 수급 3일 연속", "외국인 또는 기관 순매수"],
           ].map(([i, t, d]) => (
             <div key={t} className="glass rounded-lg px-3 py-2">
               <p className="one-line font-bold">{i} {t}</p>

@@ -69,7 +69,7 @@ entry_core:
       ttm_op_growth_min_pct: 0.0
       use_annual_consensus_if_available: true   # 올해(E) 매출·영업이익 > 전년 확정 (국내 네이버, 미국은 가능 시)
     price_not_reflected:                        # (조정 또는 횡보) 그리고 반영도 낮음
-      correction: {from_post_earnings_high_max_pct: -10.0, or_from_52w_high_max_pct: -15.0}
+      correction: {from_post_earnings_high_max_pct: -10.0, or_from_52w_high_max_pct: -10.0}   # 1차 눌림 −10% (10/9 사용자 지정 — 모든 프로젝트 눌림 정의 통일, 옛 52주 −15%)
       sideways: {range_20d_max_pct: 12.0, abs_return_20d_max_pct: 5.0}
       reflection_max: {kr_pri: 50, us_pri_lite: 50}
   M2_macd_pre_cross:                 # MACD가 Signal을 아래→위로 상향 돌파하기 직전
@@ -117,9 +117,9 @@ entry_core:
     require_source: true
     sources: ["snowball_triggers", "hermescall_triggers_timeline", "hermescall_catalyst_watch", "heimdallr_analysis_triggers", "earnings_with_rising_consensus", "catalyst_calendar_yaml"]
     earnings_with_rising_consensus: {consensus_change_30d_min_pct: 0.0}   # 다음 실적일 ≤180일 + 30일 추정치 상향(>0%)이면 이벤트로 인정
-  M5_flow_2days:                     # 외국인 또는 기관 매수 우위 최소 2일 연속
-    kr: {days: 2, pass_if_any: ["foreign_consecutive", "institution_consecutive", "foreign_plus_institution_consecutive"]}
-    us_proxy: {days: 2, accumulation_day: {close_up: true, volume_vs_ma20_min: 1.0}}   # 미국은 투자자별 일별 수급 미공개 → 매집일 대용
+  M5_flow_2days:                     # 외국인 또는 기관 매수 우위 최소 3일 연속 (10/9 사용자 지정 — 모든 프로젝트 3일 통일, 옛 2일. 키 이름은 호환 위해 유지)
+    kr: {days: 3, pass_if_any: ["foreign_consecutive", "institution_consecutive", "foreign_plus_institution_consecutive"]}
+    us_proxy: {days: 3, accumulation_day: {close_up: true, volume_vs_ma20_min: 1.0}}   # 미국은 투자자별 일별 수급 미공개 → 매집일 대용
 
 entry_gate:
   risk_off_weight_multiplier: 0.5
@@ -199,7 +199,7 @@ feedback:                            # 성과 피드백 (PRD §7.3 게이트 6 �
   report_horizons: [10, 20]          # /verify 기준별 승률 기간 (사용자 지정 10/9 — 10거래일 · 20거래일 뒤)
   min_samples: 30                    # 이 표본 미만 구간은 순위·보정에 쓰지 않음(T12 과최적화 방지)
   shrinkage_k: 30                    # 표본 수 가중 축소: 기대 수익률 = n/(n+k) × 구간 중앙값
-  dimensions: [families, sources, p_bucket, grade, market, l1, timing_verdict, timing_check, timing_score, setup_path, market_phase]   # timing_*·setup_path 는 브리핑 후보 원장(pick)에만(D54). setup_path = 주가 위치 A·B, market_phase = 상승·하락·횡보장(D69)
+  dimensions: [families, sources, p_bucket, grade, market, l1, timing_verdict, timing_check, timing_score, setup_path, market_phase, pullback_stage]   # timing_*·setup_path 는 브리핑 후보 원장(pick)에만(D54). setup_path = 주가 위치 A·B, market_phase = 상승·하락·횡보장(D69), pullback_stage = 1차·2차 눌림
   p_buckets: [20, 30, 40]            # 주가 반영도 구간 <20 · 20~30 · 30~40 · ≥40 (40 = axes.P.buy_max 와 맞춤)
   timing_score_buckets: [1, 4, 6]    # ⏱️ 매수 매력 점수 구간 <1 · 1~4 · 4~6 · ≥6
   review:                            # 분기 보정 제안 — 제안만, 자동 적용 금지(PRD §12)
@@ -216,19 +216,19 @@ buy_timing:
   setup:                                               # 🎯 필수 조건 (상승 초기에 투자 — 10/8 D65, 10/9 D69 사용자 지정): 아니면 TOP 추천 제외
     require: true                                      #   MACD 시그널 상향 돌파 직전·오늘·직후  그리고  주가 위치 A 또는 B (모든 프로젝트 공통)
     just_after_days: 3                                 #   "바로 직후" = 상향 돌파 후 3거래일 이내 (돌파 당일 = 1일째)
-    # A = 5일선이 10일선 상향 돌파 직전·직후(3거래일 이내) + 고점 대비 눌림(position 사이 구간 — 신고가 추격 방지)
+    # A = 5일선이 10일선 상향 돌파 직전·직후(3거래일 이내) + 고점 대비 눌림(1차 또는 2차 — 신고가 추격 방지)
     base: {drawdown_min_pct: -20.0, drawdown_max_pct: -10.0, days_min: 10}   # B = 52주 고점 대비 10~20% 조정 후 10거래일 이상 횡보(tech_display.base_range_max_pct)
-  position: {chase_above_pct: -5.0, deep_below_pct: -40.0}   # 52주 고점 대비 −5% 위 = 추격 주의, −40% 아래 = 하락 추세 의심, 사이 = 눌림
+  position: {chase_above_pct: -5.0, pullback1_pct: -10.0, pullback2_pct: -20.0}   # 눌림 정의(10/9 사용자 지정, 모든 프로젝트 공통): 52주 고점 대비 −10% = 1차 눌림 · −20% 이상 = 2차 눌림. −5% 위 = 추격 주의
   rsi: {overheat_min: 70, near_hot_min: 65, rebound_max: 45}   # RSI ≥70 과열(감점) · 65~70 과열 근접(표시만) · ≤45 에서 상승 전환 = 반등 시작
-  flow_days: 2                                         # 외국인 또는 기관 N일 연속 순매수 (사용자 지정 매수 근거)
+  flow_days: 3                                         # 외국인 또는 기관 3일 연속 순매수 (사용자 지정 매수 근거 · 10/9 모든 프로젝트 3일 통일)
   event_within_days: 90                                # 가까운 상승 이벤트
   points:
     p_great: 2
     p_good: 1
     p_high: -1
-    pullback: 1
+    pullback: 1                                        # 1차 눌림
+    pullback2: 1                                       # 2차 눌림 (점수는 같게 — 어느 쪽이 나은지는 사후 검증 pullback_stage 가 배운다)
     chase: -1
-    deep: -1
     rsi_hot: -2
     rsi_rebound: 1
     cross: 1                                           # MACD·5일선 상향 돌파 직전·당일·직후 (각각)

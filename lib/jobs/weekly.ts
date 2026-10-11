@@ -272,7 +272,7 @@ export async function collectMemo(now = new Date()): Promise<{ data: MemoData; f
       result: `이번 주 ${KR_BENCH} ${F(G, `이번 주 ${KR_BENCH} 수익률(채점 기준)`, mret.get(KR_BENCH) ?? null, "pct_signed")} · ${US_BENCH} ${F(G, `이번 주 ${US_BENCH} 수익률(채점 기준)`, mret.get(US_BENCH) ?? null, "pct_signed")} · 시장 국면 ${regime}`,
       buyReview: { head: ["종목", "지난주 단계", "이번 주 수익률", "기준 지수", "기준 지수 수익률", "초과", "결과"], rows: sc.rows.map((r) => [
         nmx(r.name), txt(fb, G, "지난주 단계", r.stage), F(G, `${r.name} 이번 주 수익률`, r.ret, "pct_signed"), r.benchName, F(G, `${r.name} 기준 지수 수익률`, r.bench, "pct_signed"),
-        F(G, `${r.name} 기준 지수 대비 초과`, r.excess, "pctp"), r.hit === null ? "➖ 자료 없음" : r.hit ? "✅ 시장 이김" : "❌ 시장에 짐"]) },
+        F(G, `${r.name} 기준 지수 대비 초과`, r.excess, "pctp"), r.hit === null ? "➖ 자료 없음" : r.hit ? "✅ 상승(승)" : "❌ 하락(패)"]) },
       hit: `👉 지난주 매수 검토 ${F(G, "채점된 지난주 매수 검토 종목 수", sc.scored, "int")}개 중 ${F(G, "기준 지수를 이긴 종목 수", sc.hits, "int")}개가 기준 지수를 이김`,
       scenarios: { head: ["시나리오", "지난주 확률", "지난주 예상 전개", "확인하기로 한 트리거"], rows: plan.scenarios.map((x) => [x.name, F(G, `지난주 ${x.name} 확률`, x.probability, "pct", 0), txt(fb, G, `지난주 ${x.name} 전개`, x.view), txt(fb, G, `지난주 ${x.name} 트리거`, x.trigger)]) },
       actions: plan.actions.map((x) => txt(fb, G, "지난주 실행 계획", x)),

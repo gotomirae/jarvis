@@ -55,7 +55,7 @@ describe("지난주 투자 전략 읽기 (D67)", () => {
     expect(parsePrevPlan("w", "## Ⅱ. 다음 주 투자 전략\n### 1. 기본 스탠스\n")).toEqual({ week: "w", stance: "", buy: [], scenarios: [], decisions: [], wrong: [], actions: [] });
     expect(parsePrevPlan("w", "## Ⅲ. 다음 주 투자 전략\n머리말\n### 9. 기타\n- x")).toEqual({ week: "w", stance: "", buy: [], scenarios: [], decisions: [], wrong: [], actions: [] });
   });
-  it("scoreBuys: 기준 지수보다 높으면 적중, 자료 없으면 채점 제외", () => {
+  it("scoreBuys: 수익률 > 0 이면 적중(절대 수익률, D69), 자료 없으면 채점 제외", () => {
     const s = scoreBuys([{ name: "A", stage: "🟢" }, { name: "B", stage: "🎯" }, { name: "C", stage: "🟡" }], (n) =>
       n === "A" ? { ret: 3, bench: 1, benchName: "KOSPI" } : n === "B" ? { ret: -2, bench: 1, benchName: "KOSPI" } : { ret: null, bench: 1, benchName: "S&P 500" });
     expect(s.rows.map((r) => [r.name, r.excess, r.hit])).toEqual([["A", 2, true], ["B", -3, false], ["C", null, null]]);

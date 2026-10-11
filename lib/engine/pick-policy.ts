@@ -128,7 +128,7 @@ export function assess(x: { ev: AxesEvidence; p: number | null; market: "KR" | "
   R: { buy_timing: TimingRules; pick_policy: PolicyRules; feedback: FeedbackRules }, policy: Policy | PolicySet | null, stats: PerfStat[]): Assessed {
   const idea = x.ev.idea;
   const timing = timingOf({ p: x.p, chart: idea?.chart, flow: idea?.flow, eventDays: daysUntil(x.ev.next_event, x.today), eventTitle: idea?.events[0]?.title ?? null, riskOff: x.riskOff }, R.buy_timing);
-  const features = featuresOf({ families: x.ev.families, p: x.p, grade: x.ev.F?.grade, market: x.market, l1: x.l1, phase: x.phase ?? null, timing: { score: timing.score, verdict: timing.verdict, checks: checkMarks(timing), path: timing.setup.path } });
+  const features = featuresOf({ families: x.ev.families, p: x.p, grade: x.ev.F?.grade, market: x.market, l1: x.l1, phase: x.phase ?? null, timing: { score: timing.score, verdict: timing.verdict, checks: checkMarks(timing), path: timing.setup.path, pullback: timing.pullback } });
   const scope = priorScope(stats, R.pick_policy, R.feedback.primary_horizon, x.phase);
   return { timing, admit: admits(timing, policyFor(policy, x.phase), R.pick_policy, R.feedback.timing_score_buckets, x.holding), features, prior: perfPrior(features, stats, scope, R.feedback), scope };
 }

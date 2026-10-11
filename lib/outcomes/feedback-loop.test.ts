@@ -61,19 +61,22 @@ describe("reviewProposals (제안만)", () => {
     expect(titles).toEqual([
       "신호원 sage: 🎯 성과 부진 — 가중·조건 재검토",
       "신호원 heimdallr: 🎯 성과 우수 — 유지·강화 검토",
-      "[radar]: 시장보다 약함 — 조건 재검토",
-      "[holding_alert]: 경고 뒤 오히려 시장보다 강함 — 경고 기준 재검토",
+      "[radar]: 시장 대비 마이너스 — 조건 재검토",
+      "[holding_alert]: 경고 뒤 오히려 시장 대비 플러스 — 경고 기준 재검토",
     ]);
-    expect(p[0].evidence).toContain("20거래일 시장 대비 중앙값 -2.00%, 이긴 비율 40% (40건)");
+    expect(p[0].evidence).toContain("20거래일 시장 대비 중앙값 -2.00%, 승률 40% (40건)");
+    // 절대 수익률 채점(D69): 수익률 중앙값으로 비교
+    const abs = reviewProposals([{ ...row("radar", "all", "all", 5), median_ret: -1 }], cur, { ...cfg, basis: "absolute" });
+    expect(abs.map((x) => x.title)).toEqual(["radar: 수익률 마이너스 — 조건 재검토"]);
   });
 
   it("🎯 전체 음수면 전반 재검토, 표본 부족·상한 불일치면 임계값 제안 없음", () => {
     const p = reviewProposals([row("buy", "all", "all", -3), { ...row("buy", "p_bucket", "30~40", -9), hit_rate: null }], { buy_max: 35, min_signal_families: 2 }, cfg);
-    expect(p.map((x) => x.title)).toEqual(["🎯 매수 검토 전체가 시장보다 약함 — 조건 전반 재검토"]);
+    expect(p.map((x) => x.title)).toEqual(["🎯 매수 검토 전체 시장 대비 마이너스 — 조건 전반 재검토"]);
     expect(reviewProposals([row("buy", "all", "all", 1, 2), row("buy", "p_bucket", "30~40", -9)], cur, cfg)).toEqual([]);
     expect(reviewProposals([row("buy", "all", "all", 1), row("buy", "p_bucket", "30~40", 0.5), row("buy", "families", "2", -0.5)], cur, cfg)).toEqual([]);
     expect(reviewProposals([row("buy", "all", "all", 1), row("buy", "p_bucket", "<20", -9)], { buy_max: 20, min_signal_families: 2 }, cfg)).toEqual([]);
     expect(reviewProposals([row("radar", "all", "all", null)], cur, cfg)).toEqual([]);
-    expect(reviewProposals([row("radar", "all", "all", -1)], cur, cfg)[0].title).toBe("radar: 시장보다 약함 — 조건 재검토");
+    expect(reviewProposals([row("radar", "all", "all", -1)], cur, cfg)[0].title).toBe("radar: 시장 대비 마이너스 — 조건 재검토");
   });
 });

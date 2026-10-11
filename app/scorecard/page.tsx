@@ -35,16 +35,16 @@ export default async function Scorecard() {
   const bucketName = (d: string, b: string) => (d === "l1" ? l1.get(b) ?? b : d === "sources" ? FAMILY_NAME[b] ?? b : d === "families" ? `${b}개` : d === "market" ? (b === "KR" ? "국내" : b === "US" ? "미국" : b) : b);
   const get = (scope: string, h: number) => stats.find((s) => s.scope === scope && s.horizon_days === h && s.dimension === "all");
   const buyDims = stats.filter((s) => s.scope === "buy" && s.horizon_days === F.primary_horizon && s.dimension !== "all")
-    .sort((a, b) => a.dimension.localeCompare(b.dimension) || (b.median_excess ?? -999) - (a.median_excess ?? -999));
+    .sort((a, b) => a.dimension.localeCompare(b.dimension) || (b.median_ret ?? -999) - (a.median_ret ?? -999));
   const buyAll = get("buy", F.primary_horizon);
   const th = "py-1 pr-3 font-normal";
-  const cell = (s: Stat | undefined) => (s ? <>{fmtPct(s.median_excess, 2)}<span className="text-sub"> · {s.hit_rate === null ? "-" : `${Math.round(s.hit_rate * 100)}%`} · {s.n}건</span></> : "—");
+  const cell = (s: Stat | undefined) => (s ? <>{fmtPct(s.median_ret, 2)}<span className="text-sub"> · {s.hit_rate === null ? "-" : `${Math.round(s.hit_rate * 100)}%`} · {s.n}건</span></> : "—");
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-4 space-y-8">
       <Nav />
-      <Section title="큐별 성과 — 시장 대비 초과수익" count={led.count ?? 0}>
-        <Guide items={["📏 각 칸 = 시장 대비 초과수익 중앙값 · 이긴 비율 · 건수", "💵 진입가 = 신호 다음 거래일 종가 · 기준 = 코스피 · 코스닥 · S&P 500", "🔻 매도 쪽(⚠️ · 💰)은 경고 뒤 시장보다 약했으면 승", `🔎 표본 ${F.min_samples}건 미만은 참고만`]} />
+      <Section title="큐별 성과 — 추천일 기준 수익률" count={led.count ?? 0}>
+        <Guide items={["📏 각 칸 = 추천일 기준 절대 수익률 중앙값 · 승률(수익률 > 0, 경고·익절은 < 0) · 건수", "💵 진입가 = 신호 다음 거래일 종가 · 기준 = 코스피 · 코스닥 · S&P 500", "🔻 매도 쪽(⚠️ · 💰)은 경고 뒤 시장보다 약했으면 승", `🔎 표본 ${F.min_samples}건 미만은 참고만`]} />
         {stats.length ? (
           <div className="table-wrap">
             <table className="w-full text-sm">
@@ -64,12 +64,12 @@ export default async function Scorecard() {
         {buyDims.length ? (
           <div className="table-wrap">
             <table className="w-full text-sm">
-              <thead className="text-xs text-sub text-left"><tr><th className={th}>기준</th><th className={th}>구간</th><th className={th}>초과수익 중앙값</th><th className={th}>이긴 비율</th><th className={th}>건수</th><th className={th}>순위 반영</th></tr></thead>
+              <thead className="text-xs text-sub text-left"><tr><th className={th}>기준</th><th className={th}>구간</th><th className={th}>수익률 중앙값</th><th className={th}>승률</th><th className={th}>건수</th><th className={th}>순위 반영</th></tr></thead>
               <tbody>
                 {buyDims.map((s) => (
                   <tr key={`${s.dimension}|${s.bucket}`} className="border-t border-line/50">
                     <td className="py-1 pr-3">{DIMENSION_NAME[s.dimension] ?? s.dimension}</td><td className="py-1 pr-3">{bucketName(s.dimension, s.bucket)}</td>
-                    <td className="py-1 pr-3">{fmtPct(s.median_excess, 2)}</td><td className="py-1 pr-3">{s.hit_rate === null ? "-" : `${Math.round(s.hit_rate * 100)}%`}</td>
+                    <td className="py-1 pr-3">{fmtPct(s.median_ret, 2)}</td><td className="py-1 pr-3">{s.hit_rate === null ? "-" : `${Math.round(s.hit_rate * 100)}%`}</td>
                     <td className="py-1 pr-3">{s.n}</td><td className="py-1 pr-3">{s.n >= F.min_samples ? "✓" : "—"}</td>
                   </tr>
                 ))}

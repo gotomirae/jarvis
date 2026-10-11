@@ -4,8 +4,8 @@ import { admits, assess, bucketTitle, candidatePool, derivePolicies, derivePolic
 import type { Timing, TimingRules } from "./timing";
 
 const TR: TimingRules = {
-  p: { great_max: 25, good_max: 40 }, p_weight: 1, setup: { require: false, just_after_days: 3, base: { drawdown_min_pct: -20, drawdown_max_pct: -10, days_min: 10 } }, position: { chase_above_pct: -5, deep_below_pct: -40 }, rsi: { overheat_min: 70, near_hot_min: 65, rebound_max: 45 }, flow_days: 2, event_within_days: 90,
-  points: { p_great: 2, p_good: 1, p_high: -1, pullback: 1, chase: -1, deep: -1, rsi_hot: -2, rsi_rebound: 1, cross: 1, trend_down: -1, base: 1, flow_buy: 2, flow_proxy: 1, flow_sell: -1, event: 1, risk_off: -1 },
+  p: { great_max: 25, good_max: 40 }, p_weight: 1, setup: { require: false, just_after_days: 3, base: { drawdown_min_pct: -20, drawdown_max_pct: -10, days_min: 10 } }, position: { chase_above_pct: -5, pullback1_pct: -10, pullback2_pct: -20 }, rsi: { overheat_min: 70, near_hot_min: 65, rebound_max: 45 }, flow_days: 2, event_within_days: 90,
+  points: { p_great: 2, p_good: 1, p_high: -1, pullback: 1, pullback2: 1, chase: -1, rsi_hot: -2, rsi_rebound: 1, cross: 1, trend_down: -1, base: 1, flow_buy: 2, flow_proxy: 1, flow_sell: -1, event: 1, risk_off: -1 },
   verdict: { high_min: 4, mid_min: 1 },
 };
 
@@ -81,7 +81,7 @@ describe("derivePolicy — 사후 검증으로 추천 기준 배우기", () => {
 });
 
 describe("admits — TOP 추천 자격", () => {
-  const t: Timing = { score: 2, verdict: "mid", checks: [{ key: "rsi", mark: "fail", pts: -2, text: "" }, { key: "flow", mark: "pass", pts: 2, text: "" }], setup: { required: true, ok: true, why: [], path: "ma", parts: null } };
+  const t: Timing = { pullback: 1, score: 2, verdict: "mid", checks: [{ key: "rsi", mark: "fail", pts: -2, text: "" }, { key: "flow", mark: "pass", pts: 2, text: "" }], setup: { required: true, ok: true, why: [], path: "ma", parts: null } };
   const policy = derivePolicy([st("all", "all", 120, 1, 0.55), st("timing_check", "rsi:fail", 35, -4, 0.35), st("timing_verdict", "mid", 40, -3, 0.3), st("timing_verdict", "high", 40, 4, 0.7), st("timing_score", "1~4", 40, -3, 0.3)], PR, 20, "d");
   it("필수 조건(MACD 돌파 ∧ 주가 위치 A·B) 미충족 → 제외, 필수 아니면 통과 (D69)", () => {
     const bad = { ...t, setup: { required: true, ok: false, why: ["주가 위치: x", "MACD 시그널 상향 돌파 직전·직후 아님"], path: null, parts: null } };
@@ -118,7 +118,7 @@ describe("assess — 브리핑·대시보드 공용 후보 평가", () => {
     expect(a.timing.score).toBe(2 + 1 + 1);
     expect(a.timing.verdict).toBe("high");
     expect(a.admit.ok).toBe(true);
-    expect(a.features).toEqual({ families: ["heimdallr", "sage"], p: 20, grade: "★", market: "US", l1: "1b", timing: { score: 4, verdict: "high", checks: { p: "pass", position: "none", flow: "pass", event: "pass" }, path: null } });
+    expect(a.features).toEqual({ families: ["heimdallr", "sage"], p: 20, grade: "★", market: "US", l1: "1b", timing: { score: 4, verdict: "high", checks: { p: "pass", position: "none", flow: "pass", event: "pass" }, path: null, pullback: 0 } });
     expect(assess({ ev, p: 20, market: "US", l1: "1b", riskOff: false, today: "2026-10-04", phase: "up" }, R, null, []).features.phase).toBe("up");
     expect(a.scope).toBe("buy");
     expect(a.prior.score).toBeNull();

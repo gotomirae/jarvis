@@ -1,6 +1,6 @@
 /**
- * 성과 요약 (PRD §12) — 순수 함수. 신호 종류(태그)·시장·기간별 표본 수, 초과수익 중앙값·평균, 적중률.
- * 적중 = 매수 쪽은 초과수익 > 0, 매도 쪽(⚠️·💰)은 초과수익 < 0(경고 후 시장보다 약했음).
+ * 성과 요약 (PRD §12) — 순수 함수. 신호 종류(태그)·시장·기간별 표본 수, 수익률·초과수익 중앙값, 적중률.
+ * 적중 = 추천일 기준 **절대 수익률**(D69 · 10/9 모든 프로젝트 통일): 매수 쪽은 수익률 > 0, 매도 쪽(⚠️·💰)은 수익률 < 0(경고 후 하락). 초과수익은 참고값.
  * 표본 30건 미만은 참고용이다(rules.yaml outcomes.min_samples_for_calibration) — 규칙 보정 근거로 쓰지 않는다.
  */
 import type { Side } from "./ledger";
@@ -29,14 +29,14 @@ export function scorecard(rows: ScoreInput[], minSamples: number): ScoreRow[] {
   const out: ScoreRow[] = [];
   for (const g of groups.values()) {
     const ex = g.map((r) => r.excess_pct).filter((x): x is number => x !== null);
-    const hits = ex.filter((x) => (g[0].level === "sell" ? x < 0 : x > 0)).length;
+    const hits = g.filter((r) => (g[0].level === "sell" ? r.ret_pct < 0 : r.ret_pct > 0)).length;
     const me = median(ex);
     out.push({
       event_type: g[0].event_type, tag: g[0].tag, market: g[0].market, horizon_days: g[0].horizon_days,
       n: g.length, median_ret: r2(median(g.map((r) => r.ret_pct)) as number),
       median_excess: me === null ? null : r2(me),
       mean_excess: ex.length ? r2(ex.reduce((a, b) => a + b, 0) / ex.length) : null,
-      hit_rate: ex.length ? r2(hits / ex.length) : null,
+      hit_rate: r2(hits / g.length),
       enough: g.length >= minSamples,
     });
   }

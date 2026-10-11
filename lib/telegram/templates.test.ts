@@ -84,7 +84,7 @@ describe("성과 피드백 표시 (D49)", () => {
     const t = calibrationText("2027년 1분기", 20,
       [{ label: "🎯 매수 검토", n: 42, median_excess: 1.234, hit_rate: 0.55, ranking_active: true }, { label: "🔭 선행 레이더", n: 8, median_excess: null, hit_rate: null, ranking_active: false }],
       [{ kind: "threshold", title: "상한", rule: "axes.P.buy_max", current: 40, suggested: 30, evidence: "e<1>" }, { kind: "info", title: "정보", evidence: "e2" }], "https://j/scorecard");
-    expect(t).toContain("🎯 매수 검토: +1.23% · 이긴 비율 55% (42건 · 추천 순위 반영 중)");
+    expect(t).toContain("🎯 매수 검토: +1.23% · 승률 55% (42건 · 추천 순위 반영 중)");
     expect(t).toContain("🔭 선행 레이더: - (8건 · 표본 부족)");
     expect(t).toContain("1. 🔧 상한 — 40 → 30");
     expect(t).toContain("   근거: e&lt;1&gt;");

@@ -20,13 +20,13 @@ export type TimingRules = {
   p: { great_max: number; good_max: number };
   p_weight: number;                                    // 주가 반영도 점수 배율 (보정 중 → 작게, 10/8)
   setup: { require: boolean; just_after_days: number; base: { drawdown_min_pct: number; drawdown_max_pct: number; days_min: number } }; // 🎯 필수 조건 · 상향 돌파 후 N거래일 이내 = "바로 직후" · B 조정 후 횡보
-  position: { chase_above_pct: number; deep_below_pct: number };
+  position: { chase_above_pct: number; pullback1_pct: number; pullback2_pct: number };   // 눌림: 고점 대비 −10% = 1차 · −20% 이상 = 2차 (10/9)
   rsi: { overheat_min: number; near_hot_min: number; rebound_max: number };
   flow_days: number;
   event_within_days: number;
   points: {
     p_great: number; p_good: number; p_high: number;
-    pullback: number; chase: number; deep: number;
+    pullback: number; pullback2: number; chase: number;
     rsi_hot: number; rsi_rebound: number;
     cross: number; trend_down: number; base: number;
     flow_buy: number; flow_proxy: number; flow_sell: number;
@@ -42,7 +42,9 @@ export type Verdict = "high" | "mid" | "wait";
 /** 주가 위치 경로 — A 5·10일선 돌파(ma) · B 조정 후 횡보(base) · 둘 다(both) */
 export type SetupPath = "ma" | "base" | "both";
 export type Setup = { required: boolean; ok: boolean; why: string[]; path: SetupPath | null; parts: { pullback: boolean; ma: CrossPhase; base: boolean; macd: CrossPhase } | null };
-export type Timing = { score: number; verdict: Verdict; checks: Check[]; setup: Setup };
+/** 눌림 단계 — 0 아님 · 1 1차(고점 대비 −10~−20%) · 2 2차(−20% 이상) */
+export type PullbackStage = 0 | 1 | 2;
+export type Timing = { score: number; verdict: Verdict; checks: Check[]; setup: Setup; pullback: PullbackStage };
 /** 상향 돌파 국면 — 직전(pre) · 오늘(today) · 직후 N일 이내(post) · 아님(no) */
 export type CrossPhase = "pre" | "today" | "post" | "no";
 
@@ -141,10 +143,12 @@ export function timingOf(x: TimingInput, r: TimingRules): Timing {
   else {
     const dd = c.high.drawdown_pct;
     const where = `(52주 최고 ${money(c.high.value, c.currency)} · ${ymd(c.high.date)}, 현재 ${money(c.close, c.currency)})`;
+    const R2 = r.position;
     checks.push(c.high.days === 0 ? { key: "position", mark: "warn", pts: P.chase, text: `52주 최고가 경신 중 (현재 ${money(c.close, c.currency)}) — 추격 매수 주의` }
-      : dd > r.position.chase_above_pct ? { key: "position", mark: "warn", pts: P.chase, text: `고점 대비 ${pct1(dd)} — 고점 근처, 추격 매수 주의 ${where}` }
-      : dd < r.position.deep_below_pct ? { key: "position", mark: "warn", pts: P.deep, text: `고점 대비 ${pct1(dd)} — 낙폭이 커 하락 추세 확인 필요 ${where}` }
-      : { key: "position", mark: "pass", pts: P.pullback, text: `고점 대비 ${pct1(dd)} 눌림 — 싸게 살 구간 ${where}` });
+      : dd > R2.chase_above_pct ? { key: "position", mark: "warn", pts: P.chase, text: `고점 대비 ${pct1(dd)} — 고점 근처, 추격 매수 주의 ${where}` }
+      : dd > R2.pullback1_pct ? { key: "position", mark: "none", pts: 0, text: `고점 대비 ${pct1(dd)} — 아직 눌림 전 (1차 눌림 ${R2.pullback1_pct}%) ${where}` }
+      : dd > R2.pullback2_pct ? { key: "position", mark: "pass", pts: P.pullback, text: `고점 대비 ${pct1(dd)} 1차 눌림 — 싸게 살 구간 ${where}` }
+      : { key: "position", mark: "pass", pts: P.pullback2, text: `고점 대비 ${pct1(dd)} 2차 눌림 — 깊은 조정, 바닥 확인 ${where}` });
     if (c.rsi) {
       const v = Math.floor(c.rsi.value);   // 69.6 을 "70"으로 올려 과열처럼 보이지 않게 내림 표시
       const dir = c.rsi.dir === "up" ? "↗" : c.rsi.dir === "down" ? "↘" : "→";
@@ -163,7 +167,9 @@ export function timingOf(x: TimingInput, r: TimingRules): Timing {
     : { key: "event", mark: "none", pts: 0, text: `${r.event_within_days}일 안 상승 이벤트 없음` });
   if (x.riskOff) checks.push({ key: "regime", mark: "warn", pts: P.risk_off, text: "시장 위험 회피 국면 — 나눠서 적게" });
   const score = checks.reduce((a, k) => a + k.pts, 0);
-  return { score, verdict: score >= r.verdict.high_min ? "high" : score >= r.verdict.mid_min ? "mid" : "wait", checks, setup: setupOf(c, checks, r) };
+  const dd = c && c.high.days > 0 ? c.high.drawdown_pct : null;
+  const pullback: PullbackStage = dd === null || dd > r.position.pullback1_pct ? 0 : dd > r.position.pullback2_pct ? 1 : 2;
+  return { score, verdict: score >= r.verdict.high_min ? "high" : score >= r.verdict.mid_min ? "mid" : "wait", checks, setup: setupOf(c, checks, r), pullback };
 }
 
 const PHASE_WORD: Record<CrossPhase, string> = { pre: "돌파 직전", today: "오늘 돌파", post: "돌파 직후", no: "아님" };

@@ -45,6 +45,10 @@ describe("타이밍 차원 (D54) — 타이밍이 있는 특징(브리핑 후보
     expect(g.phase).toBe("up");
     expect(bucketsOf(g, pc)).toEqual([{ dimension: "all", bucket: "all" }, { dimension: "setup_path", bucket: "base" }, { dimension: "market_phase", bucket: "up" }]);
     expect(bucketsOf(featuresOf({ p: 20, market: "KR", timing: { score: 1, verdict: "mid", checks: {} } }), pc)).toEqual([{ dimension: "all", bucket: "all" }, { dimension: "setup_path", bucket: "none" }]);
+    const ps = { ...cfg, dimensions: ["pullback_stage"] as FeedbackRules["dimensions"] };
+    expect(bucketsOf(featuresOf({ p: 1, market: "KR", timing: { score: 1, verdict: "mid", checks: {}, pullback: 2 } }), ps)).toEqual([{ dimension: "all", bucket: "all" }, { dimension: "pullback_stage", bucket: "2차 눌림" }]);
+    expect(bucketsOf(featuresOf({ p: 1, market: "KR", timing: { score: 1, verdict: "mid", checks: {}, pullback: 7 } }), ps)[1].bucket).toBe("7");
+    expect(bucketsOf(featuresOf({ p: 1, market: "KR", timing: { score: 1, verdict: "mid", checks: {} } }), ps)).toHaveLength(1);
     expect(metricOf({ median_excess: 1, median_ret: 3 }, "absolute")).toBe(3);
     expect(metricOf({ median_excess: 1 }, "absolute")).toBeNull();
     expect(metricOf({ median_excess: 1, median_ret: 3 }, "excess")).toBe(1);

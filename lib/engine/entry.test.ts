@@ -171,9 +171,9 @@ describe("표시 (entry-view)", () => {
     expect(m2Text({ hist_rising_bars: 0 })).toBe("");
     expect(m5Text(null)).toBe("");
     expect(m5Text({ path: "institution", streak_days: 3 })).toBe("기관 3일 연속 순매수");
-    expect(m5Text({ path: "combined" })).toBe("외국인+기관 2일 연속 순매수");
+    expect(m5Text({ path: "combined" })).toBe("외국인+기관 3일 연속 순매수");
     expect(m5Text({ label: "수급 대용(미국)", streak_days: 2 })).toBe("수급 대용(미국) — 종가 상승·거래량 평균 이상 2일 연속");
-    expect(m5Text({ label: "x" })).toBe("x — 종가 상승·거래량 평균 이상 2일 연속");
+    expect(m5Text({ label: "x" })).toBe("x — 종가 상승·거래량 평균 이상 3일 연속");
     expect(m5Text({ streak_days: 4 })).toBe("4일 연속");
     expect(m5Text({ path: "?" })).toBe("");
   });
@@ -185,7 +185,7 @@ describe("표시 (entry-view)", () => {
       "❌ ② MACD 상향 교차 직전 — MACD 교차 직전 아님",
       "✅ ③ 산업 고성장 — ①실적 반도체 +24%",
       "✅ ④ 6개월 내 상승 이벤트 — 11/20 NVDA 실적 (HermesCall)",
-      "❌ ⑤ 매수 수급 2일 연속",
+      "❌ ⑤ 매수 수급 3일 연속",
     ]);
     expect(condLines(c, { m1: null, m2: null, m5: null })[2]).toBe("✅ ③ 산업 고성장");
   });

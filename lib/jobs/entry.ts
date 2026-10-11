@@ -223,7 +223,7 @@ async function perfStats(scope: string): Promise<PerfStat[]> {
   const last = await dbSelect<{ as_of: string }>("perf_stats", "select=as_of&order=as_of.desc&limit=1");
   const asOf = last.ok ? last.data[0]?.as_of : undefined;
   if (!asOf) return [];
-  const r = await dbSelectAll<PerfStat>("perf_stats", `select=scope,dimension,bucket,horizon_days,n,median_excess,hit_rate&as_of=eq.${asOf}&scope=eq.${scope}&horizon_days=eq.${rules().feedback.primary_horizon}`);
+  const r = await dbSelectAll<PerfStat>("perf_stats", `select=scope,dimension,bucket,horizon_days,n,median_excess,hit_rate,median_ret&as_of=eq.${asOf}&scope=eq.${scope}&horizon_days=eq.${rules().feedback.primary_horizon}`);
   return r.ok ? r.data : [];
 }
 

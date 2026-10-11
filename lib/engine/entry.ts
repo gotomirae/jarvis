@@ -44,7 +44,7 @@ export function normalizeCheck(r: Raw, market: "KR" | "US", priUsLite: number | 
   if (market === "US" && m1.pass) m1 = priUsLite === null ? no("데이터 없음(미국 주가 반영도)") : priUsLite < priMax ? ok : no(`주가 반영도 ${priUsLite} ≥ ${priMax}`);
   return {
     check_date: String(r.check_date ?? ""),
-    m1, m2: flag(r.m2_pass, "m2_pass", "MACD 교차 직전 아님"), m5: flag(r.m5_pass, "m5_pass", "매수 수급 2일 연속 아님"),
+    m1, m2: flag(r.m2_pass, "m2_pass", "MACD 교차 직전 아님"), m5: flag(r.m5_pass, "m5_pass", "매수 수급 3일 연속 아님"),
     price_state: ps === "PB" || ps === "SW" ? ps : null,
     cross_today: r.m2_detail?.cross_today === true,
     low_10d: numOrNull(r.low_10d), low_20d: numOrNull(r.low_20d), invalidation_price: numOrNull(r.invalidation_price),

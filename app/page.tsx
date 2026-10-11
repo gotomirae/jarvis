@@ -144,7 +144,7 @@ export default async function Today() {
           <>🏢 <b className="text-white">좋은 기업</b> = 실적 · 산업 · 신호 합의 (매수 검토 후보)</>,
           <>⏱️ <b className="text-gold">지금 사기 좋은가</b> = 가격 · 추세 · 수급 · 과열</>,
           <>🚀 <b className="text-hot">필수: 상승 초기</b> = MACD 상향 돌파 <b className="text-white">직전 · 직후(3일 이내)</b> + 주가 위치 둘 중 하나</>,
-          <>　Ⓐ 5일선이 10일선 상향 돌파 <b className="text-white">직전 · 직후(3일 이내)</b> + 고점 대비 눌림 · Ⓑ 고점 대비 <b className="text-white">10~20% 조정 후 10일 이상 횡보</b></>,
+          <>　Ⓐ 5일선이 10일선 상향 돌파 <b className="text-white">직전 · 직후(3일 이내)</b> + 고점 대비 눌림(1차 −10% · 2차 −20% 이상) · Ⓑ 고점 대비 <b className="text-white">10~20% 조정 후 10일 이상 횡보</b></>,
           <>⚖️ 이미 보유 중이고 <b className="text-white">허용 비중(글로벌 20위 25% · 미국 10% · 국내 10%)에 닿으면</b> 제외</>,
           <>⏳ 눌림 대기 종목도 상승 초기 조건을 만족하면 <b className="text-hot">승격</b> (주가 반영도는 보정 중 → 비중 작게)</>,
           <>⏸️ 대기이거나 사후 검증에서 승률 낮은 기준에 걸리면 제외</>,

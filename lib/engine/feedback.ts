@@ -8,7 +8,7 @@
  */
 import type { MarketPhase } from "./regime";
 
-export type Dimension = "families" | "p_bucket" | "grade" | "market" | "l1" | "sources" | "timing_verdict" | "timing_check" | "timing_score" | "setup_path" | "market_phase";
+export type Dimension = "families" | "p_bucket" | "grade" | "market" | "l1" | "sources" | "timing_verdict" | "timing_check" | "timing_score" | "setup_path" | "market_phase" | "pullback_stage";
 export type Basis = "absolute" | "excess";
 
 export type FeedbackRules = {
@@ -24,7 +24,7 @@ export type FeedbackRules = {
 };
 
 /** ⏱️ 지금 매수 매력도 요약 (lib/engine/timing.ts) — 브리핑 후보 원장(pick)에만 있다 */
-export type TimingFeature = { score: number; verdict: string; checks: Record<string, string>; path?: string | null };   // path = 주가 위치 경로 ma·base·both (D69)
+export type TimingFeature = { score: number; verdict: string; checks: Record<string, string>; path?: string | null; pullback?: number };   // path = 주가 위치 경로 ma·base·both · pullback = 눌림 단계 0·1·2 (D69)
 export type SignalFeatures = { families: string[]; p: number | null; grade: string | null; market: "KR" | "US"; l1: string | null; timing?: TimingFeature | null; phase?: MarketPhase | null };
 
 export type PerfStat = { scope: string; dimension: string; bucket: string; horizon_days: number; n: number; median_excess: number | null; hit_rate: number | null; median_ret?: number | null };
@@ -70,6 +70,7 @@ export function bucketsOf(f: SignalFeatures, cfg: Pick<FeedbackRules, "dimension
     else if (d === "market_phase") { if (f.phase) out.push({ dimension: d, bucket: f.phase }); }
     else if (!f.timing) continue;
     else if (d === "setup_path") out.push({ dimension: d, bucket: f.timing.path ?? "none" });
+    else if (d === "pullback_stage") { if (f.timing.pullback !== undefined) out.push({ dimension: d, bucket: PULLBACK_NAME[f.timing.pullback] ?? String(f.timing.pullback) }); }
     else if (d === "timing_verdict") out.push({ dimension: d, bucket: f.timing.verdict });
     else if (d === "timing_score") out.push({ dimension: d, bucket: pBucket(f.timing.score, cfg.timing_score_buckets) });
     else for (const [k, m] of Object.entries(f.timing.checks)) out.push({ dimension: d, bucket: `${k}:${m}` });
@@ -91,7 +92,8 @@ export function perfPrior(f: SignalFeatures, stats: PerfStat[], scope: string, c
   return { score: shrunk.length ? r2(shrunk.reduce((a, c) => a + c, 0) / shrunk.length) : null, basis, overall: idx.get("all|all") ?? null };
 }
 
-export const DIMENSION_NAME: Record<string, string> = { all: "전체", families: "합의한 신호 계열 수", p_bucket: "주가 반영도", grade: "실적 등급", market: "시장", l1: "산업", sources: "신호원", timing_verdict: "지금 매수 매력", timing_check: "타이밍 항목", timing_score: "매수 매력 점수", setup_path: "주가 위치 경로", market_phase: "시장 국면" };
+export const DIMENSION_NAME: Record<string, string> = { all: "전체", families: "합의한 신호 계열 수", p_bucket: "주가 반영도", grade: "실적 등급", market: "시장", l1: "산업", sources: "신호원", timing_verdict: "지금 매수 매력", timing_check: "타이밍 항목", timing_score: "매수 매력 점수", setup_path: "주가 위치 경로", market_phase: "시장 국면", pullback_stage: "눌림 단계" };
+export const PULLBACK_NAME: Record<number, string> = { 0: "눌림 아님", 1: "1차 눌림", 2: "2차 눌림" };
 
 const signed = (x: number) => `${x > 0 ? "+" : ""}${x.toFixed(1)}%`;
 

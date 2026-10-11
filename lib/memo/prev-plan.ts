@@ -55,7 +55,7 @@ export function scoreBuys(buy: PrevPlan["buy"], retOf: (name: string) => { ret: 
   const rows = buy.map((b) => {
     const r = retOf(b.name);
     const excess = r.ret !== null && r.bench !== null ? r.ret - r.bench : null;
-    return { name: b.name, stage: b.stage, ret: r.ret, bench: r.bench, benchName: r.benchName, excess, hit: excess === null ? null : excess > 0 };
+    return { name: b.name, stage: b.stage, ret: r.ret, bench: r.bench, benchName: r.benchName, excess, hit: r.ret === null ? null : r.ret > 0 };   // 채점 = 절대 수익률(D69), 지수 대비는 참고
   });
   return { rows, hits: rows.filter((r) => r.hit === true).length, scored: rows.filter((r) => r.hit !== null).length };
 }

@@ -86,7 +86,7 @@ describe("매수 검토 추천 — 순위·근거·카드", () => {
 
   it("⏱️ 타이밍·추천 이력이 카드에 — 일봉 지표가 있으면 기술 참고 줄 생략", () => {
     const c = { as_of: "2026-09-30", close: 1, currency: "KRW", high: { value: 1, date: "2026-09-30", drawdown_pct: 0, days: 0 }, ma: null, macd: null, rsi: null } as ChartRef;
-    const t: Timing = { score: 5, verdict: "high", checks: [{ key: "p", mark: "pass", pts: 2, text: "주가 반영도 20/100" }], setup: { required: true, ok: true, why: [], path: "ma", parts: { pullback: true, ma: "pre", base: false, macd: "post" } } };
+    const t: Timing = { pullback: 1, score: 5, verdict: "high", checks: [{ key: "p", mark: "pass", pts: 2, text: "주가 반영도 20/100" }], setup: { required: true, ok: true, why: [], path: "ma", parts: { pullback: true, ma: "pre", base: false, macd: "post" } } };
     const k = ideaCard(1, { name: "x", symbol: "x", market: "KR", industry: "" }, { ...idea, chart: c }, [], { source: "s", as_of: null, rsi: 50, rsi_note: null, macd_note: null, price_note: null }, "", null, { timing: t, history: "🆕 첫 추천" });
     expect(k).toMatchObject({ tech: null, verdict: "🔥 지금 매수 매력 높음 (점수 +5)", timing: ["✅ 상승 초기 조건 — ✅ 주가 위치 A 5·10일선 돌파 직전 · ✅ MACD 돌파 직후", "✅ 주가 반영도 20/100"], history: "🆕 첫 추천" });
     expect(ideaCard(1, { name: "x", symbol: "x", market: "KR", industry: "" }, idea, [], null, "", null, { timing: { ...t, score: -1, verdict: "wait" } }).verdict).toBe("⏸️ 좋은 기업이지만 지금은 대기 (점수 -1)");

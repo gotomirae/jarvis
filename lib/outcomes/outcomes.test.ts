@@ -135,7 +135,7 @@ describe("scorecard", () => {
     expect(median([4, 1, 2, 3])).toBe(2.5);
   });
 
-  it("매수는 초과수익 > 0, 매도는 < 0 을 적중으로 센다", () => {
+  it("적중 = 절대 수익률(D69): 매수는 수익률 > 0, 매도는 < 0", () => {
     const rows: ScoreInput[] = [
       { event_type: "queue", tag: "buy", level: "buy", market: "KR", horizon_days: 5, ret_pct: 3, excess_pct: 2 },
       { event_type: "queue", tag: "buy", level: "buy", market: "KR", horizon_days: 5, ret_pct: -1, excess_pct: -2 },
@@ -149,7 +149,7 @@ describe("scorecard", () => {
     expect(s[0]).toMatchObject({ n: 3, median_ret: 3, median_excess: 2, mean_excess: 1.33, hit_rate: 0.67, enough: true });
     expect(s[1].enough).toBe(false);
     expect(s[2].hit_rate).toBe(1);
-    expect(s[3]).toMatchObject({ median_excess: null, mean_excess: null, hit_rate: null });
+    expect(s[3]).toMatchObject({ median_excess: null, mean_excess: null, hit_rate: 0 });
   });
 
   it("정렬: 이벤트 → 태그 → 시장 → 기간", () => {

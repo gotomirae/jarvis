@@ -25,7 +25,7 @@ export async function calibrationReview(now = new Date(), opts: { force?: boolea
   const label = (q: string) => ({ green: "🟢 진입 신호", yellow: "🟡 관찰", blue: "🔵 실적 돌파" } as Record<string, string>)[q] ?? QUEUE_LABEL[q as Queue] ?? q;
   const proposals = reviewProposals(stats, { buy_max: R.axes.P.buy_max, min_signal_families: R.queues.buy.min_signal_families }, F, label);
   const queues = stats.filter((s) => s.dimension === "all" && s.horizon_days === F.primary_horizon)
-    .map((s) => ({ label: label(s.scope), n: s.n, median_excess: s.median_excess, hit_rate: s.hit_rate, ranking_active: s.scope === "buy" && s.n >= F.min_samples }));
+    .map((s) => ({ label: label(s.scope), n: s.n, median_excess: F.basis === "absolute" ? (s.median_ret === null ? null : Number(s.median_ret)) : s.median_excess, hit_rate: s.hit_rate, ranking_active: s.scope === "buy" && s.n >= F.min_samples }));
   const k = new Date(now.getTime() + 9 * 3600_000);
   const period = `${k.getUTCFullYear()}년 ${Math.floor(k.getUTCMonth() / 3) + 1}분기`;
   const base = env().JARVIS_URL?.replace(/\/$/, "");

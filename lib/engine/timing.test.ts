@@ -6,11 +6,11 @@ const TR: TimingRules = {
   p: { great_max: 25, good_max: 40 },
   p_weight: 1,
   setup: { require: true, just_after_days: 3, base: { drawdown_min_pct: -20, drawdown_max_pct: -10, days_min: 10 } },
-  position: { chase_above_pct: -5, deep_below_pct: -40 },
+  position: { chase_above_pct: -5, pullback1_pct: -10, pullback2_pct: -20 },
   rsi: { overheat_min: 70, near_hot_min: 65, rebound_max: 45 },
   flow_days: 2,
   event_within_days: 90,
-  points: { p_great: 2, p_good: 1, p_high: -1, pullback: 1, chase: -1, deep: -1, rsi_hot: -2, rsi_rebound: 1, cross: 1, trend_down: -1, base: 1, flow_buy: 2, flow_proxy: 1, flow_sell: -1, event: 1, risk_off: -1 },
+  points: { p_great: 2, p_good: 1, p_high: -1, pullback: 1, pullback2: 1, chase: -1, rsi_hot: -2, rsi_rebound: 1, cross: 1, trend_down: -1, base: 1, flow_buy: 2, flow_proxy: 1, flow_sell: -1, event: 1, risk_off: -1 },
   verdict: { high_min: 4, mid_min: 1 },
 };
 
@@ -63,7 +63,7 @@ describe("timingOf — 좋은 기업과 지금 사기 좋은 주식 구분", () 
     expect(t.score).toBe(2 + 1 + 1 + 1 + 1 + 2 + 1);
     expect(checkLines(t)).toEqual([
       "✅ 주가 반영도 20/100 — 실적에 비해 주가가 크게 덜 오름",
-      "✅ 고점 대비 -20.0% 눌림 — 싸게 살 구간 (52주 최고 13,600원 · 26/03/12, 현재 10,880원)",
+      "✅ 고점 대비 -20.0% 2차 눌림 — 깊은 조정, 바닥 확인 (52주 최고 13,600원 · 26/03/12, 현재 10,880원)",
       "✅ RSI 42 ↗ 낮은 곳에서 반등 시작 (3일 전 38)",
       "✅ MACD가 시그널선 상향 돌파 직전 — 추세 전환 임박",
       "✅ 5일선이 10일선 상향 돌파 직전 — 추세 전환 임박",
@@ -71,6 +71,19 @@ describe("timingOf — 좋은 기업과 지금 사기 좋은 주식 구분", () 
       "✅ 상승 이벤트 D-30 (3Q 실적)",
     ]);
     expect(checkMarks(t)).toMatchObject({ p: "pass", flow: "pass", event: "pass" });
+    expect(t.pullback).toBe(2);
+  });
+  it("눌림 정의 (10/9) — −10% 1차 · −20% 이상 2차 · −5~−10% 는 눌림 전 · 신고가는 0", () => {
+    const at = (dd: number, days = 140) => timingOf({ p: null, chart: { ...chart, high: { ...chart.high, drawdown_pct: dd, days } }, flow: null, eventDays: null, riskOff: false }, TR);
+    expect(at(-12).pullback).toBe(1);
+    expect(checkLines(at(-12))[1]).toBe("✅ 고점 대비 -12.0% 1차 눌림 — 싸게 살 구간 (52주 최고 13,600원 · 26/03/12, 현재 10,880원)");
+    expect(at(-10).pullback).toBe(1);
+    expect(at(-45).pullback).toBe(2);
+    expect(at(-7)).toMatchObject({ pullback: 0 });
+    expect(checkLines(at(-7))[1]).toBe("➖ 고점 대비 -7.0% — 아직 눌림 전 (1차 눌림 -10%) (52주 최고 13,600원 · 26/03/12, 현재 10,880원)");
+    expect(at(-7).setup.parts?.pullback).toBe(false);
+    expect(at(0, 0).pullback).toBe(0);
+    expect(timingOf({ p: null, chart: null, flow: null, eventDays: null, riskOff: false }, TR).pullback).toBe(0);
   });
   it("신고가·과열·추세 이탈·위험 회피 → ⏸️ 대기", () => {
     const hot: ChartRef = { ...chart, currency: "USD", close: 101.5, high: { ...chart.high, value: 101.5, days: 0, drawdown_pct: 0 }, rsi: { ...chart.rsi!, value: 75, dir: "flat" },
@@ -106,10 +119,10 @@ describe("timingOf — 좋은 기업과 지금 사기 좋은 주식 구분", () 
     expect(checkLines(nearHot)).toContain(`✅ 상승 이벤트 D-5 (${"가".repeat(39)}…)`);
     expect(issues(nearHot)).toBe("고점 대비 -3.0% · RSI 69 ↘ 과열 근접");
     const deep = timingOf({ p: 30, chart: { ...chart, high: { ...chart.high, drawdown_pct: -45 }, ma: { ...chart.ma!, state: "cross_today" }, macd: null, rsi: null }, flow: null, eventDays: 0, riskOff: false }, TR);
-    expect(checkLines(deep)).toContain("⚠️ 고점 대비 -45.0% — 낙폭이 커 하락 추세 확인 필요 (52주 최고 13,600원 · 26/03/12, 현재 10,880원)");
+    expect(checkLines(deep)).toContain("✅ 고점 대비 -45.0% 2차 눌림 — 깊은 조정, 바닥 확인 (52주 최고 13,600원 · 26/03/12, 현재 10,880원)");
     expect(checkLines(deep)).toContain("✅ 5일선이 10일선 오늘 상향 돌파 — 추세 전환");
     expect(checkLines(deep)).toContain("✅ 상승 이벤트 D-0");
-    expect(deep.verdict).toBe("mid");
+    expect(deep.verdict).toBe("high");   // −45% 는 이제 2차 눌림(+1) — 옛 −40% 하락 추세 감점 없음(10/9)
     const none = timingOf({ p: null, chart: null, flow: null, eventDays: -3, riskOff: false }, TR);
     expect(checkLines(none)).toEqual(["➖ 주가 반영도 계산 전", "➖ 가격 자료 없음", "➖ 외국인·기관 수급 자료 없음", "➖ 90일 안 상승 이벤트 없음"]);
     expect(none).toMatchObject({ score: 0, verdict: "wait" });

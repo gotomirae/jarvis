@@ -6,7 +6,7 @@
  *  · M1~M5 의 "필수" 여부는 사용자 결정 사항이라 제안 대상이 아니다.
  * 승인되면 사용자가 Claude Code 세션에서 rules.yaml 을 고치고 docs/DECISIONS.md 에 근거를 남긴다.
  */
-import { DIMENSION_NAME, type FeedbackRules } from "@/lib/engine/feedback";
+import { DIMENSION_NAME, type FeedbackRules, BASIS_WORD, metricOf } from "@/lib/engine/feedback";
 import type { StatRow } from "./attribution";
 
 export type Proposal = { kind: "threshold" | "info"; title: string; rule?: string; current?: number; suggested?: number; evidence: string };
@@ -17,9 +17,10 @@ const SELL = new Set(["holding_alert", "take_profit"]);
 export function reviewProposals(stats: StatRow[], current: { buy_max: number; min_signal_families: number }, cfg: FeedbackRules, name: (scope: string) => string = (s) => s): Proposal[] {
   const h = cfg.primary_horizon;
   const gap = cfg.review.min_gap_pctp;
-  const ok = stats.filter((s) => s.horizon_days === h && s.n >= cfg.min_samples && s.median_excess !== null) as (StatRow & { median_excess: number })[];
+  // 채점 기준(feedback.basis, D69 = 절대 수익률)의 대표값을 median_excess 자리에 놓고 같은 규칙으로 비교한다
+  const ok = stats.map((s) => ({ ...s, median_excess: metricOf(s, cfg.basis) })).filter((s) => s.horizon_days === h && s.n >= cfg.min_samples && s.median_excess !== null) as (StatRow & { median_excess: number })[];
   const get = (scope: string, dim: string, bucket: string) => ok.find((s) => s.scope === scope && s.dimension === dim && s.bucket === bucket);
-  const ev = (s: StatRow & { median_excess: number }) => `${h}거래일 시장 대비 중앙값 ${signed(s.median_excess)}${s.hit_rate === null ? "" : `, 이긴 비율 ${Math.round(s.hit_rate * 100)}%`} (${s.n}건)`;
+  const ev = (s: StatRow & { median_excess: number }) => `${h}거래일 ${BASIS_WORD[cfg.basis]} 중앙값 ${signed(s.median_excess)}${s.hit_rate === null ? "" : `, 승률 ${Math.round(s.hit_rate * 100)}%`} (${s.n}건)`;
   const out: Proposal[] = [];
   const all = get("buy", "all", "all");
 
@@ -43,13 +44,13 @@ export function reviewProposals(stats: StatRow[], current: { buy_max: number; mi
       if (s.median_excess <= all.median_excess - gap) out.push({ kind: "info", title: `${DIMENSION_NAME[s.dimension]} ${s.bucket}: 🎯 성과 부진 — 가중·조건 재검토`, evidence: `${ev(s)} vs 전체 ${ev(all)}` });
       else if (s.median_excess >= all.median_excess + gap) out.push({ kind: "info", title: `${DIMENSION_NAME[s.dimension]} ${s.bucket}: 🎯 성과 우수 — 유지·강화 검토`, evidence: `${ev(s)} vs 전체 ${ev(all)}` });
     }
-    if (all.median_excess < 0) out.push({ kind: "info", title: "🎯 매수 검토 전체가 시장보다 약함 — 조건 전반 재검토", evidence: ev(all) });
+    if (all.median_excess < 0) out.push({ kind: "info", title: `🎯 매수 검토 전체 ${BASIS_WORD[cfg.basis]} 마이너스 — 조건 전반 재검토`, evidence: ev(all) });
   }
 
   // ④ 다른 큐 — 매수 쪽은 음수, 매도 쪽(⚠️·💰)은 양수(경고 후 오히려 강세)면 재검토
   for (const s of ok.filter((x) => x.scope !== "buy" && x.dimension === "all")) {
     if (SELL.has(s.scope) ? s.median_excess > 0 : s.median_excess < 0) {
-      out.push({ kind: "info", title: `${name(s.scope)}: ${SELL.has(s.scope) ? "경고 뒤 오히려 시장보다 강함 — 경고 기준 재검토" : "시장보다 약함 — 조건 재검토"}`, evidence: ev(s) });
+      out.push({ kind: "info", title: `${name(s.scope)}: ${SELL.has(s.scope) ? `경고 뒤 오히려 ${BASIS_WORD[cfg.basis]} 플러스 — 경고 기준 재검토` : `${BASIS_WORD[cfg.basis]} 마이너스 — 조건 재검토`}`, evidence: ev(s) });
     }
   }
   return out;

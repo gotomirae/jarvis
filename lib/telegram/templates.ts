@@ -132,13 +132,13 @@ export function systemText(title: string, lines: string[]): string {
   return [`🔧 <b>${esc(title)}</b>`, ...lines.map(esc), "", FOOT].join("\n");
 }
 
-export type QueuePerf = { label: string; n: number; median_excess: number | null; hit_rate: number | null; ranking_active: boolean };
+export type QueuePerf = { label: string; n: number; median_excess: number | null; hit_rate: number | null; ranking_active: boolean };   // median_excess = 채점 기준 대표값(D69 절대 수익률)
 
 /** 📊 분기 신호원 성적표 + 보정 제안 (PRD §12·§14, D49) — 제안만, 적용은 사용자 승인 후 */
 export function calibrationText(period: string, horizon: number, queues: QueuePerf[], proposals: Proposal[], url?: string): string {
-  const out = [`📊 <b>${esc(period)} 신호 성적표 · 보정 제안</b>`, "", `<b>큐별 ${horizon}거래일 뒤 시장 대비 초과수익(중앙값)</b>`];
+  const out = [`📊 <b>${esc(period)} 신호 성적표 · 보정 제안</b>`, "", `<b>큐별 ${horizon}거래일 뒤 추천일 기준 수익률(중앙값)</b>`];
   if (!queues.length) out.push("아직 측정이 끝난 신호가 없습니다.");
-  for (const q of queues) out.push(`${esc(q.label)}: ${pct(q.median_excess, 2)}${q.hit_rate === null ? "" : ` · 이긴 비율 ${Math.round(q.hit_rate * 100)}%`} (${q.n}건${q.ranking_active ? " · 추천 순위 반영 중" : " · 표본 부족"})`);
+  for (const q of queues) out.push(`${esc(q.label)}: ${pct(q.median_excess, 2)}${q.hit_rate === null ? "" : ` · 승률 ${Math.round(q.hit_rate * 100)}%`} (${q.n}건${q.ranking_active ? " · 추천 순위 반영 중" : " · 표본 부족"})`);
   out.push("", `<b>보정 제안 ${proposals.length}건</b>${proposals.length ? " — 자동 적용하지 않습니다. 승인하면 설정 변경과 결정 기록을 남깁니다." : " — 바꿀 근거가 충분하지 않습니다(표본 30건 미만 구간은 비교하지 않음)."}`);
   proposals.forEach((p, i) => {
     out.push(`${i + 1}. ${p.kind === "threshold" ? "🔧" : "ℹ️"} ${esc(p.title)}${p.rule ? ` — ${esc(String(p.current))} → ${esc(String(p.suggested))}` : ""}`, `   근거: ${esc(p.evidence)}`);

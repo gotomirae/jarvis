@@ -5,7 +5,7 @@
 import type { Conds, Tag } from "./entry";
 
 export const TAG_NAME: Record<Tag, string> = { PB: "눌림", SW: "횡보", CU: "캐치업", PEAD_PB: "실적 돌파 후 눌림" };
-export const COND_NAME = { m1: "① 실적 가속 또는 영익 턴어라운드, 주가 미반영", m2: "② MACD 상향 교차 직전", m3: "③ 산업 고성장", m4: "④ 6개월 내 상승 이벤트", m5: "⑤ 매수 수급 2일 연속" } as const;
+export const COND_NAME = { m1: "① 실적 가속 또는 영익 턴어라운드, 주가 미반영", m2: "② MACD 상향 교차 직전", m3: "③ 산업 고성장", m4: "④ 6개월 내 상승 이벤트", m5: "⑤ 매수 수급 3일 연속" } as const;
 
 type D = Record<string, unknown> | null | undefined;
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -52,8 +52,8 @@ const FLOW: Record<string, string> = { foreign: "외국인", institution: "기�
 export function m5Text(d: D): string {
   if (!d) return "";
   const days = num(d.streak_days);
-  if (typeof d.path === "string" && FLOW[d.path]) return `${FLOW[d.path]} ${days ?? 2}일 연속 순매수`;
-  if (d.label) return `${String(d.label)} — 종가 상승·거래량 평균 이상 ${days ?? 2}일 연속`;
+  if (typeof d.path === "string" && FLOW[d.path]) return `${FLOW[d.path]} ${days ?? 3}일 연속 순매수`;   // 기본 = rules.yaml M5 3일(10/9)
+  if (d.label) return `${String(d.label)} — 종가 상승·거래량 평균 이상 ${days ?? 3}일 연속`;
   return days ? `${days}일 연속` : "";
 }
 

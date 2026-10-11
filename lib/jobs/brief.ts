@@ -26,7 +26,7 @@ import { dashboardButtons, inlineLinks, linkLine, rows, type LinkEntity } from "
 import { sendMessage } from "@/lib/telegram/send";
 import { sendAnalysisPrompt } from "./analysis";
 import { BRIEF_SPLIT, briefText, type BriefData } from "@/lib/telegram/templates";
-import { briefDate, kstDate, kstString } from "@/lib/time";
+import { briefDate, briefDayOk, kstDate, kstString } from "@/lib/time";
 import { latestHoldings, loadEntities, rules } from "./context";
 import { currentRegime } from "./pipeline";
 
@@ -208,6 +208,8 @@ async function priceRef(id: string, now: Date, firstAt: string | null): Promise<
 export async function sendBrief(kind: "morning" | "evening", now = new Date(), opts: { force?: boolean } = {}): Promise<Record<string, unknown>> {
   const date = briefDate(kind, now);
   const key = `brief:${kind}:${date}`;
+  // 토·일(KST)은 아침·저녁 브리핑을 쉰다(사용자 지정 10/11, D71) — pg_cron·Actions 예비 모두 여기서 멈춤. --force 수동 발송은 허용
+  if (!opts.force && !briefDayOk(date, rules().telegram.briefing_days_kst)) return { skipped: "주말 — 브리핑 쉼(토·일)", key };
   const done = await dbSelect<{ sent_at: string | null }>("notifications", `select=sent_at&dedupe_key=eq.${encodeURIComponent(key)}`);
   if (!opts.force && done.ok && done.data[0]?.sent_at) return { skipped: "이미 발송", key };
   const data = await buildBrief(kind, now);

@@ -17,6 +17,11 @@ export function briefDate(kind: "morning" | "evening", d: Date = new Date()): st
   return kind === "evening" ? kstDate(new Date(d.getTime() - 12 * 3600_000)) : kstDate(d);
 }
 
+/** 브리핑 날짜(YYYY-MM-DD, KST)의 요일이 발송 요일인지 — 0=일 … 6=토 (D71: 토·일 쉼). days 없으면 매일 */
+export function briefDayOk(date: string, days?: number[]): boolean {
+  return !days || days.includes(new Date(`${date}T12:00:00Z`).getUTCDay());
+}
+
 /**
  * 브리핑 슬롯(YYYY-MM-DD)이 지금 실행이 속한 브리핑 날짜와 같은지. 다르면 몇 시간 늦게 시작된 예비 실행이다
  * (10/2 02:08 — 19:45 예비가 6시간 지연돼 "10-02" 슬롯으로 돌며 그날 저녁 정시 발송을 막음, D48). 날짜 모양이 아니면 검사 안 함.

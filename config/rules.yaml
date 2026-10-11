@@ -291,6 +291,7 @@ market:                              # 브리핑·레짐 시세 (Yahoo chart, �
 telegram:
   realtime_max_per_day_excl_urgent: 3
   briefing_times_kst: {morning: "07:30", evening: "19:20", weekly: "Sat 09:30"}
+  briefing_days_kst: [1, 2, 3, 4, 5]   # ☀️·🌙 브리핑 요일(KST, 0=일 … 6=토) — 토·일 쉼 (사용자 지정 2026-10-11, D71). 🏛️ 주간 투자위원회(토)는 별도
 
 cost:
   monthly_llm_cap_usd: 5    # 주간 메모 서술만. M3 ② 수집·추출은 무료(LLM·유료 API 0)

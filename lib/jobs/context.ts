@@ -42,7 +42,7 @@ export type Rules = {
   tech_display: TechDisplayRules;
   inbox: { max_per_day: number; hermescall: { stage: string; strength_min: number; or_filters_min: number }; heimdallr: { grades: string[] }; sage: { new_mentors_min: number } };
   market: { morning: MarketSym[]; us_sectors: MarketSym[]; evening: MarketSym[]; regime: { vix: string; kospi: string } };
-  telegram: { realtime_max_per_day_excl_urgent: number };
+  telegram: { realtime_max_per_day_excl_urgent: number; briefing_days_kst?: number[] };
   feedback: FeedbackRules;
   buy_timing: TimingRules;
   pick_policy: PolicyRules & { top_max: number };
